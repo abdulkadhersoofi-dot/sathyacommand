@@ -439,7 +439,7 @@ The tax is decided per line, per night, from the actual value. Rates are stored 
 | Supply | Rate | Input tax credit | SAC | How the system handles it |
 | --- | --- | --- | --- | --- |
 | Room, up to ₹7,500 per night | 5% | Not available | 996311 | Rate chosen per room per night from the actual charge after discounts |
-| Room, above ₹7,500 per night | 18% | Available | 996311 | Villas at ₹9,500 fall here |
+| Room, above ₹7,500 per night | 18% | Available | 996311 | Selling any unit here would move the restaurant to 18% from the next financial year, so the system asks for MD approval first |
 | Restaurant in "specified premises" | 18% | Available | 996331 | The premises become "specified" if any room was charged above ₹7,500 in the previous financial year, or if the hotel opts in. The system tracks this and warns before the new year starts |
 | Restaurant, other premises | 5% | Not available | 996331 | Applies if no room crossed ₹7,500 last year |
 | Room service, minibar food | Restaurant rate | As above | 996331 | CA check |

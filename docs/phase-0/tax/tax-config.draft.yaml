@@ -31,11 +31,21 @@ gst:
     specified_premises:
       rule: any_unit_value_above_7500_in_preceding_fy_or_declaration
       tracked_automatically: true          # system flags at FY end if any night crossed ₹7,500
-      opted_in_by_declaration: null        # CA to confirm
+      opted_in_by_declaration: false       # MD decision 2026-10-19: stay at 5%
+      status_by_fy:
+        "2026-27": other                   # no unit above ₹7,500 in FY 2025-26 (MD); CA to confirm
     rates:
       - { premises: specified, rate: 18, itc: true,  effective_from: 2025-04-01, ca_status: pending }
       - { premises: other,     rate: 5,  itc: false, effective_from: 2025-04-01, ca_status: pending }
     room_service_follows_restaurant: true   # ca_status: pending
+    active_rate_fy_2026_27: 5               # without ITC
+
+  # Protects the 5% restaurant rate: selling any unit above ₹7,500 a night would make the
+  # premises "specified" and move the restaurant to 18% from the next financial year.
+  accommodation_price_guard:
+    limit_per_unit_per_night: 7500
+    above_limit_requires: managing_director_approval
+    warn_text: 'This rate is above ₹7,500. The restaurant would move from 5% to 18% GST next financial year.'
 
   banquets:
     hall_and_lawn_rental: { sac: null, rate: 18, itc: true, ca_status: pending }   # CA to give SAC
@@ -49,7 +59,9 @@ gst:
 
   liquor: outside_gst   # billed under TN VAT, separate invoice
 
+  aato_band: above_10_crore                 # MD, 2026-10-19
   e_invoice:
+    required_for_resort: true
     mandatory_above_aato: 50000000          # ₹5 crore
     report_within_days_if_aato_at_least: { aato: 100000000, days: 30 }
     applies_to: [b2b_invoice, b2b_credit_note, b2b_debit_note]
@@ -113,6 +125,7 @@ income_tax:
       rate: 0.1
       threshold: { annual_per_vendor: 5000000 }
       applies_if_buyer_turnover_above: 100000000
+      applies_to_resort: true             # turnover above ₹10 crore
       ca_status: pending
     - code: partner_payments
       old_section: 194T

@@ -39,3 +39,6 @@ T37,Liquor control,Dry day,Liquor KOT on a notified dry day,Blocked with message
 T38,Liquor control,Outside licensed hours,BOT after closing time,Blocked; manager cannot override,Excise,,
 T39,Form C,Foreign guest,UK passport holder checks in 22:00,Form C task due by 22:00 next day; reminders until submitted,Bureau of Immigration,,
 T40,Service charge,Guest declines service charge,Bill with optional service charge line,Line removed in one tap; logged,CCPA guidelines,,
+T41,GST rooms,"Rate above ₹7,500 attempted","Reception sets a suite at ₹8,200 for one night",Blocked until MD approves; warning that the restaurant would move to 18% GST next FY,Specified premises guard,,
+T42,GST e-invoice,B2B invoice reporting window,B2B invoice dated 1 Nov; resort AATO above ₹10 crore,IRN must be generated within 30 days; system alerts accounts before the deadline,E-invoice 30-day rule,,
+T43,TDS,194Q on large supplier,Provisions supplier: purchases cross ₹50 lakh in the year,0.1% TDS on the amount above ₹50 lakh,Old 194Q (buyer turnover above ₹10 crore),,
