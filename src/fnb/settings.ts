@@ -8,6 +8,7 @@ import type { Ws } from './common'
 interface Licence { id: string; kind: string; name: string; number: string; authority: string | null; valid_from: string | null; valid_until: string | null; print_on: string[]; notes: string | null; active: boolean; state: string; updated_by: string }
 interface VatClass { id: string; label: string; active: boolean; rate: number | null; upcoming: VatRow[]; history: VatRow[] }
 interface VatRow { effective_from: string; rate: number; note: string | null; set_by: string }
+interface BillingSettings { upiVpa: string | null; upiPayee: string | null; serviceChargePercent: number }
 interface Bar { open: string | null; close: string | null; dryDays: { day: string; reason: string }[]; liquorNow: { allowed: boolean; reason: string | null }; legalAge: number }
 
 const KINDS: [string, string][] = [
@@ -25,14 +26,16 @@ export class SettingsView {
   private licences: Licence[] = []
   private vat: VatClass[] = []
   private bar: Bar | null = null
+  private billing: BillingSettings | null = null
   private businessDate = ''
 
   constructor(private ws: Ws) {}
 
   async load() {
     const api = this.ws.api
-    ;[this.licences, this.vat, this.bar, { businessDate: this.businessDate }] = await Promise.all([
+    ;[this.licences, this.vat, this.bar, { businessDate: this.businessDate }, this.billing] = await Promise.all([
       api.get<Licence[]>('/api/licences'), api.get<VatClass[]>('/api/vat-rates'), api.get<Bar>('/api/fnb/bar-settings'), api.get<{ businessDate: string }>('/api/business-date'),
+      api.get<BillingSettings>('/api/fnb/billing-settings'),
     ])
   }
 
@@ -71,6 +74,16 @@ export class SettingsView {
       ${canBar ? '<div class="ws-toolbar"><button type="button" class="btn" data-s="add-dry">Add dry day</button></div>' : ''}
       ${b.dryDays.map((d) => `<div class="row-card"><div class="rc-title">${fmt(d.day)}</div><div class="rc-sub">${esc(d.reason)}</div>
         <div class="rc-right">${canBar ? `<button type="button" class="btn small ghost" data-dry="${esc(d.day)}">Remove</button>` : ''}</div></div>`).join('') || '<div class="empty">No dry days entered. Add them as the state notifies them.</div>'}
+    </section>
+    <section>
+      <div class="sec-title">Restaurant bills</div>
+      <form class="form-grid bar-hours" data-s-form="billing">
+        <label class="span2">UPI ID for the QR code on bills<input name="upiVpa" value="${esc(this.billing!.upiVpa ?? '')}" placeholder="sathyaresorts@okaxis" ${this.ws.can('menu.price') ? '' : 'disabled'}></label>
+        <label class="span2">Payee name shown in the UPI app<input name="upiPayee" value="${esc(this.billing!.upiPayee ?? '')}" maxlength="60" ${this.ws.can('menu.price') ? '' : 'disabled'}></label>
+        <label>Service charge %<input name="service" type="number" min="0" max="20" step="0.5" value="${this.billing!.serviceChargePercent}" ${this.ws.can('menu.price') ? '' : 'disabled'}></label>
+        ${this.ws.can('menu.price') ? '<div class="span2"><button class="btn" type="submit">Save</button></div>' : ''}
+      </form>
+      <p class="muted small">Service charge is optional by law: bills say so, and staff remove it when a guest asks.</p>
     </section></div>`
   }
 
@@ -144,6 +157,11 @@ export class SettingsView {
   }
 
   async submit(form: HTMLFormElement): Promise<boolean> {
+    if (form.dataset.sForm === 'billing') {
+      await this.ws.api.req('PUT', '/api/fnb/billing-settings', { upiVpa: val(form, 'upiVpa') || null, upiPayee: val(form, 'upiPayee') || null, serviceChargePercent: Number(val(form, 'service') || 0) })
+      await this.load()
+      return true
+    }
     if (form.dataset.sForm !== 'hours') return false
     await this.ws.api.req('PUT', '/api/fnb/bar-settings', { open: val(form, 'open') || undefined, close: val(form, 'close') || undefined })
     await this.load()

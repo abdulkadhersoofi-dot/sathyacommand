@@ -11,19 +11,23 @@ import type { Party } from './einvoice'
 // Issues GST documents. Every document is a frozen snapshot: numbers come from a gap-free series,
 // and the database refuses later edits (see migration 004).
 
-export type DocType = 'invoice' | 'credit_note' | 'receipt_voucher' | 'refund_voucher'
+export type DocType = 'invoice' | 'fnb_invoice' | 'credit_note' | 'receipt_voucher' | 'refund_voucher'
 
 export interface DocLine { slNo: number; description: string; sac: string | null; qty: number; gstRate: number; taxable: number; cgst: number; sgst: number; total: number }
 
-const PREFIX: Record<Exclude<DocType, 'invoice'>, string> = { credit_note: 'CN', receipt_voucher: 'RV', refund_voucher: 'RF' }
+const PREFIX: Record<Exclude<DocType, 'invoice'>, string> = { fnb_invoice: 'RST', credit_note: 'CN', receipt_voucher: 'RV', refund_voucher: 'RF' }
 
-async function nextNumber(t: Db, docType: DocType, fy: string, invoicePrefix: string) {
+/** Next number in a gap-free series (one per document type and financial year). */
+export async function nextSeriesNumber(t: Db, series: string, fy: string, prefix: string) {
   const [r] = await t.query<{ serial: number }>(
     `insert into doc_series (doc_type, fy, next_serial) values ($1, $2, 2)
      on conflict (doc_type, fy) do update set next_serial = doc_series.next_serial + 1
-     returning next_serial - 1 as serial`, [docType, fy])
-  return documentNumber(docType === 'invoice' ? invoicePrefix : PREFIX[docType], fy, r.serial)
+     returning next_serial - 1 as serial`, [series, fy])
+  return documentNumber(prefix, fy, r.serial)
 }
+
+const nextNumber = (t: Db, docType: DocType, fy: string, invoicePrefix: string) =>
+  nextSeriesNumber(t, docType, fy, docType === 'invoice' ? invoicePrefix : PREFIX[docType])
 
 export async function supplier(t: Db): Promise<Party & { prefix: string }> {
   const [p] = await t.query<{ legal_name: string | null; name: string; gstin: string | null; address: string | null; city: string | null; pin: string | null; state_code: string; invoice_prefix: string }>(
@@ -52,7 +56,7 @@ function summarise(lines: DocLine[]) {
   return { summary: [...byRate.values()].sort((a, b) => a.rate - b.rate), taxable: sum('taxable'), cgst: sum('cgst'), sgst: sum('sgst'), total: sum('total') }
 }
 
-interface IssueInput {
+export interface IssueInput {
   docType: DocType
   reservationId: string | null
   folioId?: string | null
@@ -63,14 +67,14 @@ interface IssueInput {
   reason?: string
 }
 
-async function issue(ctx: Ctx, t: Db, who: Caller, input: IssueInput) {
+export async function issue(ctx: Ctx, t: Db, who: Caller, input: IssueInput) {
   const sup = await supplier(t)
   const date = await businessDate(t)
   const fy = financialYear(date)
   const number = await nextNumber(t, input.docType, fy, sup.prefix)
   const totals = summarise(input.lines)
   const b2b = !!input.recipient.gstin
-  const needsIrn = b2b && (input.docType === 'invoice' || input.docType === 'credit_note')
+  const needsIrn = b2b && (input.docType === 'invoice' || input.docType === 'fnb_invoice' || input.docType === 'credit_note')
   const ei = needsIrn ? eInvoice(ctx.tax, { b2b: true, invoiceDate: date }) : { required: false, irnDeadline: null }
   const id = randomUUID()
   const { prefix: _p, ...supplierSnap } = sup
@@ -93,7 +97,7 @@ export async function issueStayInvoice(ctx: Ctx, t: Db, who: Caller, reservation
   const [folio] = await t.query<{ id: string }>('select id from folio where reservation_id = $1 order by created_at limit 1', [reservationId])
   const rows = await t.query<{ id: string; kind: string; description: string; sac: string | null; gst_rate: string | null; taxable_paise: number; cgst_paise: number; sgst_paise: number; amount_paise: number; reverses: string | null }>(
     `select l.* from folio_line l join folio f on f.id = l.folio_id
-      where f.reservation_id = $1 and l.kind not in ('payment', 'refund') order by l.business_date, l.posted_at, l.id`, [reservationId])
+      where f.reservation_id = $1 and l.kind not in ('payment', 'refund', 'liquor') order by l.business_date, l.posted_at, l.id`, [reservationId])
   const reversed = new Set(rows.filter((r) => r.reverses).map((r) => r.reverses))
   const charges = rows.filter((r) => !r.reverses && !reversed.has(r.id))
   if (!charges.length) return null

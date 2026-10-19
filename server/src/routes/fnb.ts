@@ -66,7 +66,7 @@ export async function orderView(ctx: Ctx, db: Db, id: string) {
   const items = await db.query<{ status: string; price_paise: number; qty: number; liquor_class: string | null }>(
     `select i.id, i.item_id, i.name, i.price_paise, i.qty, i.liquor_class, i.station_id, i.seat, i.course, i.note, i.status, i.kot_id,
             k.number as kot_number, k.kind as kot_kind, k.status as kot_status, i.void_reason, i.added_at
-       from order_item i left join kot k on k.id = i.kot_id where i.order_id = $1 order by i.added_at, i.id`, [id])
+       from order_item i left join kot k on k.id = i.kot_id where i.order_id = $1 order by i.added_at, i.seq`, [id])
   const kots = await db.query(
     `select id, number, kind, station_id, status, prints, created_at, ready_at, served_at from kot where order_id = $1 order by created_at`, [id])
   const live = items.filter((i) => i.status !== 'void')
@@ -522,7 +522,7 @@ export function fnbRoutes(app: FastifyInstance, ctx: Ctx) {
     return db.query(
       `select o.id, o.number, o.outlet_id, ot.name as outlet, os.twin_id as outlet_twin_id, o.kind, o.table_id, tb.label as table_label, o.reservation_id,
               s.room_no, s.twin_id, g.name as guest, o.covers, o.status, o.business_date::text, o.opened_at, u.name as opened_by,
-              coalesce((select json_agg(json_build_object('name', i.name, 'qty', i.qty, 'price', i.price_paise, 'status', i.status) order by i.added_at)
+              coalesce((select json_agg(json_build_object('name', i.name, 'qty', i.qty, 'price', i.price_paise, 'status', i.status) order by i.added_at, i.seq)
                           from order_item i where i.order_id = o.id and i.status <> 'void'), '[]') as items,
               coalesce((select sum(i.price_paise * i.qty) from order_item i where i.order_id = o.id and i.status <> 'void'), 0)::bigint as subtotal_paise,
               (select count(*)::int from order_item i where i.order_id = o.id and i.status = 'pending') as pending_items,
@@ -581,7 +581,7 @@ export function fnbRoutes(app: FastifyInstance, ctx: Ctx) {
       const o = await loadOrder(t, id, true)
       openOnly(o)
       const pending = await t.query<{ id: string; name: string; qty: number; note: string | null; seat: number | null; course: number; station_id: string; price_paise: number; liquor_class: string | null; item_id: string }>(
-        `select id, name, qty, note, seat, course, station_id, price_paise, liquor_class, item_id from order_item where order_id = $1 and status = 'pending' order by course, added_at`, [id])
+        `select id, name, qty, note, seat, course, station_id, price_paise, liquor_class, item_id from order_item where order_id = $1 and status = 'pending' order by course, added_at, seq`, [id])
       if (!pending.length) throw new HttpError(409, 'Nothing new to send.')
       if (pending.some((p) => p.liquor_class)) await checkLiquorAllowed(ctx, t)
       const view = await orderView(ctx, t, id)
@@ -678,7 +678,7 @@ export function fnbRoutes(app: FastifyInstance, ctx: Ctx) {
         where k.status <> 'served' and ($1::text is null or k.station_id = $1) order by k.created_at`, [stationId ?? null])
     const lines = kots.length ? await db.query<{ kot_id: string }>(
       `select i.kot_id, i.id, i.name, i.qty, i.note, i.seat, i.course, i.status, i.void_reason, m.allergens, m.jain
-         from order_item i join menu_item m on m.id = i.item_id where i.kot_id = any($1) order by i.course, i.added_at`, [kots.map((k) => k.id)]) : []
+         from order_item i join menu_item m on m.id = i.item_id where i.kot_id = any($1) order by i.course, i.added_at, i.seq`, [kots.map((k) => k.id)]) : []
     const t = now().getTime()
     const tickets = kots.map((k) => ({ ...k, ageMinutes: Math.floor((t - new Date(k.created_at).getTime()) / 60_000), lines: lines.filter((l) => l.kot_id === k.id) }))
     // All-day counts: how many of each dish the station still has to make.

@@ -531,3 +531,14 @@ button.row-card { width: 100%; text-align: left; font: inherit; background: var(
   .ws-head { padding: 8px 12px; gap: 8px; }
   .ws-title { display: none; }
 }
+
+/* restaurant billing */
+.tbl[data-state="billed"] { border-left-color: var(--god); background: color-mix(in srgb, var(--god) 10%, var(--surface)); }
+.tbl[data-state="billed"] em { color: var(--god); }
+.bill-card { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-top: 10px; }
+.bill-card.settled { background: color-mix(in srgb, var(--st-vacant) 7%, var(--surface)); }
+.split-row { display: grid !important; grid-template-columns: minmax(0, 1fr) 100px; gap: 8px; align-items: center; flex-direction: row !important; font-weight: 600 !important; color: var(--fg) !important; margin: 4px 0; }
+.pay-row { display: grid; grid-template-columns: 130px 110px minmax(0, 1fr); gap: 6px; margin: 6px 0; }
+.pay-row select, .pay-row input, .cash-tender input { letter-spacing: normal; text-align: left; font: 500 14px var(--f-body); color: var(--fg); background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; min-width: 0; }
+.cash-tender { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: var(--muted); margin-top: 6px; }
+@media (max-width: 520px) { .pay-row { grid-template-columns: 1fr 1fr; } .pay-row input[name^="r"] { grid-column: 1 / -1; } }

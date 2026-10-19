@@ -43,9 +43,9 @@ export class Api {
   post = <T = unknown>(path: string, body: unknown = {}) => this.req<T>('POST', path, body)
 
   /** Opens an authenticated document (e.g. a printable invoice) in a new tab. */
-  async openDocument(path: string) {
+  async openDocument(path: string, method = 'GET') {
     const win = window.open('', '_blank')
-    const html = await this.req<string>('GET', path)
+    const html = await this.req<string>(method, path, method === 'POST' ? {} : undefined)
     const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }))
     if (win) win.location.href = url
     else location.href = url

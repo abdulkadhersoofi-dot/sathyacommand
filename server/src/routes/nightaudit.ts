@@ -3,12 +3,21 @@ import type { FastifyInstance } from 'fastify'
 import { accommodationNight, addDays, rupees } from '@sathya/tax'
 import { appendAudit } from '../audit-store'
 import { can, HttpError, type Ctx } from '../context'
+import type { Db } from '../db'
 import { businessDate, LODGING, PROPERTY } from '../fo-core'
 import { requireCaller } from './auth'
 
 // Cashier shifts and the night audit that closes each business day.
 
 const newId = (p: string) => `${p}-${randomUUID().slice(0, 8).toUpperCase()}`
+
+/** Cash taken in a cashier shift: front-desk payments and restaurant / bar payments. */
+async function shiftCash(db: Db, shiftId: string) {
+  const [{ cash }] = await db.query<{ cash: number }>(
+    `select (select coalesce(sum(amount_paise), 0) from payment where shift_id = $1)
+          + (select coalesce(sum(amount_paise), 0) from fnb_payment where shift_id = $1 and method = 'cash') as cash`, [shiftId])
+  return Number(cash)
+}
 
 export function nightAuditRoutes(app: FastifyInstance, ctx: Ctx) {
   const db = ctx.db
@@ -18,7 +27,7 @@ export function nightAuditRoutes(app: FastifyInstance, ctx: Ctx) {
   // ---------- cashier shifts ----------
   app.post('/api/cashier/open', async (req, reply) => {
     const who = await requireCaller(ctx, req)
-    if (!can(who, 'front_desk')) throw new HttpError(403, 'This needs front desk access.')
+    if (!can(who, 'front_desk') && !can(who, 'fnb.bill')) throw new HttpError(403, 'This needs front desk or restaurant cashier access.')
     const float = (req.body as { openingFloat?: number })?.openingFloat
     if (!(float! >= 0)) throw new HttpError(400, 'Send openingFloat (₹ counted in the drawer).')
     const id = newId('SH')
@@ -38,7 +47,7 @@ export function nightAuditRoutes(app: FastifyInstance, ctx: Ctx) {
     const [s] = await db.query<{ id: string; opening_float: number }>(
       'select id, opening_float, opened_at, business_date::text from cashier_shift where user_id = $1 and closed_at is null', [who.userId])
     if (!s) return { open: false }
-    const [{ cash }] = await db.query<{ cash: number }>('select coalesce(sum(amount_paise), 0)::bigint as cash from payment where shift_id = $1', [s.id])
+    const cash = await shiftCash(db, s.id)
     return { open: true, ...s, cashTaken: Number(cash), expectedInDrawer: s.opening_float + Number(cash) }
   })
 
@@ -50,7 +59,7 @@ export function nightAuditRoutes(app: FastifyInstance, ctx: Ctx) {
       const [s] = await t.query<{ id: string; opening_float: number }>(
         'select id, opening_float from cashier_shift where user_id = $1 and closed_at is null for update', [who.userId])
       if (!s) throw new HttpError(409, 'You have no open shift.')
-      const [{ cash }] = await t.query<{ cash: number }>('select coalesce(sum(amount_paise), 0)::bigint as cash from payment where shift_id = $1', [s.id])
+      const cash = await shiftCash(t, s.id)
       const expected = s.opening_float + Number(cash)
       const counted = rupees(b.countedCash!)
       const variance = counted - expected
@@ -111,6 +120,13 @@ export function nightAuditRoutes(app: FastifyInstance, ctx: Ctx) {
       const [{ departures }] = await t.query<{ departures: number }>(`select count(*)::int departures from reservation where status = 'checked_out' and checked_out_at::date = $1::date`, [day])
       const overstays = await t.query<{ id: string }>(`select id from reservation where status = 'in_house' and departure <= $1`, [day])
       const openShifts = await t.query<{ id: string }>('select id from cashier_shift where closed_at is null')
+      // Restaurant and bar: what was settled today, and orders still open.
+      const fnbBills = await t.query<{ amounts: { foodTaxable: number; cgst: number; sgst: number; liquorTaxable: number; vat: number; total: number; payable: number }; to_room: boolean }>(
+        `select b.amounts, b.reservation_id is not null as to_room from fnb_bill b where b.status = 'settled'
+            and exists (select 1 from fnb_payment p where p.bill_id = b.id and p.business_date = $1)`, [day])
+      const fnbPay = await t.query<{ method: string; total: number }>('select method, sum(amount_paise)::bigint as total from fnb_payment where business_date = $1 group by method order by method', [day])
+      const fnbOpen = await t.query<{ number: number }>(`select number from fnb_order where status in ('open', 'billed') order by number`)
+      const fsum = (k: 'foodTaxable' | 'cgst' | 'sgst' | 'liquorTaxable' | 'vat') => fnbBills.reduce((a, b) => a + b.amounts[k], 0)
       const formCOverdue = await t.query<{ reservation_id: string }>('select reservation_id from form_c where submitted_at is null and due_at < $1', [now()])
       const irnDue = await t.query<{ number: string; irn_deadline: string }>(
         `select number, irn_deadline::text from tax_document where irn_status in ('pending','failed') and irn_deadline <= $1::date + 5 order by irn_deadline`, [day])
@@ -124,6 +140,11 @@ export function nightAuditRoutes(app: FastifyInstance, ctx: Ctx) {
         overstays: overstays.map((r) => r.id), openCashierShifts: openShifts.map((s) => s.id),
         formCOverdue: formCOverdue.map((r) => r.reservation_id),
         eInvoicesDueWithin5Days: irnDue.map((r) => ({ number: r.number, deadline: r.irn_deadline })),
+        fnb: {
+          bills: fnbBills.length, foodSales: fsum('foodTaxable'), foodGst: fsum('cgst') + fsum('sgst'), liquorSales: fsum('liquorTaxable'), liquorVat: fsum('vat'),
+          chargedToRooms: fnbBills.filter((b) => b.to_room).length,
+          payments: Object.fromEntries(fnbPay.map((p) => [p.method, Number(p.total)])), openOrders: fnbOpen.map((o) => o.number),
+        },
       }
       await t.query('insert into night_audit (business_date, run_by, run_at, summary) values ($1, $2, $3, $4)', [day, who.userId, now(), JSON.stringify(summary)])
       const next = addDays(day, 1)

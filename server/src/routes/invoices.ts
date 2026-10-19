@@ -22,7 +22,7 @@ const DOC_COLS = `id, doc_type, number, fy, issue_date::text, reservation_id, or
   reverse_charge, lines, tax_summary, taxable_paise, cgst_paise, sgst_paise, total_paise, advance_adjusted_paise, amount_in_words, reason,
   irn_status, irn_deadline::text, irn, ack_no, ack_date, signed_qr, irn_error, issued_at`
 
-const TITLES: Record<string, string> = { invoice: 'Tax Invoice', credit_note: 'Credit Note', receipt_voucher: 'Receipt Voucher', refund_voucher: 'Refund Voucher' }
+const TITLES: Record<string, string> = { invoice: 'Tax Invoice', fnb_invoice: 'Tax Invoice', credit_note: 'Credit Note', receipt_voucher: 'Receipt Voucher', refund_voucher: 'Refund Voucher' }
 
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!))
 const money = (p: number) => formatInr(p).replace('₹', '')
@@ -32,7 +32,7 @@ export function invoiceRoutes(app: FastifyInstance, ctx: Ctx) {
 
   async function viewer(req: FastifyRequest) {
     const who = await requireCaller(ctx, req)
-    if (!can(who, 'front_desk') && !can(who, 'invoice.view')) throw new HttpError(403, 'You cannot see tax documents.')
+    if (!can(who, 'front_desk') && !can(who, 'invoice.view') && !can(who, 'fnb.bill')) throw new HttpError(403, 'You cannot see tax documents.')
     return who
   }
 
@@ -111,7 +111,7 @@ export function invoiceRoutes(app: FastifyInstance, ctx: Ctx) {
       original = { number: o.number, issueDate: o.issue_date }
     }
     const doc: DocForIrn = {
-      docType: d.doc_type as 'invoice' | 'credit_note', number: d.number, issueDate: d.issue_date, supplier: d.supplier, recipient: d.recipient,
+      docType: d.doc_type === 'credit_note' ? 'credit_note' : 'invoice', number: d.number, issueDate: d.issue_date, supplier: d.supplier, recipient: d.recipient,
       placeOfSupply: d.place_of_supply, lines: d.lines, original,
       totals: { taxable: d.taxable_paise, cgst: d.cgst_paise, sgst: d.sgst_paise, total: d.total_paise },
     }

@@ -253,13 +253,16 @@ export class FrontDesk {
       <p>This posts tonight's room charges for ${inHouse} in-house guest${inHouse === 1 ? '' : 's'} and moves the hotel to the next business day.</p>
       ${pendingArrivals ? `<p class="fd-warn">${pendingArrivals} arrival${pendingArrivals > 1 ? 's have' : ' has'} not checked in and will be marked no-show.</p>` : ''}
       ${this.cashier.open ? '<p class="fd-warn">Your cashier shift is still open.</p>' : ''}`, 'Close the day', async () => {
-      const s = await this.api.post<{ roomsSold: number; occupancy: number; roomRevenue: number; roomGst: number; noShows: string[]; formCOverdue: string[]; eInvoicesDueWithin5Days: unknown[]; nextBusinessDate: string }>('/api/night-audit')
+      const s = await this.api.post<{ roomsSold: number; occupancy: number; roomRevenue: number; roomGst: number; noShows: string[]; formCOverdue: string[]; eInvoicesDueWithin5Days: unknown[]; nextBusinessDate: string
+        fnb?: { bills: number; foodSales: number; foodGst: number; liquorSales: number; liquorVat: number; openOrders: number[] } }>('/api/night-audit')
       setToday(s.nextBusinessDate)
       await this.store.setDate(s.nextBusinessDate)
       await this.store.reload()
       this.open('Day closed', `<dl class="kv">
         <dt>Rooms sold</dt><dd>${s.roomsSold} (${s.occupancy}%)</dd>
         <dt>Room revenue</dt><dd>${rs(s.roomRevenue)} + GST ${rs(s.roomGst)}</dd>
+        ${s.fnb ? `<dt>Restaurant &amp; bar</dt><dd>${rs(s.fnb.foodSales)} + GST ${rs(s.fnb.foodGst)} · liquor ${rs(s.fnb.liquorSales)} + VAT ${rs(s.fnb.liquorVat)}</dd>
+          ${s.fnb.openOrders.length ? `<dt>Open restaurant orders</dt><dd class="fd-warn">${s.fnb.openOrders.length}</dd>` : ''}` : ''}
         <dt>No-shows</dt><dd>${s.noShows.length}</dd>
         <dt>Form C overdue</dt><dd>${s.formCOverdue.length}</dd>
         <dt>E-invoices due in 5 days</dt><dd>${s.eInvoicesDueWithin5Days.length}</dd>

@@ -2,6 +2,7 @@ import { esc, toast, tonePill } from '../ui/dom'
 import { val } from '../ui/form-modal'
 import { chips, dietDot, minutesAgo, rs, type Category, type MenuItem, type Table, type Ticket, type Ws } from './common'
 import { printTickets } from './print'
+import { Billing } from './billing'
 
 // The captain's tablet: tables of an outlet, then the order screen. Items go into a cart on the tablet
 // and reach the kitchen only on "Send", one ticket per station.
@@ -9,7 +10,7 @@ import { printTickets } from './print'
 interface OrderLine { id: string; item_id: string; name: string; price_paise: number; qty: number; liquor_class: string | null; note: string | null; status: 'pending' | 'sent' | 'void'; kot_id: string | null; kot_number: number | null; kot_kind: string | null; kot_status: string | null; void_reason: string | null }
 interface OrderKot { id: string; number: number; kind: string; station_id: string; status: string; prints: number; created_at: string }
 export interface OrderView {
-  id: string; number: number; outlet_id: string; outlet: string; kind: string; table_id: string | null; table_label: string | null; room_no: string | null; guest: string | null
+  id: string; number: number; outlet_id: string; outlet: string; kind: string; table_id: string | null; table_label: string | null; room_no: string | null; guest: string | null; reservation_id: string | null
   covers: number; status: string; opened_at: string; items: OrderLine[]; kots: OrderKot[]
   totals: { food: number; gstRate: number; cgst: number; sgst: number; liquorBeforeVat: number; vat: number; vatMissing: string[]; payable: number }
 }
@@ -30,7 +31,11 @@ export class CaptainView {
   private ageOk = new Set<string>()
   private lastTickets: Ticket[] = []
 
-  constructor(private ws: Ws) {}
+  private billing: Billing
+
+  constructor(private ws: Ws) {
+    this.billing = new Billing(ws, async () => { await this.load(); this.ws.render() })
+  }
 
   private get outlet() { return this.ws.outlets.find((o) => o.id === this.outletId) }
 
@@ -39,7 +44,7 @@ export class CaptainView {
     if (!this.outletId) return
     if (this.order) {
       this.order = await this.ws.api.get<OrderView>(`/api/fnb/orders/${this.order.id}`)
-      if (this.order.status !== 'open') { this.order = null; this.cart.clear() }
+      if (!['open', 'billed'].includes(this.order.status)) { this.order = null; this.cart.clear() }
     }
     const outletId = this.order?.outlet_id ?? this.outletId
     if (this.menuFor !== outletId) {
@@ -53,6 +58,7 @@ export class CaptainView {
       this.tables = await this.ws.api.get(`/api/fnb/tables?outletId=${this.outletId}`)
       this.roomOrders = await this.ws.api.get(`/api/fnb/orders?outletId=${this.outletId}`)
     }
+    await this.billing.load(this.order?.status === 'billed' ? this.order.id : null)
   }
 
   /** Opens a specific order (e.g. from the kitchen panel). */
@@ -72,7 +78,7 @@ export class CaptainView {
   // ---------- tables ----------
   private tablesHtml() {
     const o = this.outlet!
-    const head = chips(this.ws.outlets.filter((x) => x.active).map((x) => [x.id, x.name]), this.outletId, 'outlet')
+    const head = chips(this.ws.outlets.filter((x) => x.active).map((x) => [x.id, x.name]), this.outletId, 'outlet') + `<div class="ws-toolbar">${this.billing.shiftHtml()}</div>`
     if (o.kind === 'room_service') {
       return head + `<div class="ws-toolbar"><button class="btn primary" type="button" data-cap="new-room">New room-service order</button></div>
         <div class="sec-title">Open room-service orders <span>${this.roomOrders.length}</span></div>
@@ -84,11 +90,11 @@ export class CaptainView {
     const sections = [...new Set(this.tables.map((t) => t.section ?? ''))]
     const takeaway = this.roomOrders.filter((r) => r.kind === 'takeaway')
     return head + sections.map((sec) => `<div class="sec-title">${esc(sec || 'Tables')}</div><div class="tables">${this.tables.filter((t) => (t.section ?? '') === sec).map((t) => {
-      const state = !t.order_id ? 'free' : t.ready_tickets ? 'ready' : 'open'
+      const state = !t.order_id ? 'free' : t.order_status === 'billed' ? 'billed' : t.ready_tickets ? 'ready' : 'open'
       return `<button type="button" class="tbl" data-table="${esc(t.id)}" data-state="${state}">
         <b>${esc(t.label)}</b>
         <span>${t.order_id ? `Order ${t.order_number} · ${t.covers} pax · ${minutesAgo(t.opened_at!)} min` : `${t.seats} seats`}</span>
-        ${t.ready_tickets ? '<em>Food ready</em>' : ''}</button>`
+        ${state === 'billed' ? '<em>Bill out</em>' : t.ready_tickets ? '<em>Food ready</em>' : ''}</button>`
     }).join('')}</div>`).join('')
       + `<div class="ws-toolbar"><button class="btn" type="button" data-cap="takeaway">Takeaway order</button></div>`
       + (takeaway.length ? `<div class="sec-title">Takeaway</div>` + takeaway.map((r) => `<button type="button" class="row-card ws-row" data-order="${esc(r.id)}"><div class="rc-title">Order ${r.number}</div><div class="rc-sub">${minutesAgo(r.opened_at)} min · ${rs(Number(r.subtotal_paise))}</div></button>`).join('') : '')
@@ -107,13 +113,15 @@ export class CaptainView {
         <div class="ord-head"><div><div class="dr-kicker">${esc(o.outlet)} · Order ${o.number}</div><div class="dr-title">${esc(where)}</div>
           <div class="muted small">${o.covers} cover${o.covers > 1 ? 's' : ''} · open ${minutesAgo(o.opened_at)} min</div></div></div>
         ${this.linesHtml(o)}
-        ${this.totalsHtml(o)}
-        <div class="actions">
+        ${o.status === 'billed' ? '' : this.totalsHtml(o)}
+        ${o.status === 'billed' ? this.billing.html(o) : `<div class="actions">
           <button type="button" class="btn primary" data-cap="send" ${this.cart.size ? '' : 'disabled'}>Send to kitchen${this.cart.size ? ` (${[...this.cart.values()].reduce((a, c) => a + c.qty, 0)})` : ''}</button>
+          ${!this.cart.size && o.items.some((i) => i.status === 'sent') && !o.items.some((i) => i.status === 'pending') && this.ws.can('fnb.bill') ? '<button type="button" class="btn primary" data-bill="bill">Bill</button>' : ''}
           ${this.lastTickets.length ? '<button type="button" class="btn" data-cap="print">Print tickets</button>' : ''}
           ${o.kind === 'dine_in' ? '<button type="button" class="btn" data-cap="move">Move table</button>' : ''}
+          ${o.kind === 'dine_in' ? '<button type="button" class="btn" data-cap="merge">Merge table</button>' : ''}
           ${o.items.some((i) => i.status === 'sent') ? '' : '<button type="button" class="btn ghost" data-cap="cancel-order">Cancel order</button>'}
-        </div>
+        </div>`}
       </div></div>`
   }
 
@@ -123,7 +131,7 @@ export class CaptainView {
     const cats: [string, string][] = [['', 'All'], ...this.menu.categories.filter((c) => this.menu.items.some((i) => i.category_id === c.id)).map((c): [string, string] => [c.id, c.name])]
     return chips(cats, this.cat, 'cat') + `<div class="menu-grid">${items.map((i) => {
       const inCart = this.cart.get(i.id)?.qty
-      return `<button type="button" class="dish" data-item="${esc(i.id)}" ${i.available ? '' : 'disabled'}>
+      return `<button type="button" class="dish" data-item="${esc(i.id)}" ${i.available && this.order?.status !== 'billed' ? '' : 'disabled'}>
         <span class="dish-name">${dietDot(i.diet)}${esc(i.name)}</span>${i.name_ta ? `<span class="dish-ta">${esc(i.name_ta)}</span>` : ''}
         <span class="dish-foot"><span class="mono">${rs(i.price_paise)}</span>${!i.available ? '<em>Sold out</em>' : i.liquor_class ? '<em>Liquor</em>' : ''}${inCart ? `<b class="dish-qty">${inCart}</b>` : ''}</span></button>`
     }).join('') || '<div class="empty">No dishes match.</div>'}</div>`
@@ -172,6 +180,7 @@ export class CaptainView {
   async click(t: HTMLElement): Promise<boolean> {
     const d = (k: string) => t.closest<HTMLElement>(`[data-${k}]`)?.dataset[k.replace(/-(.)/g, (_, c) => c.toUpperCase())]
     const api = this.ws.api
+    if (await this.billing.click(t, this.order)) return true
     const outlet = d('outlet'); if (outlet !== undefined) { this.outletId = outlet; this.order = null; await this.load(); return true }
     const cat = d('cat'); if (cat !== undefined) { this.cat = cat; this.refreshItems(); return true }
     const table = d('table')
@@ -243,6 +252,15 @@ export class CaptainView {
       this.ws.modal.open('Move to table', `<div class="form-grid"><label class="span2">Table<select name="table">${free.map((x) => `<option value="${esc(x.id)}">${esc(x.label)} · ${x.seats} seats</option>`).join('')}</select></label></div>`, 'Move', async (f) => {
         this.order = await api.post<OrderView>(`/api/fnb/orders/${this.order!.id}/move`, { tableId: val(f, 'table') })
         this.ws.render(); return 'Moved'
+      })
+    }
+    if (act === 'merge') {
+      const others = (await api.get<Table[]>(`/api/fnb/tables?outletId=${this.order!.outlet_id}`)).filter((x) => x.order_id && x.order_id !== this.order!.id && x.order_status === 'open')
+      this.ws.modal.open('Merge another table into this order', others.length ? `<div class="form-grid"><label class="span2">Table<select name="from">${others.map((x) => `<option value="${esc(x.order_id!)}">${esc(x.label)} · order ${x.order_number} · ${x.covers} pax</option>`).join('')}</select></label></div>
+        <p class="muted small">Its items and guests move to this order and that table becomes free.</p>` : '<p>No other open tables to merge.</p>', others.length ? 'Merge' : 'Done', async (f) => {
+        if (!others.length) return ''
+        await api.post(`/api/fnb/orders/${this.order!.id}/merge`, { fromOrderId: val(f, 'from') })
+        await this.load(); this.ws.render(); return 'Tables merged'
       })
     }
     if (act === 'cancel-order') {
