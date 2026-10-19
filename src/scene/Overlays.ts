@@ -1,11 +1,10 @@
 import * as THREE from 'three'
-import { SITE, type V2 } from '../data/registry'
+import { blockCells, rectPoly, type V2 } from '../data/layout'
 import { minutesOpen, type Store } from '../data/store'
 import type { Order, Reservation } from '../data/types'
 import { centroid, ease, inPoly, scalePoly } from './geo'
 import type { Site } from './Site'
 import type { Rooms } from './Rooms'
-import { mainBlockPoly } from './Site'
 
 // Everything drawn on top of the site: venue event overlays, kitchen load
 // ring, room-service markers, HTML labels, and short-lived motion (order arcs,
@@ -39,7 +38,7 @@ export class Overlays {
       new THREE.RingGeometry(14, 16.5, 56).rotateX(-Math.PI / 2),
       new THREE.MeshBasicMaterial({ color: 0x35a46b, transparent: true, opacity: 0.7, depthWrite: false }),
     )
-    const k = site.anchors.get('KITCHEN')!.pos
+    const k = site.anchors.get('KITCHEN')?.pos ?? new THREE.Vector3()
     this.kitchenRing.position.set(k.x, 0.2, k.z)
     this.markers = new THREE.InstancedMesh(
       new THREE.OctahedronGeometry(0.9, 0),
@@ -48,6 +47,12 @@ export class Overlays {
     this.markers.count = 0
     this.group.add(this.tables, this.kitchenRing, this.markers)
     this.buildLabels()
+  }
+
+  /** Removes this overlay's HTML labels (used when the scene is rebuilt from a new layout). */
+  dispose() {
+    for (const l of this.labels.values()) l.el.remove()
+    this.labels.clear()
   }
 
   // ---------- labels ----------
@@ -63,10 +68,15 @@ export class Overlays {
       if (!a) continue
       this.addLabel(id, name, a.pos.clone().setY(a.height + 2), id)
     }
-    const [cx, cz] = centroid(mainBlockPoly())
-    this.addLabel('park-wing', 'Park Wing · 36 rooms', new THREE.Vector3(cx, SITE.mainBlock.floors * SITE.mainBlock.floorHeight + 3, cz))
-    const v = centroid(SITE.villas.map((x) => centroid(x.poly)))
-    this.addLabel('villas', 'Garden Villas', new THREE.Vector3(v[0], 8, v[1]))
+    for (const b of this.site.layout.blocks) {
+      const [cx, cz] = centroid(rectPoly(b.rect))
+      this.addLabel(`block:${b.id}`, `${b.label} · ${blockCells(b).length} rooms`, new THREE.Vector3(cx, b.floors * b.floorHeight + 3, cz))
+    }
+    const villas = this.site.layout.villas
+    if (villas.length) {
+      const v = centroid(villas.map((x) => centroid(x.poly)))
+      this.addLabel('villas', villas.every((x) => x.kind === 'villa') ? 'Garden Villas' : 'Villas & Cottages', new THREE.Vector3(v[0], 8, v[1]))
+    }
   }
 
   private addLabel(key: string, text: string, pos: THREE.Vector3, spaceId?: string) {
@@ -95,9 +105,9 @@ export class Overlays {
     const placed: { x: number; y: number; w: number; h: number }[] = []
     const items = [...this.labels.entries()].map(([key, l]) => {
       v.copy(l.pos)
-      if (key === 'park-wing') v.y += this.rooms.exploded ? 10 : 0
+      if (key.startsWith('block:')) v.y += this.rooms.exploded ? 10 : 0
       v.project(camera)
-      const prio = (l.el.classList.contains('has-detail') ? 2 : 0) + (key === 'park-wing' ? 1 : 0)
+      const prio = (l.el.classList.contains('has-detail') ? 2 : 0) + (key.startsWith('block:') ? 1 : 0)
       return { l, x: ((v.x + 1) / 2) * w, y: ((1 - v.y) / 2) * h, onScreen: v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1, prio, depth: v.z }
     }).sort((a, b) => b.prio - a.prio || a.depth - b.depth)
     for (const it of items) {
@@ -218,26 +228,26 @@ export class Overlays {
     if (r) return r
     const a = this.site.anchors.get(id)
     if (a) return a.pos.clone().setY(Math.max(1, a.height))
-    return this.site.anchors.get('RESTAURANT')!.pos.clone().setY(4.6)   // restaurant tables
+    return (this.site.anchors.get('RESTAURANT')?.pos ?? new THREE.Vector3()).clone().setY(4.6)   // restaurant tables
   }
 
   orderArc(o: Order) {
     const from = this.anchorOf(o.origin)
-    const to = this.site.anchors.get('KITCHEN')!.pos.clone().setY(4.2)
+    const to = (this.site.anchors.get('KITCHEN')?.pos ?? new THREE.Vector3()).clone().setY(4.2)
     this.arc(from, to, MARIGOLD, 1.8)
   }
 
   foodRunner(o: Order) {
     if (o.kind !== 'room') return
-    const k = this.site.anchors.get('KITCHEN')!.pos
+    const k = (this.site.anchors.get('KITCHEN')?.pos ?? new THREE.Vector3())
     const to = this.anchorOf(o.origin)
     this.walker([k.clone().setY(1.2), new THREE.Vector3(to.x, 1.2, to.z), to], MARIGOLD, 3.2)
   }
 
   guestMove(res: Reservation, change: 'check-in' | 'check-out') {
-    const gate = new THREE.Vector3(SITE.gate[0], 1.2, SITE.gate[1])
+    const gate = new THREE.Vector3(this.site.layout.gate[0], 1.2, this.site.layout.gate[1])
     const mid = (x: number, y: number) => { const [a, b] = [(x - 440) * 0.4, (y - 500) * 0.4]; return new THREE.Vector3(a, 1.2, b) }
-    const rec = this.site.anchors.get('RECEPTION')!.pos.clone().setY(1.2)
+    const rec = (this.site.anchors.get('RECEPTION')?.pos ?? new THREE.Vector3()).clone().setY(1.2)
     const room = this.anchorOf(res.spaceId)
     const path = [gate, mid(586, 726), mid(548, 684), rec, new THREE.Vector3(room.x, 1.2, room.z), room]
     if (change === 'check-out') path.reverse()

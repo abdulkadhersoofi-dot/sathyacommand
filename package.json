@@ -12,7 +12,8 @@
   },
   "dependencies": {
     "qrcode-generator": "1.4.4",
-    "three": "0.170.0"
+    "three": "0.170.0",
+    "@sathya/twin": "0.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

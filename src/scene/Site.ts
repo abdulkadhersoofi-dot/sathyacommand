@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { SITE, M_PER_PX, type V2 } from '../data/registry'
+import { rectPoly, type SiteLayout, type V2 } from '../data/layout'
 import { centroid, distToPolyline, extruded, flatPatch, hipRoof, inPoly, ribbon, scalePoly } from './geo'
 
 // Static scenery: terrain, drives, pool, trees, lamps and the non-room buildings.
@@ -19,9 +19,12 @@ export class Site {
   lampMaterial: THREE.MeshStandardMaterial
   waterUniforms = { uTime: { value: 0 }, uNight: { value: 0 } }
   treeUniforms = { uTime: { value: 0 } }
-  roadPaths: V2[][] = SITE.roads.filter((r) => r.kind === 'drive').map((r) => r.pts)
+  /** Every drawn object that Twin Studio can select, tagged with userData.layoutId. */
+  editables: THREE.Object3D[] = []
+  roadPaths: V2[][]
 
-  constructor() {
+  constructor(public layout: SiteLayout) {
+    this.roadPaths = layout.roads.filter((r) => r.kind === 'drive').map((r) => r.pts)
     this.buildTerrain()
     this.buildPool()
     this.buildBuildings()
@@ -37,7 +40,7 @@ export class Site {
   }
 
   private buildTerrain() {
-    const [x0, z0] = SITE.bounds.min, [x1, z1] = SITE.bounds.max
+    const [x0, z0] = this.layout.bounds.min, [x1, z1] = this.layout.bounds.max
     const w = x1 - x0 + 160, d = z1 - z0 + 160
     const base = new THREE.Mesh(
       new THREE.PlaneGeometry(w, d).rotateX(-Math.PI / 2),
@@ -47,10 +50,12 @@ export class Site {
     base.receiveShadow = true
     this.root.add(base)
 
-    SITE.ground.forEach((g, i) => {
+    this.layout.ground.forEach((g, i) => {
       const mat = new THREE.MeshStandardMaterial({ color: GROUND_COLORS[g.kind], roughness: 1 })
       const mesh = new THREE.Mesh(flatPatch(g.poly, 0.03 + i * 0.004), mat)
       mesh.receiveShadow = true
+      mesh.userData.layoutId = g.id
+      this.editables.push(mesh)
       if (g.spaceId) {
         mesh.userData.spaceId = g.spaceId
         this.pickables.push(mesh)
@@ -63,20 +68,23 @@ export class Site {
 
     // cricket pitch strip
     const pitch = new THREE.Mesh(new THREE.PlaneGeometry(3, 20).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xd8c39a, roughness: 1 }))
-    const c = this.anchors.get('GROUND-CRICKET')!.pos
-    pitch.position.set(c.x, 0.07, c.z)
-    this.root.add(pitch)
+    const c = this.anchors.get('GROUND-CRICKET')?.pos
+    if (c) {
+      pitch.position.set(c.x, 0.07, c.z)
+      this.root.add(pitch)
+    }
 
-    for (const r of SITE.roads) {
+    for (const r of this.layout.roads) {
       const mat = new THREE.MeshStandardMaterial({ color: r.kind === 'highway' ? 0x5d5f61 : 0xa49c8e, roughness: 0.95, side: THREE.DoubleSide })
-      const mesh = new THREE.Mesh(ribbon(r.pts, r.width * M_PER_PX, r.kind === 'highway' ? 0.05 : 0.08), mat)
+      const mesh = new THREE.Mesh(ribbon(r.pts, r.width, r.kind === 'highway' ? 0.05 : 0.08), mat)
       mesh.receiveShadow = true
+      mesh.userData.layoutId = r.id
+      this.editables.push(mesh)
       this.root.add(mesh)
     }
   }
 
   private buildPool() {
-    const deck = SITE.pool
     const mat = new THREE.ShaderMaterial({
       uniforms: this.waterUniforms,
       vertexShader: `varying vec2 vP; void main(){ vP = position.xz; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
@@ -90,17 +98,23 @@ export class Site {
           gl_FragColor = vec4(mix(day, night, uNight), 1.0);
         }`,
     })
-    const water = new THREE.Mesh(flatPatch(deck, 0.12), mat)
-    water.userData.spaceId = 'POOL'
-    this.pickables.push(water)
-    this.root.add(water)
-    const [cx, cz] = centroid(deck)
-    this.anchors.set('POOL', { pos: new THREE.Vector3(cx, 0, cz), poly: deck, height: 0 })
+    for (const p of this.layout.pools) {
+      const water = new THREE.Mesh(flatPatch(p.poly, 0.12), mat)
+      water.userData.layoutId = p.id
+      this.editables.push(water)
+      if (p.spaceId) {
+        water.userData.spaceId = p.spaceId
+        this.pickables.push(water)
+        const [cx, cz] = centroid(p.poly)
+        this.anchors.set(p.spaceId, { pos: new THREE.Vector3(cx, 0, cz), poly: p.poly, height: 0 })
+      }
+      this.root.add(water)
+    }
   }
 
   private buildBuildings() {
     const center = new THREE.Vector2(0, 0)
-    for (const b of SITE.buildings) {
+    for (const b of this.layout.buildings) {
       const g = new THREE.Group()
       const wallMat = new THREE.MeshStandardMaterial({ color: b.wallColor, roughness: 0.85 })
       const roofMat = new THREE.MeshStandardMaterial({ color: b.roofColor, roughness: 0.8, flatShading: true, side: THREE.DoubleSide })
@@ -130,7 +144,9 @@ export class Site {
         floor.receiveShadow = true
         g.add(floor)
         roof.userData.spaceId = b.spaceId
+        roof.userData.layoutId = posts.userData.layoutId = b.id
         this.pickables.push(roof)
+        this.editables.push(roof, posts)
       } else {
         const walls = new THREE.Mesh(extruded(b.poly, b.height), wallMat)
         walls.castShadow = walls.receiveShadow = true
@@ -139,7 +155,9 @@ export class Site {
           : new THREE.Mesh(extruded(scalePoly(b.poly, 1.015), 0.5, b.height), roofMat)
         roof.castShadow = true
         walls.userData.spaceId = roof.userData.spaceId = b.spaceId
+        walls.userData.layoutId = roof.userData.layoutId = b.id
         this.pickables.push(walls, roof)
+        this.editables.push(walls, roof)
         g.add(walls, roof)
       }
 
@@ -155,7 +173,7 @@ export class Site {
     // entrance gate arch
     const gate = new THREE.Group()
     const gm = new THREE.MeshStandardMaterial({ color: 0xc8643b, roughness: 0.8 })
-    const [gx, gz] = SITE.gate
+    const [gx, gz] = this.layout.gate
     for (const s of [-1, 1]) {
       const p = new THREE.Mesh(new THREE.BoxGeometry(1.2, 6, 1.2), gm)
       p.position.set(gx + s * 3.8 * 0.84, 3, gz - s * 3.8 * 0.55)
@@ -172,18 +190,19 @@ export class Site {
 
   private buildTrees() {
     const r = mulberry(4242)
-    const [x0, z0] = SITE.bounds.min, [x1, z1] = SITE.bounds.max
+    const [x0, z0] = this.layout.bounds.min, [x1, z1] = this.layout.bounds.max
     const blockers = [
-      ...SITE.buildings.map((b) => scalePoly(b.poly, 1.25)),
-      ...SITE.villas.map((v) => scalePoly(v.poly, 1.5)),
-      ...SITE.ground.map((g) => g.poly),
-      mainBlockPoly(1.12),
+      ...this.layout.buildings.map((b) => scalePoly(b.poly, 1.25)),
+      ...this.layout.villas.map((v) => scalePoly(v.poly, 1.5)),
+      ...this.layout.ground.map((g) => g.poly),
+      ...this.layout.pools.map((p) => scalePoly(p.poly, 1.1)),
+      ...this.layout.blocks.map((b) => scalePoly(rectPoly(b.rect), 1.12)),
     ]
     const pts: { p: V2; s: number }[] = []
     for (let tries = 0; tries < 6000 && pts.length < 520; tries++) {
       const p: V2 = [x0 + r() * (x1 - x0), z0 + r() * (z1 - z0)]
       if (blockers.some((b) => inPoly(p, b))) continue
-      if (SITE.roads.some((rd) => distToPolyline(p, rd.pts) < (rd.width * M_PER_PX) / 2 + 2.2)) continue
+      if (this.layout.roads.some((rd) => distToPolyline(p, rd.pts) < rd.width / 2 + 2.2)) continue
       if (pts.some((q) => Math.hypot(q.p[0] - p[0], q.p[1] - p[1]) < 4.2)) continue
       pts.push({ p, s: 2.2 + r() * 2.4 })
     }
@@ -243,13 +262,6 @@ export class Site {
     this.root.add(bulbs, poles)
     return mat
   }
-}
-
-export function mainBlockPoly(k = 1): V2[] {
-  const [x1, y1, x2, y2] = SITE.mainBlock.rect
-  const s = M_PER_PX, ox = 440, oy = 500
-  const poly: V2[] = [[(x1 - ox) * s, (y1 - oy) * s], [(x2 - ox) * s, (y1 - oy) * s], [(x2 - ox) * s, (y2 - oy) * s], [(x1 - ox) * s, (y2 - oy) * s]]
-  return scalePoly(poly, k)
 }
 
 export function mulberry(seed: number) {

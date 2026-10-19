@@ -107,7 +107,22 @@ export class Store {
     this.invalidate('reload')
   }
 
+  /** Fetch rooms and bookings again (a new layout was published, or rooms were relinked). */
+  async reloadSpaces() {
+    this.spaces = await this.adapter.getSpaces()
+    this.spaceById = new Map(this.spaces.map((s) => [s.id, s]))
+    await this.reload()
+  }
+
   private async onSnapshotChanged(e: Extract<DomainEvent, { type: 'snapshot.changed' }>) {
+    if (e.action === 'site.published' || e.action === 'site.restored' || e.action.startsWith('room.')) {
+      await this.reloadSpaces()
+      if (e.action.startsWith('site.')) {
+        this.pushFeed({ id: `${e.action}-${e.entityId}`, at: new Date(), kind: 'alert', text: `Resort layout version ${e.entityId} published by ${e.actor}` })
+        this.emit('site', e)
+      }
+      return
+    }
     await this.reload()
     const r = this.reservations.find((x) => x.id === e.entityId)
     const room = r ? (r.roomNo ? `room ${r.roomNo}` : 'unassigned room') : ''

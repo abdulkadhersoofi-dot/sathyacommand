@@ -410,3 +410,16 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .fd-count { font-size: 14px; }
 .muted.small, p.small { font-size: 12px; }
 @media (max-width: 520px) { .form-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- Twin Studio ---------- */
+.drawer.studio { z-index: 7; }
+.studio-add { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 6px; }
+.studio-fields { margin-top: 6px; }
+.studio-fields input, .studio-fields select, .studio-note input {
+  font: 500 13.5px var(--f-body); letter-spacing: normal; text-align: left; color: var(--fg); background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; min-width: 0; width: 100%;
+}
+.studio-fields input[type="color"] { padding: 2px; height: 34px; }
+.studio-note { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: var(--muted); }
+.drawer.studio .row-card { margin-top: 6px; }
+body.studio-on .layers, body.studio-on .legend, body.studio-on .hint, body.studio-on .tip, body.studio-on .ml-detail { display: none; }

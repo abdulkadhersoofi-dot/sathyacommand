@@ -20,6 +20,8 @@ sign_in:
 #   invoice.view     see tax invoices, credit notes and vouchers
 #   invoice.credit_note  issue a credit note against an invoice
 #   einvoice.generate    register invoices with the GST portal (IRN)
+#   site.edit        draft changes to the 3D resort layout (Twin Studio)
+#   site.publish     publish a new version of the 3D resort layout
 #   '*'              everything, including deciding approvals
 roles:
   managing_director:
@@ -27,10 +29,10 @@ roles:
     permissions: ['*']
     limits: unlimited
   general_manager:
-    permissions: [inventory.edit, devices.approve, users.manage, front_desk, folio.reverse, discount.approve, night_audit, invoice.view, invoice.credit_note]
+    permissions: [inventory.edit, devices.approve, users.manage, front_desk, folio.reverse, discount.approve, night_audit, invoice.view, invoice.credit_note, site.edit, site.publish]
     limits: { discount_percent: 25, refund: 50000, comp_room_nights: 5, purchase_order: 500000, rate_override_below_floor: true }
   operations_manager:
-    permissions: [front_desk, folio.reverse, discount.approve]
+    permissions: [front_desk, folio.reverse, discount.approve, site.edit]
     limits: { discount_percent: 20, void_per_bill: 5000, room_move: true, mark_out_of_order: true, overtime_hours_per_week: 12 }
   front_office_manager:
     permissions: [front_desk, folio.reverse, night_audit, invoice.credit_note]

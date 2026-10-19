@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import type { Store } from '../data/store'
 import { Site } from './Site'
+import { defaultLayout, type SiteLayout } from '../data/layout'
 import { Rooms } from './Rooms'
 import { Overlays } from './Overlays'
 import { ease } from './geo'
@@ -20,9 +21,12 @@ export class World {
   scene = new THREE.Scene()
   camera: THREE.PerspectiveCamera
   controls: OrbitControls
-  site = new Site()
-  rooms = new Rooms()
+  site: Site
+  rooms: Rooms
   overlays: Overlays
+  layout: SiteLayout
+  /** Twin Studio is open: normal hover / tap is off and the studio handles the pointer. */
+  editMode = false
   night = false
   eco = false
 
@@ -39,7 +43,10 @@ export class World {
   private lastTap = { id: '' as string | null, t: 0 }
   private size = { w: 1, h: 1 }
 
-  constructor(private host: HTMLElement, labelLayer: HTMLElement, private store: Store, private cb: WorldCallbacks) {
+  constructor(private host: HTMLElement, private labelLayer: HTMLElement, private store: Store, private cb: WorldCallbacks, layout: SiteLayout = defaultLayout()) {
+    this.layout = layout
+    this.site = new Site(layout)
+    this.rooms = new Rooms(layout)
     const lowEnd = (navigator.hardwareConcurrency ?? 8) <= 4 || ((navigator as any).deviceMemory ?? 8) <= 4
     this.eco = lowEnd
     this.renderer = new THREE.WebGLRenderer({ antialias: !lowEnd, powerPreference: 'high-performance' })
@@ -76,6 +83,87 @@ export class World {
     this.resize()
     this.intro()
     this.renderer.setAnimationLoop(() => this.frame())
+  }
+
+  /** Replaces the whole resort with a new layout (Twin Studio edits, or a newly published version). */
+  rebuild(layout: SiteLayout) {
+    const dispose = (root: THREE.Object3D) => root.traverse((o) => {
+      const m = o as THREE.Mesh
+      m.geometry?.dispose()
+      const mats = Array.isArray(m.material) ? m.material : m.material ? [m.material] : []
+      mats.forEach((x) => x.dispose())
+    })
+    this.scene.remove(this.site.root, this.rooms.group, this.overlays.group)
+    this.overlays.dispose()
+    dispose(this.site.root); dispose(this.rooms.group)
+    this.layout = layout
+    this.site = new Site(layout)
+    this.rooms = new Rooms(layout)
+    this.overlays = new Overlays(this.site, this.rooms, this.labelLayer)
+    this.overlays.group.visible = !this.editMode
+    this.scene.add(this.site.root, this.rooms.group, this.overlays.group)
+    this.setNight(this.night)
+    this.refresh()
+  }
+
+  invalidate() { this.dirty = true }
+
+  /** Twin Studio on/off: pointer goes to the editor and live status rings and arcs are hidden. */
+  setEditMode(on: boolean) {
+    this.editMode = on
+    this.overlays.group.visible = !on
+    this.invalidate()
+  }
+
+  /** Which layout object is under the pointer (Twin Studio). */
+  layoutHit(clientX: number, clientY: number): string | null {
+    this.setNdc(clientX, clientY)
+    const hits = this.raycaster.intersectObjects([...this.rooms.editables, ...this.site.editables], false)
+    for (const h of hits) {
+      const id = this.rooms.layoutIdFromHit(h)
+      if (id) return id
+    }
+    return null
+  }
+
+  /** The point on the ground under the pointer, in layout metres. */
+  groundAt(clientX: number, clientY: number): [number, number] | null {
+    this.setNdc(clientX, clientY)
+    const p = new THREE.Vector3()
+    return this.raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), p) ? [p.x, p.z] : null
+  }
+
+  private setNdc(x: number, y: number) {
+    const r = this.renderer.domElement.getBoundingClientRect()
+    this.ndc.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1)
+    this.raycaster.setFromCamera(this.ndc, this.camera)
+  }
+
+  /** Slides the view so a ground point is in the middle of the screen. */
+  panTo(x: number, z: number) {
+    const fromT = this.controls.target.clone(), fromP = this.camera.position.clone()
+    const d = new THREE.Vector3(x - fromT.x, 0, z - fromT.z)
+    this.tween(0.5, (k) => {
+      const e = ease.inOutCubic(k)
+      this.controls.target.copy(fromT).addScaledVector(d, e)
+      this.camera.position.copy(fromP).addScaledVector(d, e)
+    })
+  }
+
+  /** Looks straight down at the resort, like a site plan. */
+  planView(on: boolean) {
+    const fromT = this.controls.target.clone(), fromP = this.camera.position.clone()
+    const toT = on ? new THREE.Vector3(10, 0, 14) : HOME_TARGET
+    const toP = on ? new THREE.Vector3(10, 330, 14.5) : HOME_POS
+    this.controls.enableRotate = !on
+    // On the plan, one finger or the left button slides the map instead of orbiting.
+    this.controls.mouseButtons.LEFT = on ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE
+    this.controls.touches.ONE = on ? THREE.TOUCH.PAN : THREE.TOUCH.ROTATE
+    this.tween(0.8, (k) => {
+      const e = ease.inOutCubic(k)
+      this.controls.target.lerpVectors(fromT, toT, e)
+      this.camera.position.lerpVectors(fromP, toP, e)
+    })
   }
 
   // ---------- state from the store ----------
@@ -191,11 +279,13 @@ export class World {
   private bindPointer() {
     const el = this.renderer.domElement
     el.addEventListener('pointermove', (e) => {
+      if (this.editMode) return
       if (e.pointerType === 'mouse' && e.buttons === 0) this.pendingPick = { x: e.clientX, y: e.clientY, pointer: 'hover' }
     })
     el.addEventListener('pointerleave', () => { this.setHover(null, 0, 0, 'mouse') })
     el.addEventListener('pointerdown', (e) => { this.down = { x: e.clientX, y: e.clientY, t: performance.now() } })
     el.addEventListener('pointerup', (e) => {
+      if (this.editMode) return
       const moved = Math.hypot(e.clientX - this.down.x, e.clientY - this.down.y)
       if (moved > 8 || performance.now() - this.down.t > 450) return
       const id = this.pick(e.clientX, e.clientY)

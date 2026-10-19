@@ -1,22 +1,24 @@
 import * as THREE from 'three'
-import { SITE } from '../data/registry'
+import { blockCells, rectPoly, type SiteLayout } from '../data/layout'
 import type { Store } from '../data/store'
 import { extruded, hipRoof, centroid, scalePoly } from './geo'
-import { mainBlockPoly } from './Site'
 import { FACADE, HK_HEX, STATUS_HEX, revenueColor } from './palette'
 
-// Status-driven lodging: the Park Wing as one instanced mesh of room cells,
-// and the garden villas as individual cottages with a status halo.
+// Status-driven lodging: every room block as one instanced mesh of room cells,
+// and the villas / cottages as individual buildings with a status halo.
 
-interface Cell { id: string; floor: number; x: number; z: number; sx: number; sz: number }
+interface Cell { id: string; floor: number; x: number; z: number; sx: number; sz: number; fh: number; blockId: string }
 
 const SLAB = 0.32
 
 export class Rooms {
   group = new THREE.Group()
   pickables: THREE.Object3D[] = []
+  editables: THREE.Object3D[] = []
   glow = { value: 0.12 }
   private cells: Cell[] = []
+  private cellById = new Map<string, Cell>()
+  private slabs: { cell: Cell; level: number; top: boolean }[] = []
   private roomMesh: THREE.InstancedMesh
   private slabMesh: THREE.InstancedMesh
   private baseColors = new Map<string, THREE.Color>()
@@ -26,11 +28,17 @@ export class Rooms {
   private explodeTarget = 0
   private villaParts = new Map<string, { walls: THREE.MeshStandardMaterial; roof: THREE.MeshStandardMaterial; halo: THREE.Mesh; center: THREE.Vector3 }>()
   private tmpC = new THREE.Color()
-  private fh = SITE.mainBlock.floorHeight
 
-  constructor() {
-    this.layoutCells()
-    const n = this.cells.length
+  constructor(private layout: SiteLayout) {
+    for (const b of layout.blocks) {
+      const cells = blockCells(b).map((c) => ({ ...c, fh: b.floorHeight, blockId: b.id }))
+      this.cells.push(...cells)
+      // one slab ring under each floor and a roof ring on top, following the first floor's cells
+      const ring = cells.filter((c) => c.floor === 1)
+      for (let level = 0; level <= b.floors; level++) for (const c of ring) this.slabs.push({ cell: c, level, top: level === b.floors })
+    }
+    for (const c of this.cells) this.cellById.set(c.id, c)
+
     const roomMat = new THREE.MeshStandardMaterial({ roughness: 0.75, map: windowTexture() })
     roomMat.onBeforeCompile = (sh) => {
       sh.uniforms.uGlow = this.glow
@@ -39,70 +47,50 @@ export class Rooms {
         '#include <emissivemap_fragment>\n totalEmissiveRadiance += vColor.rgb * uGlow;',
       )
     }
-    this.roomMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), roomMat, n)
+    this.roomMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), roomMat, Math.max(1, this.cells.length))
+    this.roomMesh.count = this.cells.length
     this.roomMesh.castShadow = this.roomMesh.receiveShadow = true
     this.roomMesh.userData.instanceIds = this.cells.map((c) => c.id)
-    this.cells.forEach((c, i) => this.roomMesh.setColorAt(i, FACADE))
+    this.cells.forEach((_c, i) => this.roomMesh.setColorAt(i, FACADE))
 
-    const floors = SITE.mainBlock.floors
-    this.slabMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ roughness: 0.9 }), 12 * (floors + 1))
+    this.slabMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ roughness: 0.9 }), Math.max(1, this.slabs.length))
+    this.slabMesh.count = this.slabs.length
     this.slabMesh.castShadow = true
-    for (let f = 0; f <= floors; f++) {
-      for (let k = 0; k < 12; k++) {
-        this.slabMesh.setColorAt(f * 12 + k, new THREE.Color(f === floors ? 0x9a7c62 : 0xd9d2c5))
-      }
-    }
+    this.slabs.forEach((s, i) => this.slabMesh.setColorAt(i, new THREE.Color(s.top ? 0x9a7c62 : 0xd9d2c5)))
     this.layoutMatrices()
+    this.group.add(this.roomMesh, this.slabMesh)
+    if (this.cells.length) this.pickables.push(this.roomMesh)
+    this.editables.push(this.roomMesh, this.slabMesh)
 
-    // courtyard garden
-    const court = new THREE.Mesh(
-      extruded(scalePoly(mainBlockPoly(), 0.45), 0.15),
-      new THREE.MeshStandardMaterial({ color: 0x78a65c, roughness: 1 }),
-    )
-    court.receiveShadow = true
-    this.group.add(this.roomMesh, this.slabMesh, court)
-    this.pickables.push(this.roomMesh)
+    // courtyard gardens
+    for (const b of layout.blocks) {
+      const court = new THREE.Mesh(
+        extruded(scalePoly(rectPoly(b.rect), 0.45), 0.15),
+        new THREE.MeshStandardMaterial({ color: 0x78a65c, roughness: 1 }),
+      )
+      court.receiveShadow = true
+      court.userData.layoutId = b.id
+      this.editables.push(court)
+      this.group.add(court)
+    }
     this.buildVillas()
   }
 
-  private layoutCells() {
-    const [[x0, z0], , [x1, z1]] = mainBlockPoly()
-    const d = SITE.mainBlock.depth
-    const W = x1 - x0, innerZ = z1 - z0 - 2 * d
-    const sides: { n: number; cell: (i: number) => Omit<Cell, 'id' | 'floor'> }[] = [
-      { n: 4, cell: (i) => ({ x: x0 + W * (i + 0.5) / 4, z: z0 + d / 2, sx: W / 4, sz: d }) },
-      { n: 2, cell: (i) => ({ x: x1 - d / 2, z: z0 + d + innerZ * (i + 0.5) / 2, sx: d, sz: innerZ / 2 }) },
-      { n: 4, cell: (i) => ({ x: x1 - W * (i + 0.5) / 4, z: z1 - d / 2, sx: W / 4, sz: d }) },
-      { n: 2, cell: (i) => ({ x: x0 + d / 2, z: z1 - d - innerZ * (i + 0.5) / 2, sx: d, sz: innerZ / 2 }) },
-    ]
-    for (let f = 1; f <= SITE.mainBlock.floors; f++) {
-      let r = 1
-      for (const s of sides) {
-        for (let i = 0; i < s.n; i++, r++) {
-          this.cells.push({ id: `MAIN-${f}-${f}${String(r).padStart(2, '0')}`, floor: f, ...s.cell(i) })
-        }
-      }
-    }
-  }
-
-  private floorBase(f: number) { return (f - 1) * this.fh + (f - 1) * this.explode * 5 }
+  private floorBase(f: number, fh: number) { return (f - 1) * fh + (f - 1) * this.explode * 5 }
 
   private layoutMatrices() {
     const m = new THREE.Matrix4(), q = new THREE.Quaternion()
     this.cells.forEach((c, i) => {
-      const h = this.fh - SLAB
-      m.compose(new THREE.Vector3(c.x, this.floorBase(c.floor) + SLAB + h / 2, c.z), q, new THREE.Vector3(c.sx - 0.45, h, c.sz - 0.45))
+      const h = c.fh - SLAB
+      m.compose(new THREE.Vector3(c.x, this.floorBase(c.floor, c.fh) + SLAB + h / 2, c.z), q, new THREE.Vector3(c.sx - 0.45, h, c.sz - 0.45))
       this.roomMesh.setMatrixAt(i, m)
     })
-    const floors = SITE.mainBlock.floors
-    const ring = this.cells.slice(0, 12)
-    for (let f = 0; f <= floors; f++) {
-      ring.forEach((c, k) => {
-        const y = f < floors ? this.floorBase(f + 1) + SLAB / 2 : this.floorBase(floors) + this.fh + SLAB / 2
-        m.compose(new THREE.Vector3(c.x, y, c.z), q, new THREE.Vector3(c.sx + 0.3, f === floors ? SLAB * 1.6 : SLAB, c.sz + 0.3))
-        this.slabMesh.setMatrixAt(f * 12 + k, m)
-      })
-    }
+    this.slabs.forEach((s, i) => {
+      const c = s.cell
+      const y = s.top ? this.floorBase(s.level, c.fh) + c.fh + SLAB / 2 : this.floorBase(s.level + 1, c.fh) + SLAB / 2
+      m.compose(new THREE.Vector3(c.x, y, c.z), q, new THREE.Vector3(c.sx + 0.3, s.top ? SLAB * 1.6 : SLAB, c.sz + 0.3))
+      this.slabMesh.setMatrixAt(i, m)
+    })
     this.roomMesh.instanceMatrix.needsUpdate = true
     this.slabMesh.instanceMatrix.needsUpdate = true
     this.roomMesh.computeBoundingSphere()
@@ -110,13 +98,15 @@ export class Rooms {
   }
 
   private buildVillas() {
-    for (const v of SITE.villas) {
+    for (const v of this.layout.villas) {
       const walls = new THREE.MeshStandardMaterial({ color: FACADE, roughness: 0.85 })
-      const roof = new THREE.MeshStandardMaterial({ color: 0xc8643b, roughness: 0.8, flatShading: true, side: THREE.DoubleSide })
-      const w = new THREE.Mesh(extruded(v.poly, 3.2), walls)
-      const r = new THREE.Mesh(hipRoof(v.poly, 3.2, 2.4, 1.12), roof)
+      const roof = new THREE.MeshStandardMaterial({ color: v.kind === 'tent' ? 0xf3f1ec : 0xc8643b, roughness: 0.8, flatShading: true, side: THREE.DoubleSide })
+      const wallH = v.kind === 'tent' ? 2.2 : 3.2
+      const w = new THREE.Mesh(extruded(v.poly, wallH), walls)
+      const r = new THREE.Mesh(hipRoof(v.poly, wallH, 2.4, 1.12), roof)
       w.castShadow = r.castShadow = true
       w.userData.spaceId = r.userData.spaceId = v.id
+      w.userData.layoutId = r.userData.layoutId = v.id
       const [cx, cz] = centroid(v.poly)
       const size = Math.max(...v.poly.map(([x, z]) => Math.hypot(x - cx, z - cz)))
       const halo = new THREE.Mesh(
@@ -126,8 +116,16 @@ export class Rooms {
       halo.position.set(cx, 0.15, cz)
       this.group.add(w, r, halo)
       this.pickables.push(w, r)
-      this.villaParts.set(v.id, { walls, roof, halo, center: new THREE.Vector3(cx, 3.2, cz) })
+      this.editables.push(w, r)
+      this.villaParts.set(v.id, { walls, roof, halo, center: new THREE.Vector3(cx, wallH, cz) })
     }
+  }
+
+  /** The layout object (block or villa) a ray hit belongs to. */
+  layoutIdFromHit(hit: THREE.Intersection): string | undefined {
+    if (hit.object === this.roomMesh && hit.instanceId != null) return this.cells[hit.instanceId]?.blockId
+    if (hit.object === this.slabMesh && hit.instanceId != null) return this.slabs[hit.instanceId]?.cell.blockId
+    return hit.object.userData.layoutId
   }
 
   // Recolour everything for the current date and layer.
@@ -204,12 +202,12 @@ export class Rooms {
   }
 
   anchor(id: string): THREE.Vector3 | undefined {
-    const c = this.cells.find((x) => x.id === id)
-    if (c) return new THREE.Vector3(c.x, this.floorBase(c.floor) + this.fh, c.z)
+    const c = this.cellById.get(id)
+    if (c) return new THREE.Vector3(c.x, this.floorBase(c.floor, c.fh) + c.fh, c.z)
     return this.villaParts.get(id)?.center.clone()
   }
 
-  isMainBlock(id: string) { return id.startsWith('MAIN-') }
+  isMainBlock(id: string) { return this.cellById.has(id) }
 }
 
 function windowTexture() {

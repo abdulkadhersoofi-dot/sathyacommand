@@ -8,6 +8,8 @@ import { Store, type Layer } from './data/store'
 import type { DomainEvent, HkStatus } from './data/types'
 import { addDays, fmtDay, inr, setToday, todayKey } from './data/dates'
 import { World } from './scene/World'
+import { Studio } from './studio/studio'
+import { defaultLayout, type SiteLayout } from './data/layout'
 import { $, toast } from './ui/dom'
 import { drawerHtml, tipHtml } from './ui/cards'
 import { sideHtml, type Tab } from './ui/side'
@@ -24,6 +26,10 @@ if (liveMode) {
   me = await signIn(api)
   setToday((await api.get<{ businessDate: string }>('/api/business-date')).businessDate)
 }
+// The resort drawing: the published Twin Studio version when live, the traced default otherwise.
+const fetchLayout = async () => api ? (await api.get<{ layout: SiteLayout }>('/api/site')).layout : defaultLayout()
+let layout = defaultLayout()
+try { layout = await fetchLayout() } catch { /* keep the traced default */ }
 const liveAdapter = api ? new LiveAdapter(api) : null
 const adapter: HmsAdapter = liveAdapter ?? new MockAdapter()
 const store = new Store(adapter)
@@ -62,7 +68,7 @@ const world = new World(stage, $('#labels'), store, {
     syncExplode()
     openDrawer(id)
   },
-})
+}, layout)
 
 // ---------- tooltip ----------
 function showTip(id: string | null, x: number, y: number, touch: boolean) {
@@ -148,6 +154,7 @@ function renderAll() {
 
 store.on((why, payload) => {
   if (why === 'select') return
+  if (why === 'site') { if (!studio.open) void refreshLayout(); return }
   if (why === 'live') {
     const e = payload as DomainEvent
     if (store.feed[0]) fresh.add(store.feed[0].id)
@@ -271,6 +278,28 @@ const ecoBtn = $('#btn-eco')
 ecoBtn.setAttribute('aria-pressed', String(world.eco))
 ecoBtn.addEventListener('click', () => { world.setEco(!world.eco); ecoBtn.setAttribute('aria-pressed', String(world.eco)) })
 
+// Twin Studio
+const studioBtn = $('#btn-studio')
+const studio = new Studio(world, api, me, (published) => {
+  studioBtn.setAttribute('aria-pressed', 'false')
+  document.body.classList.remove('studio-on')
+  if (published) void refreshLayout()
+})
+studioBtn.hidden = !Studio.allowed(me, liveMode)
+studioBtn.addEventListener('click', () => {
+  if (studio.open) { studio.exit(); return }
+  closeDrawer(); hideTip(); $('#side').classList.remove('open')
+  document.body.classList.add('studio-on')
+  studioBtn.setAttribute('aria-pressed', 'true')
+  void studio.enter()
+})
+async function refreshLayout() {
+  try {
+    world.rebuild(await fetchLayout())
+    await store.reloadSpaces()
+  } catch (err) { toast(`Couldn't load the new layout: ${(err as Error).message}`) }
+}
+
 // God Mode
 const godBtn = $('#btn-god')
 const modal = $('#pin-modal')
@@ -299,7 +328,7 @@ $('#pin-form').addEventListener('submit', (e) => {
   toast('God Mode on: revenue, rates and owner actions unlocked')
 })
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') { if (!modal.hidden) modal.hidden = true; else if (fd && document.querySelector('.fd-modal:not([hidden])')) fd.close(); else if (drawerId) closeDrawer(); else hideTip() }
+  if (e.key === 'Escape') { if (studio.open) return; if (!modal.hidden) modal.hidden = true; else if (fd && document.querySelector('.fd-modal:not([hidden])')) fd.close(); else if (drawerId) closeDrawer(); else hideTip() }
 })
 
 // clock + ageing KOTs

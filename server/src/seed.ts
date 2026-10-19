@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { loadTaxConfig, priceGuard, rupees } from '@sathya/tax'
 import { appendAudit } from './audit-store'
 import { loadRolesConfig, syncRoles } from './context'
+import { ensureSiteLayout } from './routes/site'
 import type { Db } from './db'
 
 // First-run data. Rooms come from seed/rooms.placeholder.csv until the resort's real
@@ -97,6 +98,8 @@ async function seedInto(db: Db, opts: { today?: string; mdMobile?: string }) {
   await syncRoles(db, roles)
   await db.query(`insert into app_user (id, name, mobile) values ('u-md', 'Managing Director', $1)`, [opts.mdMobile ?? null])
   await db.query(`insert into user_role (user_id, role_id) values ('u-md', 'managing_director')`)
+
+  await ensureSiteLayout(db)
 
   await appendAudit(db, {
     actor: SYSTEM, action: 'system.seed', entity: { type: 'property', id: PROPERTY },
