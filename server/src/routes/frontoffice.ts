@@ -8,6 +8,8 @@ import {
   applyDiscount, businessDate, folioBalance, freeByNight, LODGING, nightsOf, PROPERTY, rateFor, reservationBalance,
 } from '../fo-core'
 import { createApproval } from './approvals'
+import { issueReceiptVoucher, issueRefundVoucher, issueStayInvoice } from '../invoicing'
+import { validateGstin } from '@sathya/tax'
 import { requireCaller } from './auth'
 
 // Reservations, room assignment, check-in / check-out, guest bills (folios) and payments.
@@ -80,6 +82,7 @@ export function frontOfficeRoutes(app: FastifyInstance, ctx: Ctx) {
       guest?: { name?: string; mobile?: string; email?: string; nationality?: string; company?: string; gstin?: string }
       roomTypeId?: string; plan?: string; arrival?: string; departure?: string; adults?: number; children?: number
       source?: string; eta?: string; billToCompany?: string; billToGstin?: string; requests?: string
+      billToAddress?: string; billToCity?: string; billToPin?: string
     }
     if (!b?.guest?.name?.trim()) throw new HttpError(400, 'Give the guest\'s name.')
     if (!b.roomTypeId || !b.plan || !DATE.test(b.arrival ?? '') || !DATE.test(b.departure ?? '') || b.departure! <= b.arrival!) {
@@ -89,7 +92,12 @@ export function frontOfficeRoutes(app: FastifyInstance, ctx: Ctx) {
     if (nights.length > 60) throw new HttpError(400, 'A single reservation can be at most 60 nights.')
     const today = await businessDate(db)
     if (b.arrival! < today) throw new HttpError(400, `Arrival can't be before today's business date (${today}).`)
-    if (b.billToGstin && !/^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(b.billToGstin)) throw new HttpError(400, 'That GSTIN is not valid.')
+    if (b.billToGstin) {
+      const v = validateGstin(b.billToGstin)
+      if (!v.ok) throw new HttpError(400, `Company GSTIN: ${v.reason}`)
+      b.billToGstin = v.gstin
+      if (!b.billToCompany?.trim()) throw new HttpError(400, 'Give the company\'s legal name for a GST bill.')
+    }
 
     const result = await db.tx(async (t) => {
       await t.query('select pg_advisory_xact_lock($1)', [RESERVATION_LOCK])     // one booking decision at a time
@@ -117,10 +125,11 @@ export function frontOfficeRoutes(app: FastifyInstance, ctx: Ctx) {
       const id = newId('R')
       await t.query(
         `insert into reservation (id, property_id, guest_id, status, room_type_id, rate_plan_code, arrival, departure, adults, children,
-           source, eta, bill_to_company, bill_to_gstin, requests, created_by, created_at)
-         values ($1, $2, $3, 'confirmed', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+           source, eta, bill_to_company, bill_to_gstin, requests, created_by, created_at, bill_to_address, bill_to_city, bill_to_pin)
+         values ($1, $2, $3, 'confirmed', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
         [id, PROPERTY, guest.id, b.roomTypeId, b.plan, b.arrival, b.departure, adults, children, b.source ?? 'direct', b.eta ?? null,
-          b.billToCompany ?? null, b.billToGstin ?? null, b.requests ?? null, who.userId, now()])
+          b.billToCompany ?? null, b.billToGstin ?? null, b.requests ?? null, who.userId, now(),
+          b.billToAddress ?? null, b.billToCity ?? null, b.billToPin ?? null])
       for (let i = 0; i < nights.length; i++) {
         await t.query('insert into room_night (reservation_id, night, room_type_id, amount_paise) values ($1, $2, $3, $4)',
           [id, nights[i], b.roomTypeId, amounts[i]])
@@ -284,11 +293,12 @@ export function frontOfficeRoutes(app: FastifyInstance, ctx: Ctx) {
       if (balance !== 0) {
         throw new HttpError(409, balance > 0 ? `₹${(balance / 100).toFixed(2)} is still due. Take payment before check-out.` : `₹${(-balance / 100).toFixed(2)} is owed to the guest. Refund it before check-out.`, { balance })
       }
+      const invoice = await issueStayInvoice(ctx, t, who, id)
       await t.query(`update reservation set status = 'checked_out', checked_out_at = $2 where id = $1`, [id, now()])
       await t.query(`update folio set status = 'closed' where reservation_id = $1`, [id])
       await appendAudit(t, { actor: who, action: 'reservation.check_out', entity: { type: 'reservation', id },
-        after: { early: released.length > 0, releasedNights: released.map((n) => n.night) } }, now())
-      return { ok: true, releasedNights: released.map((n) => n.night) }
+        after: { early: released.length > 0, releasedNights: released.map((n) => n.night), invoice: invoice?.number ?? null } }, now())
+      return { ok: true, releasedNights: released.map((n) => n.night), invoice }
     })
   })
 
@@ -296,7 +306,7 @@ export function frontOfficeRoutes(app: FastifyInstance, ctx: Ctx) {
   app.post('/api/folios/:id/charges', async (req, reply) => {
     const who = await frontDesk(ctx, req)
     const { id } = req.params as { id: string }
-    const b = req.body as { kind?: 'laundry' | 'misc'; description?: string; amount?: number; gstRate?: number }
+    const b = req.body as { kind?: 'laundry' | 'misc'; description?: string; amount?: number; gstRate?: number; sac?: string }
     if (!b?.description?.trim() || !(b.amount! > 0)) throw new HttpError(400, 'Send description and amount (₹).')
     const rate = b.kind === 'laundry' ? 18 : b.gstRate
     if (b.kind !== 'laundry' && b.kind !== 'misc') throw new HttpError(400, 'kind must be laundry or misc.')
@@ -307,10 +317,11 @@ export function frontOfficeRoutes(app: FastifyInstance, ctx: Ctx) {
       if (f.status !== 'open') throw new HttpError(409, 'This bill is closed.')
       const g = splitGst(rupees(b.amount!), rate!)
       const lineId = newId('L')
+      const sac = b.kind === 'laundry' ? ctx.tax.gst.other_services?.laundry?.sac ?? null : b.sac ?? null
       await t.query(
-        `insert into folio_line (id, folio_id, business_date, posted_at, kind, description, gst_rate, taxable_paise, cgst_paise, sgst_paise, amount_paise, posted_by)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-        [lineId, id, await businessDate(t), now(), b.kind, b.description, rate, g.taxable, g.cgst, g.sgst, g.total, who.userId])
+        `insert into folio_line (id, folio_id, business_date, posted_at, kind, description, sac, gst_rate, taxable_paise, cgst_paise, sgst_paise, amount_paise, posted_by)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+        [lineId, id, await businessDate(t), now(), b.kind, b.description, sac, rate, g.taxable, g.cgst, g.sgst, g.total, who.userId])
       await appendAudit(t, { actor: who, action: 'folio.charge', entity: { type: 'folio', id }, amount: g.total, after: { lineId, kind: b.kind, description: b.description, gstRate: rate } }, now())
       return reply.status(201).send({ lineId, total: g.total, balance: await folioBalance(t, id) })
     })
@@ -353,7 +364,7 @@ export function frontOfficeRoutes(app: FastifyInstance, ctx: Ctx) {
     if (!methods.includes(b?.method ?? '') || !(b.amount! > 0)) throw new HttpError(400, `Send method (${methods.join(', ')}) and amount (₹).`)
     if (b.method !== 'cash' && !b.reference?.trim() && b.method !== 'company') throw new HttpError(400, 'Card, UPI, bank and OTA payments need a reference.')
     const amount = rupees(b.amount!) * (b.refund ? -1 : 1)
-    const result = await db.tx(async (t): Promise<{ blocked: string } | { lineId: string; balance: number }> => {
+    const result = await db.tx(async (t): Promise<{ blocked: string } | { lineId: string; balance: number; voucher: string | null }> => {
       const [f] = await t.query<{ status: string; reservation_id: string }>('select status, reservation_id from folio where id = $1 for update', [id])
       if (!f) throw new HttpError(404, 'No such bill.')
       if (f.status !== 'open') throw new HttpError(409, 'This bill is closed.')
@@ -378,11 +389,18 @@ export function frontOfficeRoutes(app: FastifyInstance, ctx: Ctx) {
          values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
         [lineId, id, await businessDate(t), now(), amount > 0 ? 'payment' : 'refund',
           `${amount > 0 ? 'Payment' : 'Refund'} · ${b.method!.toUpperCase()}`, -amount, who.userId, b.reference ?? null])
-      await t.query('insert into payment (id, folio_id, line_id, method, amount_paise, reference, shift_id, received_by, at) values ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-        [newId('P'), id, lineId, b.method, amount, b.reference ?? null, shiftId, who.userId, now()])
+      // Money before check-in is an advance: GST is due on it now, so it gets a receipt (or refund) voucher.
+      const [res] = await t.query<{ status: string }>('select status from reservation where id = $1', [f.reservation_id])
+      let voucher: { id: string; number: string } | null = null
+      if (['confirmed', 'cancelled', 'no_show'].includes(res.status)) {
+        if (amount > 0 && res.status === 'confirmed') voucher = await issueReceiptVoucher(ctx, t, who, f.reservation_id, amount)
+        if (amount < 0) voucher = await issueRefundVoucher(ctx, t, who, f.reservation_id, -amount)
+      }
+      await t.query('insert into payment (id, folio_id, line_id, method, amount_paise, reference, shift_id, received_by, at, voucher_id) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
+        [newId('P'), id, lineId, b.method, amount, b.reference ?? null, shiftId, who.userId, now(), voucher?.id ?? null])
       await appendAudit(t, { actor: who, action: amount > 0 ? 'payment.receive' : 'payment.refund', entity: { type: 'folio', id }, amount,
         after: { method: b.method, reference: b.reference ?? null } }, now())
-      return { lineId, balance: await folioBalance(t, id) }
+      return { lineId, balance: await folioBalance(t, id), voucher: voucher?.number ?? null }
     })
     if ('blocked' in result) {
       // Logged outside the refused transaction, so God Mode sees the attempt.

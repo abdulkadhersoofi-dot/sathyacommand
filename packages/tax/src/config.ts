@@ -29,6 +29,7 @@ export interface TaxConfig {
     accommodation_price_guard: { limit_per_unit_per_night: number; above_limit_requires: string; warn_text: string }
     e_invoice: { required_for_resort: boolean; report_within_days_if_aato_at_least: { aato: number; days: number } }
     reverse_charge: { service: string; rate: number; applies_when: 'always' | 'supplier_not_body_corporate' | 'supplier_unregistered' }[]
+    other_services?: Record<string, { rate: number | null; sac?: string | null }>
     credits_to_track: {
       gst_tds_by_government: { rate: number; contract_value_above: number }
       gst_tcs_by_ota: { rate: number }

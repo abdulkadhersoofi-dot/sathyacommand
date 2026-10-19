@@ -162,7 +162,7 @@ describe('check-out and cashier close', () => {
     expect(due.statusCode).toBe(409)
     await R.post(`/api/folios/${ids.FA}/payments`, FD, { method: 'card', amount: due.json().balance / 100, reference: 'POS-88123' })
     const out = await R.post(`/api/reservations/${ids.A}/check-out`, FD)
-    expect(out.json()).toEqual({ ok: true, releasedNights: [] })
+    expect(out.json()).toMatchObject({ ok: true, releasedNights: [], invoice: { number: 'SPR/26-27/000001', irnStatus: 'not_required' } })
     expect((await detail(ids.A)).status).toBe('checked_out')
   })
 

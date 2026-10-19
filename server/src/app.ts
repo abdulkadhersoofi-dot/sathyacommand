@@ -9,6 +9,7 @@ import { inventoryRoutes } from './routes/inventory'
 import { userRoutes } from './routes/users'
 import { frontOfficeRoutes } from './routes/frontoffice'
 import { nightAuditRoutes } from './routes/nightaudit'
+import { invoiceRoutes } from './routes/invoices'
 
 export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boolean } = {}) {
   const ctx: Ctx = {
@@ -17,6 +18,7 @@ export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boo
     roles: opts.roles ?? loadRolesConfig(),
     sms: opts.sms ?? consoleSms,
     now: opts.now ?? (() => new Date()),
+    einvoice: opts.einvoice,
   }
   const app = Fastify({ logger: opts.logger ?? false })
 
@@ -33,6 +35,7 @@ export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boo
   userRoutes(app, ctx)
   frontOfficeRoutes(app, ctx)
   nightAuditRoutes(app, ctx)
+  invoiceRoutes(app, ctx)
 
   app.get('/health', async () => ({ ok: true, db: db.engine }))
 

@@ -112,6 +112,8 @@ export function nightAuditRoutes(app: FastifyInstance, ctx: Ctx) {
       const overstays = await t.query<{ id: string }>(`select id from reservation where status = 'in_house' and departure <= $1`, [day])
       const openShifts = await t.query<{ id: string }>('select id from cashier_shift where closed_at is null')
       const formCOverdue = await t.query<{ reservation_id: string }>('select reservation_id from form_c where submitted_at is null and due_at < $1', [now()])
+      const irnDue = await t.query<{ number: string; irn_deadline: string }>(
+        `select number, irn_deadline::text from tax_document where irn_status in ('pending','failed') and irn_deadline <= $1::date + 5 order by irn_deadline`, [day])
       const summary = {
         businessDate: day,
         roomsSold: toPost.length, sellableRooms: sellable,
@@ -121,6 +123,7 @@ export function nightAuditRoutes(app: FastifyInstance, ctx: Ctx) {
         arrivals, departures, noShows: noShows.map((r) => r.id),
         overstays: overstays.map((r) => r.id), openCashierShifts: openShifts.map((s) => s.id),
         formCOverdue: formCOverdue.map((r) => r.reservation_id),
+        eInvoicesDueWithin5Days: irnDue.map((r) => ({ number: r.number, deadline: r.irn_deadline })),
       }
       await t.query('insert into night_audit (business_date, run_by, run_at, summary) values ($1, $2, $3, $4)', [day, who.userId, now(), JSON.stringify(summary)])
       const next = addDays(day, 1)

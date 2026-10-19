@@ -4,6 +4,7 @@ import { parse } from 'yaml'
 import type { TaxConfig } from '@sathya/tax'
 import type { Actor } from '@sathya/audit'
 import type { Db } from './db'
+import type { EInvoiceProvider } from './einvoice'
 
 // Everything a route needs, passed in once so tests can swap the clock and the SMS sender.
 
@@ -25,6 +26,7 @@ export interface Ctx {
   roles: RolesConfig
   sms: SmsSender
   now: () => Date
+  einvoice?: EInvoiceProvider
 }
 
 export interface Caller extends Actor {

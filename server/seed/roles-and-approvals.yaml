@@ -17,6 +17,9 @@ sign_in:
 #   folio.reverse    reverse a charge on a guest bill
 #   discount.approve approve a discount above the requester's limit
 #   night_audit      run the night audit (closes the business day)
+#   invoice.view     see tax invoices, credit notes and vouchers
+#   invoice.credit_note  issue a credit note against an invoice
+#   einvoice.generate    register invoices with the GST portal (IRN)
 #   '*'              everything, including deciding approvals
 roles:
   managing_director:
@@ -24,13 +27,13 @@ roles:
     permissions: ['*']
     limits: unlimited
   general_manager:
-    permissions: [inventory.edit, devices.approve, users.manage, front_desk, folio.reverse, discount.approve, night_audit]
+    permissions: [inventory.edit, devices.approve, users.manage, front_desk, folio.reverse, discount.approve, night_audit, invoice.view, invoice.credit_note]
     limits: { discount_percent: 25, refund: 50000, comp_room_nights: 5, purchase_order: 500000, rate_override_below_floor: true }
   operations_manager:
     permissions: [front_desk, folio.reverse, discount.approve]
     limits: { discount_percent: 20, void_per_bill: 5000, room_move: true, mark_out_of_order: true, overtime_hours_per_week: 12 }
   front_office_manager:
-    permissions: [front_desk, folio.reverse, night_audit]
+    permissions: [front_desk, folio.reverse, night_audit, invoice.credit_note]
     limits: { discount_percent: 15, refund: 10000, cashier_variance_writeoff: 500 }
   reception:
     permissions: [front_desk]
@@ -39,6 +42,7 @@ roles:
     permissions: [front_desk, night_audit]
     limits: {}
   accounts:
+    permissions: [invoice.view, invoice.credit_note, einvoice.generate]
     limits: { vendor_payment_needs_approval_above: 25000, delete_vouchers: false }
   stores:
     limits: { purchase_order: 25000, stock_adjustment: 0 }
