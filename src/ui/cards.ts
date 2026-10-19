@@ -137,7 +137,8 @@ function actionsFor(store: Store, r: Reservation) {
   const btns: string[] = []
   if (r.status === 'confirmed' && r.arrival === store.date) btns.push(`<button class="btn primary" data-act="checkin" data-res="${r.id}">Check in</button>`)
   if (r.status === 'in-house') btns.push(`<button class="btn" data-act="checkout" data-res="${r.id}">Check out</button>`)
-  if (store.godMode && r.balance && r.status !== 'checked-out') btns.push(`<button class="btn god" data-act="waive" data-res="${r.id}">Waive ${inr(r.balance)}</button>`)
+  if (store.live && r.folioId && (r.status === 'in-house' || r.status === 'confirmed')) btns.push(`<button class="btn" data-act="pay" data-res="${r.id}">Payment</button>`)
+  if (!store.live && store.godMode && r.balance && r.status !== 'checked-out') btns.push(`<button class="btn god" data-act="waive" data-res="${r.id}">Waive ${inr(r.balance)}</button>`)
   return btns.length ? `<div class="actions">${btns.join('')}</div>` : ''
 }
 
@@ -180,7 +181,9 @@ export function drawerHtml(store: Store, id: string) {
       const n = nextStay(store, id)
       body += `<div class="guest"><div class="dr-kicker">Vacant on ${fmtDay(store.date)}</div><div class="note">${n ? `Next: ${esc(n.guest)}, arriving ${fmtDay(n.arrival)}` : 'No upcoming bookings in the next 60 days.'}</div></div>`
     }
-    if (store.isToday) {
+    if (store.isToday && store.live) {
+      body += `<div class="sec-title">Housekeeping</div><div class="empty">Live room cleaning status arrives with the housekeeping module (Phase 4).</div>`
+    } else if (store.isToday) {
       const hk = store.hk[id] ?? 'clean'
       body += `<div class="sec-title">Housekeeping <span>${hkPill(hk)}</span></div><div class="actions">`
       if (hk === 'out-of-order') body += god ? `<button class="btn god" data-act="hk" data-space="${id}" data-hk="clean">Return to service</button>` : `<span class="actions-note">Only the owner can release an out-of-order room.</span>`
@@ -231,5 +234,5 @@ export function drawerHtml(store: Store, id: string) {
     </div>
     ${s.verify ? `<div class="verify">Location and use traced from the satellite image. Confirm on site.</div>` : ''}
     ${body}
-    ${store.isToday ? `<div class="actions-note">Actions update the sample HMS. From Phase 4 they write back to the live HMS and are recorded in the audit log.</div>` : ''}`
+    ${store.isToday && !store.live ? `<div class="actions-note">Actions update the sample HMS. From Phase 4 they write back to the live HMS and are recorded in the audit log.</div>` : ''}`
 }

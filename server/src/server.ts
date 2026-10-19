@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import { buildApp } from './app'
 import { loadRolesConfig, syncRoles } from './context'
 import { migrate, openPglite, openPostgres } from './db'
@@ -12,6 +13,6 @@ const mdMobile = process.env.MD_MOBILE ? normaliseMobile(process.env.MD_MOBILE) 
 const seeded = await seed(db, { mdMobile })
 await syncRoles(db, loadRolesConfig())
 if (mdMobile) await db.query(`update app_user set mobile = $1 where id = 'u-md' and mobile is null`, [mdMobile])
-const app = buildApp(db, { logger: true })
+const app = buildApp(db, { logger: true, appDir: process.env.APP_DIR ?? fileURLToPath(new URL('../../dist/', import.meta.url)) })
 app.log.info({ engine: db.engine, migrationsApplied: applied, seeded }, 'database ready')
 await app.listen({ host: '0.0.0.0', port: Number(process.env.PORT ?? 8080) })

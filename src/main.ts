@@ -1,20 +1,34 @@
 import { MockAdapter } from './data/adapters/mock'
-import { HttpAdapter } from './data/adapters/http'
+import { LiveAdapter } from './data/adapters/live'
 import type { HmsAdapter } from './data/adapters/HmsAdapter'
+import { Api, serverAvailable } from './live/api'
+import { signIn, type Me } from './live/signin'
+import { FrontDesk } from './ui/frontdesk'
 import { Store, type Layer } from './data/store'
 import type { DomainEvent, HkStatus } from './data/types'
-import { addDays, fmtDay, inr, todayKey } from './data/dates'
+import { addDays, fmtDay, inr, setToday, todayKey } from './data/dates'
 import { World } from './scene/World'
 import { $, toast } from './ui/dom'
 import { drawerHtml, tipHtml } from './ui/cards'
 import { sideHtml, type Tab } from './ui/side'
 import { kpisHtml, layersHtml, legendHtml, timelineHtml } from './ui/dock'
 
-// Phase 1 runs on the mock HMS. Set VITE_GATEWAY_URL to point at the
-// Resort Gateway and the same UI runs on live data.
-const gateway = import.meta.env.VITE_GATEWAY_URL as string | undefined
-const adapter: HmsAdapter = gateway ? new HttpAdapter(gateway) : new MockAdapter()
+// When an HMS server answers (same address, or VITE_GATEWAY_URL), the app signs the user in and runs
+// on live data. Otherwise (the hosted demo) it runs on the built-in sample resort.
+const base = (import.meta.env.VITE_GATEWAY_URL as string | undefined) ?? ''
+const liveMode = await serverAvailable(base)
+let api: Api | null = null
+let me: Me | null = null
+if (liveMode) {
+  api = new Api(base)
+  me = await signIn(api)
+  setToday((await api.get<{ businessDate: string }>('/api/business-date')).businessDate)
+}
+const liveAdapter = api ? new LiveAdapter(api) : null
+const adapter: HmsAdapter = liveAdapter ?? new MockAdapter()
 const store = new Store(adapter)
+store.live = liveMode
+let fd: FrontDesk | null = null
 
 let tab: Tab = 'live'
 let tipId: string | null = null
@@ -102,7 +116,7 @@ function renderDrawer() {
 function renderSide() {
   const body = $('#side-body')
   const scroll = body.scrollTop
-  body.innerHTML = sideHtml(store, tab, fresh)
+  body.innerHTML = fd && tab === 'arrivals' ? fd.html() : sideHtml(store, tab, fresh)
   body.scrollTop = scroll
   fresh.clear()
   const k = store.kpis()
@@ -146,6 +160,10 @@ function animate(e: DomainEvent) {
   if (e.type === 'order.created' && store.layers.has('fnb')) world.overlays.orderArc(e.order)
   if (e.type === 'order.updated' && e.order.status === 'ready' && store.layers.has('fnb')) world.overlays.foodRunner(e.order)
   if (e.type === 'reservation.updated') world.overlays.guestMove(e.reservation, e.change)
+  if (e.type === 'snapshot.changed' && (e.action === 'reservation.check_in' || e.action === 'reservation.check_out')) {
+    const r = store.reservations.find((x) => x.id === e.entityId)
+    if (r?.spaceId) world.overlays.guestMove(r, e.action === 'reservation.check_in' ? 'check-in' : 'check-out')
+  }
 }
 
 // ---------- interactions ----------
@@ -153,11 +171,19 @@ document.addEventListener('click', async (e) => {
   const t = e.target as HTMLElement
   const layer = t.closest<HTMLElement>('[data-layer]')
   if (layer) { store.toggleLayer(layer.dataset.layer as Layer); return }
+  const fdBtn = t.closest<HTMLElement>('[data-fd]')
+  if (fdBtn && fd) { e.stopPropagation(); fd.handle(fdBtn); return }
 
   const act = t.closest<HTMLElement>('[data-act]')
   if (act) {
     e.stopPropagation()
     const { act: a, res, order, space, hk } = act.dataset
+    if (fd) {
+      if (a === 'checkin') void fd.checkIn(res!)
+      if (a === 'checkout') void fd.checkOut(res!)
+      if (a === 'pay') void fd.payment(res!)
+      return
+    }
     if (a === 'checkin') { await adapter.checkIn(res!); toast('Checked in') }
     if (a === 'checkout') { await adapter.checkOut(res!); toast('Checked out. Room sent to housekeeping') }
     if (a === 'advance') await adapter.advanceOrder(order!)
@@ -249,6 +275,13 @@ ecoBtn.addEventListener('click', () => { world.setEco(!world.eco); ecoBtn.setAtt
 const godBtn = $('#btn-god')
 const modal = $('#pin-modal')
 godBtn.addEventListener('click', () => {
+  if (me) {
+    // Live: God Mode belongs to the signed-in role (already verified with the authenticator), no PIN.
+    store.setGodMode(!store.godMode)
+    godBtn.setAttribute('aria-pressed', String(store.godMode))
+    toast(store.godMode ? 'God Mode on' : 'God Mode off')
+    return
+  }
   if (store.godMode) { store.setGodMode(false); godBtn.setAttribute('aria-pressed', 'false'); toast('God Mode off'); return }
   modal.hidden = false
   $('#pin-error').hidden = true
@@ -266,7 +299,7 @@ $('#pin-form').addEventListener('submit', (e) => {
   toast('God Mode on: revenue, rates and owner actions unlocked')
 })
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') { if (!modal.hidden) modal.hidden = true; else if (drawerId) closeDrawer(); else hideTip() }
+  if (e.key === 'Escape') { if (!modal.hidden) modal.hidden = true; else if (fd && document.querySelector('.fd-modal:not([hidden])')) fd.close(); else if (drawerId) closeDrawer(); else hideTip() }
 })
 
 // clock + ageing KOTs
@@ -278,5 +311,20 @@ setInterval(tick, 15000)
 setInterval(() => { if (store.isToday) { store.invalidate('clock') } }, 30000)
 setTimeout(() => $('#hint').style.opacity = '0', 9000)
 
-$('#source-label').textContent = `Sathya Park & Resorts · ${adapter.name}`
+$('#source-label').textContent = me ? `Sathya Park & Resorts · ${me.name}` : `Sathya Park & Resorts · ${adapter.name}`
+if (api && me && liveAdapter) {
+  const badge = document.querySelector<HTMLElement>('.sample-badge')!
+  badge.textContent = 'Live'
+  badge.classList.add('live')
+  badge.title = 'Connected to the Sathya HMS server'
+  godBtn.hidden = !me.godMode
+  const out = document.createElement('button')
+  out.className = 'icon-btn'
+  out.type = 'button'
+  out.textContent = 'Sign out'
+  out.addEventListener('click', async () => { try { await api!.post('/auth/sign-out') } finally { api!.setToken(null); location.reload() } })
+  document.querySelector('.topbar-actions')!.appendChild(out)
+  fd = new FrontDesk(api, store, me, () => renderSide())
+  setTab('arrivals')
+}
 store.load().then(renderAll).catch((err) => toast(`Couldn't load HMS data: ${err.message}`))

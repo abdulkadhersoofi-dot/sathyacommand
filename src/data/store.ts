@@ -36,6 +36,7 @@ export class Store {
   date = todayKey()
   layers = new Set<Layer>(['rooms', 'fnb', 'events'])
   godMode = false
+  live = false
   selectedId: string | null = null
 
   private listeners = new Set<Listener>()
@@ -100,7 +101,37 @@ export class Store {
   audit: { at: Date; text: string }[] = []
   logAudit(text: string) { this.audit.unshift({ at: new Date(), text }) }
 
+  /** Fetch bookings again (live mode, after the server announces a change). */
+  async reload() {
+    this.reservations = await this.adapter.getReservations({ from: this.rangeFrom, to: this.rangeTo })
+    this.invalidate('reload')
+  }
+
+  private async onSnapshotChanged(e: Extract<DomainEvent, { type: 'snapshot.changed' }>) {
+    await this.reload()
+    const r = this.reservations.find((x) => x.id === e.entityId)
+    const room = r ? (r.roomNo ? `room ${r.roomNo}` : 'unassigned room') : ''
+    const text: Record<string, string> = {
+      'reservation.create': `New booking${r ? ` for ${r.guest}` : ''} (${e.actor})`,
+      'reservation.check_in': `${r?.guest ?? 'Guest'} checked in to ${room}`,
+      'reservation.check_out': `${r?.guest ?? 'Guest'} checked out of ${room}`,
+      'reservation.cancel': `Booking cancelled${r ? ` for ${r.guest}` : ''}`,
+      'reservation.assign_room': `${r?.guest ?? 'Guest'} assigned to ${room}`,
+      'reservation.room_move': `${r?.guest ?? 'Guest'} moved to ${room}`,
+      'payment.receive': `Payment received (${e.actor})`,
+      'payment.cash_blocked': `Cash payment of ₹2 lakh or more blocked (${e.actor})`,
+      'invoice.issue': 'Tax invoice issued',
+      'night_audit.run': `Day closed by ${e.actor}`,
+    }
+    const msg = text[e.action]
+    if (msg) {
+      this.pushFeed({ id: `${e.action}-${e.entityId}-${Date.now()}`, at: new Date(), kind: e.action.includes('check_out') ? 'checkout' : e.action.startsWith('reservation') ? 'checkin' : 'alert', text: msg, spaceId: r?.spaceId || undefined })
+    }
+    this.emit('live', e)
+  }
+
   private onDomainEvent(e: DomainEvent) {
+    if (e.type === 'snapshot.changed') { void this.onSnapshotChanged(e); return }
     const now = new Date()
     if (e.type === 'order.created') {
       if (this.isToday && !this.orders.includes(e.order)) this.orders.push(e.order)

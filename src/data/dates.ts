@@ -3,7 +3,10 @@
 export const dateKey = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
-export const todayKey = () => dateKey(new Date())
+// In live mode "today" is the hotel's business date (it changes at night audit, not at midnight).
+let businessToday: string | null = null
+export const setToday = (key: string | null) => { businessToday = key }
+export const todayKey = () => businessToday ?? dateKey(new Date())
 
 export function addDays(key: string, n: number) {
   const d = new Date(key + 'T12:00:00')

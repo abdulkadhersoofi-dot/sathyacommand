@@ -36,6 +36,12 @@ export interface Reservation {
   balance: number
   vip?: boolean
   notes?: string
+  // Live HMS only
+  folioId?: string
+  roomNo?: string | null
+  roomTypeId?: string
+  serverSpaceId?: string | null
+  company?: string | null
 }
 
 export type OrderStatus = 'placed' | 'cooking' | 'ready' | 'served'
@@ -74,5 +80,6 @@ export type DomainEvent =
   | { type: 'order.updated'; order: Order }
   | { type: 'reservation.updated'; reservation: Reservation; change: 'check-in' | 'check-out' }
   | { type: 'housekeeping.updated'; spaceId: string; status: HkStatus }
+  | { type: 'snapshot.changed'; action: string; entityId: string; actor: string; amount?: number }
 
 export interface DateRange { from: string; to: string }

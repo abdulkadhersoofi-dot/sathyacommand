@@ -1,4 +1,6 @@
+import { existsSync } from 'node:fs'
 import Fastify from 'fastify'
+import fastifyStatic from '@fastify/static'
 import { accommodationNight, addDays, loadTaxConfig, priceGuard, rupees, type NightTax } from '@sathya/tax'
 import { appendAudit, readAudit, verifyStoredChain } from './audit-store'
 import { consoleSms, HttpError, loadRolesConfig, type Ctx } from './context'
@@ -10,8 +12,9 @@ import { userRoutes } from './routes/users'
 import { frontOfficeRoutes } from './routes/frontoffice'
 import { nightAuditRoutes } from './routes/nightaudit'
 import { invoiceRoutes } from './routes/invoices'
+import { dashboardRoutes } from './routes/dashboard'
 
-export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boolean } = {}) {
+export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boolean; appDir?: string } = {}) {
   const ctx: Ctx = {
     db,
     tax: opts.tax ?? loadTaxConfig(),
@@ -36,6 +39,10 @@ export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boo
   frontOfficeRoutes(app, ctx)
   nightAuditRoutes(app, ctx)
   invoiceRoutes(app, ctx)
+  dashboardRoutes(app, ctx)
+
+  // Serve the built 3D app and front desk screens from the same address as the API.
+  if (opts.appDir && existsSync(opts.appDir)) app.register(fastifyStatic, { root: opts.appDir, index: 'index.html' })
 
   app.get('/health', async () => ({ ok: true, db: db.engine }))
 

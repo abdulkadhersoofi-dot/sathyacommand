@@ -49,8 +49,9 @@ export const loadRolesConfig = (): RolesConfig =>
 /** Development sender: prints the code to the server log. Production needs a DLT-registered SMS provider. */
 export const consoleSms: SmsSender = {
   async sendOtp(mobile, code) {
-    if (process.env.NODE_ENV === 'production') throw new Error('No SMS provider configured')
-    console.log(`[dev] sign-in code for ${mobile}: ${code}`)
+    // In production, codes may only go to the server log when the owner explicitly opts in (pilot before an SMS provider is set up).
+    if (process.env.NODE_ENV === 'production' && process.env.OTP_DELIVERY !== 'log') throw new Error('No SMS provider configured')
+    console.log(`[sign-in code] ${mobile.slice(0, 5)}•••••${mobile.slice(-3)}: ${code}`)
   },
 }
 

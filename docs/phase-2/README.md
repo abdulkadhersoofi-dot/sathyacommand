@@ -12,7 +12,7 @@ Weeks 5–14 of the [blueprint](../HMS_BLUEPRINT.md). Built in steps, each one t
 | 2.4b | SMS provider (DLT-registered), 4-digit PIN quick-switch on shared tablets, shift-bound sign-in (needs rosters) | Later |
 | 2.5 | **Front office**: availability by room type and night; reservations with the price fixed per night at booking; overbooking refused (and double-booking a room refused by the database itself); room assignment, moves and upgrades; discounts within role limits, larger ones to the approval inbox; extra beds (counted toward the ₹7,500 slab); cancellation; check-in with ID (only the last 4 characters stored) and a 24-hour Form C task for foreign guests; guest bills with laundry and other charges, manager-only reversals (never deletion), payments by cash, card, UPI, bank, company or OTA, refunds; ₹2 lakh cash block (attempts logged); check-out with balance check and early-departure night release; cashier shifts with denomination count and variance flag; night audit that marks no-shows, posts each night's room charge with GST from that night's value, records the day's figures and moves the business date | Done · 18 tests run two full business days |
 | 2.6 | **GST documents**: company tax details with GSTIN check-digit validation (must be a Tamil Nadu GSTIN); tax invoice issued automatically at check-out with every field the invoice rules require, SAC per line, rate-wise summary, amount in words and advances adjusted; reversed charges drop out; gap-free numbering per financial year (`SPR/26-27/000001`, max 16 characters); receipt vouchers with GST on advances and refund vouchers on refunds; credit notes capped at what was invoiced; issued documents frozen by the database; B2B documents queued for e-invoicing with the 30-day deadline, IRP JSON payload, pre-checks that name what the portal would reject, IRN generation through a pluggable provider (sandbox until a GSP is chosen); printable invoice; e-invoice deadlines in the night audit; check-out refused until the company GSTIN is set | Done · 11 tests |
-| 2.7 | Front desk screens; 3D dashboard switched to live data | |
+| 2.7 | **Front desk screens and live 3D**: the app finds the HMS server and switches from sample data to live; sign-in screen (SMS code, authenticator code, first-time set-up with QR code, new-device approval message); 3D dashboard and panels on real rooms and bookings, refreshed instantly from a live event stream, with check-in / check-out animations; front desk panel (arrivals, due out, in-house with balances); forms for new booking (live GST quote), check-in with room choice and ID, payment (advance → receipt voucher), check-out with tax invoice and print, cashier shift open / close with note count, closing the day with its summary; God Mode tied to the signed-in role; sign-out; one Render web service serves app and API ([deploy guide](../DEPLOY.md)) | Done · 3 API tests + browser run of the full flow |
 | 2.8 | Twin Studio v1 (edit the 3D resort) | |
 
 ## Waiting on
@@ -28,8 +28,8 @@ Weeks 5–14 of the [blueprint](../HMS_BLUEPRINT.md). Built in steps, each one t
 
 ```bash
 npm install
-npm test                      # 112 tests: tax book, documents, audit log, API, front office, invoicing
-npm run start -w server       # API on http://localhost:8080 with a local database in server/data
+npm test                      # 115 tests: tax book, documents, audit log, API, front office, invoicing, dashboard feed
+npm run build && npm run start -w server   # app + API on http://localhost:8080, local database in server/data
 ```
 
 Set `DATABASE_URL` to use a real PostgreSQL database instead of the local one, and `MD_MOBILE` to give the MD's login a mobile number on first start.
