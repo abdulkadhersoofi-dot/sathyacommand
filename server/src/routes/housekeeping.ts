@@ -5,6 +5,7 @@ import { appendAudit } from '../audit-store'
 import { can, HttpError, type Caller, type Ctx } from '../context'
 import type { Db } from '../db'
 import { businessDate, folioBalance, LODGING } from '../fo-core'
+import { placeAt } from '../geo'
 import { addTask, CHECKLISTS, CREDITS, hkOf, setHk, type HkStatus, type TaskKind } from '../hk-core'
 import { requireCaller } from './auth'
 
@@ -166,6 +167,7 @@ export function housekeepingRoutes(app: FastifyInstance, ctx: Ctx) {
       }
       await t.query(`update hk_task set status = 'in_progress', started_at = $2, assigned_to = coalesce(assigned_to, $3) where id = $1`, [x.id, now(), who.userId])
       await appendAudit(t, { actor: who, action: 'hk.clean_start', entity: { type: 'hk_task', id: x.id }, after: { room: x.space_id, kind: x.kind } }, now())
+      if (x.space_id) await placeAt(t, who.userId, x.space_id, now())
       return { ok: true }
     })
   })

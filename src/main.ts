@@ -6,6 +6,7 @@ import { signIn, type Me } from './live/signin'
 import { FrontDesk } from './ui/frontdesk'
 import { FnbWorkspace } from './fnb/workspace'
 import { HkWorkspace } from './hk/workspace'
+import { StaffWorkspace } from './staff/workspace'
 import { Outbox } from './live/outbox'
 import { Store, type Layer } from './data/store'
 import type { DomainEvent, HkStatus } from './data/types'
@@ -40,6 +41,7 @@ store.live = liveMode
 let fd: FrontDesk | null = null
 let fnb: FnbWorkspace | null = null
 let hkWs: HkWorkspace | null = null
+let staffWs: StaffWorkspace | null = null
 
 let tab: Tab = 'live'
 let tipId: string | null = null
@@ -161,6 +163,17 @@ store.on((why, payload) => {
   if (why === 'select') return
   if (why === 'site') { if (!studio.open) void refreshLayout(); return }
   if (why === 'hkchange' && hkWs?.open && !hkWs.modal.isOpen) void hkWs.refresh()
+  if (why === 'layers') void loadStaff()
+  if (why === 'staff') {
+    const e = payload as { action: string; actor: string }
+    if (staffWs?.open && !staffWs.modal.isOpen) void staffWs.refresh()
+    if (e.action === 'staff.sos' && store.staffAllowed) {
+      sosAlert(e.actor)
+      if (!store.layers.has('staff')) store.toggleLayer('staff')
+    }
+    void loadStaff()
+    if (e.action !== 'staff.sos') return
+  }
   if (why === 'fnb') {
     // Another tablet changed an order or the menu: refresh the restaurant screen unless a form is open there.
     if (fnb?.open && !fnb.modal.isOpen) void fnb.refresh()
@@ -183,6 +196,39 @@ function animate(e: DomainEvent) {
     if (r?.spaceId) world.overlays.guestMove(r, e.action === 'reservation.check_in' ? 'check-in' : 'check-out')
   }
 }
+
+// ---------- staff on duty (managers and security) ----------
+interface LiveStaff { user_id: string; name: string; roles: string | null; at: string | null; x: string | number | null; z: string | number | null; inside: boolean | null; sos: boolean }
+async function loadStaff() {
+  if (!api || !store.staffAllowed) return
+  if (!store.layers.has('staff')) { world.setStaff(null); return }
+  try {
+    const rows = await api.get<LiveStaff[]>('/api/staff/live')
+    world.setStaff(rows.filter((r) => r.x != null && r.z != null).map((r) => ({
+      id: r.user_id, name: r.name, roles: r.roles ?? '', x: Number(r.x), z: Number(r.z), sos: r.sos, outside: r.inside === false,
+      stale: !r.at || Date.now() - new Date(r.at).getTime() > 10 * 60_000,
+    })))
+  } catch { /* offline: keep the last pins */ }
+}
+setInterval(() => { if (!document.hidden) void loadStaff() }, 15_000)
+
+/** An SOS stays on screen until someone opens it. */
+function sosAlert(who: string) {
+  let el = document.getElementById('sos-alert') as HTMLButtonElement | null
+  if (!el) {
+    el = document.createElement('button')
+    el.id = 'sos-alert'
+    el.type = 'button'
+    el.className = 'sos-alert'
+    el.setAttribute('role', 'alert')
+    el.addEventListener('click', () => { el!.hidden = true; hideWorkspaces(); void staffWs?.show('team') })
+    document.getElementById('app')!.appendChild(el)
+  }
+  el.textContent = `🚨 SOS from ${who}. Tap to see where and respond.`
+  el.hidden = false
+}
+
+function hideWorkspaces() { for (const w of [fnb, hkWs, staffWs]) if (w?.open) w.hide() }
 
 // ---------- interactions ----------
 document.addEventListener('click', async (e) => {
@@ -347,6 +393,7 @@ document.addEventListener('keydown', (e) => {
     if (document.querySelector('.fd-modal:not([hidden])')) { document.querySelectorAll<HTMLElement>('.fd-modal:not([hidden])').forEach((m) => m.querySelector<HTMLElement>('[data-x]')?.click()); return }
     if (fnb?.open) { fnb.hide(); return }
     if (hkWs?.open) { hkWs.hide(); return }
+    if (staffWs?.open) { staffWs.hide(); return }
     if (studio.open) return; if (!modal.hidden) modal.hidden = true; else if (fd && document.querySelector('.fd-modal:not([hidden])')) fd.close(); else if (drawerId) closeDrawer(); else hideTip() }
 })
 
@@ -378,10 +425,38 @@ if (api && me && liveAdapter) {
   hkWs = new HkWorkspace(api, me, outbox, () => renderSide())
   const hkBtn = $('#btn-hk')
   hkBtn.hidden = !HkWorkspace.allowed(me)
-  hkBtn.addEventListener('click', () => { if (hkWs!.open) hkWs!.hide(); else { if (fnb?.open) fnb.hide(); void hkWs!.show() } })
+  hkBtn.addEventListener('click', () => { if (hkWs!.open) hkWs!.hide(); else { hideWorkspaces(); void hkWs!.show() } })
   const fnbBtn = $('#btn-fnb')
   fnbBtn.hidden = false
-  fnbBtn.addEventListener('click', () => { if (fnb!.open) fnb!.hide(); else { if (hkWs?.open) hkWs.hide(); void fnb!.show() } })
+  fnbBtn.addEventListener('click', () => { if (fnb!.open) fnb!.hide(); else { hideWorkspaces(); void fnb!.show() } })
+
+  // Staff app: everyone clocks in and out here; managers and security also see the team on the map.
+  store.staffAllowed = me.permissions.includes('*') || me.permissions.includes('staff.track')
+  if (store.staffAllowed) store.layers.add('staff')
+  staffWs = new StaffWorkspace(api, me, outbox, {
+    openWork(kind) {
+      if (kind === 'housekeeping' && hkWs) void hkWs.show('mine')
+      if (kind === 'pickup' && fnb) void fnb.show('kitchen')
+    },
+    showOnMap(userId) {
+      if (!store.layers.has('staff')) store.toggleLayer('staff')
+      void loadStaff().then(() => { if (userId && !world.focusStaff(userId)) toast('The map has no position for this person yet.') })
+    },
+  }, () => renderSide())
+  const staffBtn = $('#btn-staff')
+  staffBtn.hidden = false
+  staffBtn.addEventListener('click', () => { if (staffWs!.open) staffWs!.hide(); else { hideWorkspaces(); void staffWs!.show() } })
+  // While on duty the phone shares its location: say so on every screen.
+  const duty = document.createElement('button')
+  duty.type = 'button'
+  duty.className = 'duty-pill'
+  duty.hidden = true
+  duty.textContent = '📍 Location on: on duty'
+  duty.addEventListener('click', () => { hideWorkspaces(); void staffWs!.show('today') })
+  document.getElementById('app')!.appendChild(duty)
+  staffWs.tracker.onChange = () => { duty.hidden = !staffWs!.tracker.active }
+  void staffWs.resume()
+  void loadStaff()
   setTab('arrivals')
 }
 store.load().then(renderAll).catch((err) => toast(`Couldn't load HMS data: ${err.message}`))

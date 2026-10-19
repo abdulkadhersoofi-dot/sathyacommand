@@ -37,6 +37,11 @@ sign_in:
 #   hk.attend        clean assigned rooms (start, checklist, photos, finish), do-not-disturb, minibar, report what is in the room
 #   hk.inspect       inspect cleaned rooms and score them
 #   hk.manage        assign rooms, out of order, room status, minibar list, lost & found disposal
+#   staff.track      see who is on duty and where (live staff layer), SOS alerts
+#   attendance.view  everyone's attendance, late arrivals and no-shows
+#   roster.manage    shifts and rosters
+#   broadcast.send   send messages to all staff or to roles
+#   staff.settings   resort boundary for attendance, map position, selfie rule, beacons
 #   menu.edit        add and edit menu items and tables (price changes go to menu.price for approval)
 #   menu.price       change menu prices and import the menu
 #   bar.settings     licensed bar hours and dry days
@@ -49,13 +54,13 @@ roles:
     permissions: ['*']
     limits: unlimited
   general_manager:
-    permissions: [inventory.edit, devices.approve, users.manage, front_desk, folio.reverse, discount.approve, night_audit, invoice.view, invoice.credit_note, site.edit, site.publish, fnb.order, fnb.void, fnb.bill, fnb.discount, menu.edit, menu.price, bar.settings, bar.stock, bar.approve, kitchen.stock, kitchen.approve, food_cost.view, printers.manage, licences.edit, hk.view, hk.manage, hk.inspect]
+    permissions: [inventory.edit, devices.approve, users.manage, front_desk, folio.reverse, discount.approve, night_audit, invoice.view, invoice.credit_note, site.edit, site.publish, fnb.order, fnb.void, fnb.bill, fnb.discount, menu.edit, menu.price, bar.settings, bar.stock, bar.approve, kitchen.stock, kitchen.approve, food_cost.view, printers.manage, licences.edit, hk.view, hk.manage, hk.inspect, staff.track, attendance.view, roster.manage, broadcast.send, staff.settings]
     limits: { discount_percent: 25, breakage_per_entry: 10000, refund: 50000, comp_room_nights: 5, purchase_order: 500000, rate_override_below_floor: true }
   operations_manager:
-    permissions: [front_desk, folio.reverse, discount.approve, site.edit, fnb.order, fnb.void, fnb.bill, fnb.discount, hk.view, hk.manage, hk.inspect]
+    permissions: [front_desk, folio.reverse, discount.approve, site.edit, fnb.order, fnb.void, fnb.bill, fnb.discount, hk.view, hk.manage, hk.inspect, staff.track, attendance.view, roster.manage, broadcast.send]
     limits: { discount_percent: 20, void_per_bill: 5000, room_move: true, mark_out_of_order: true, overtime_hours_per_week: 12 }
   front_office_manager:
-    permissions: [front_desk, folio.reverse, night_audit, invoice.credit_note, hk.view]
+    permissions: [front_desk, folio.reverse, night_audit, invoice.credit_note, hk.view, attendance.view, roster.manage, broadcast.send]
     limits: { discount_percent: 15, refund: 10000, cashier_variance_writeoff: 500 }
   reception:
     permissions: [front_desk, fnb.order, fnb.bill, hk.view]
@@ -69,7 +74,7 @@ roles:
   stores:
     limits: { purchase_order: 25000, stock_adjustment: 0 }
   executive_housekeeper:
-    permissions: [hk.view, hk.attend, hk.inspect, hk.manage]
+    permissions: [hk.view, hk.attend, hk.inspect, hk.manage, attendance.view, roster.manage, broadcast.send]
     limits: { linen_writeoff: 2000 }
   hk_supervisor:
     permissions: [hk.view, hk.attend, hk.inspect]
@@ -78,7 +83,7 @@ roles:
     permissions: [hk.attend]
     limits: {}
   fnb_manager:
-    permissions: [fnb.order, fnb.void, fnb.bill, fnb.discount, kitchen, menu.edit, kitchen.stock, kitchen.approve, food_cost.view, printers.manage]
+    permissions: [fnb.order, fnb.void, fnb.bill, fnb.discount, kitchen, menu.edit, kitchen.stock, kitchen.approve, food_cost.view, printers.manage, attendance.view, roster.manage, broadcast.send]
     limits: { discount_percent: 15, void_per_bill: 3000, staff_meal: true, menu_price_change_needs: general_manager }
   captain:
     permissions: [fnb.order, fnb.bill]
@@ -97,9 +102,10 @@ roles:
   engineering:
     limits: { spares_issue: 5000 }
   security:
+    permissions: [staff.track]
     limits: {}
   hr_payroll:
-    permissions: [users.manage]
+    permissions: [users.manage, attendance.view, roster.manage, broadcast.send]
     limits: { salary_advance: 10000, payroll_release_needs: [general_manager, managing_director] }
   employee_self_service:
     limits: {}

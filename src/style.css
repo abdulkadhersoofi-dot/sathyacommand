@@ -609,3 +609,52 @@ button.row-card { width: 100%; text-align: left; font: inherit; background: var(
   .linen-row { grid-template-columns: minmax(0, 1.6fr) repeat(3, 44px) minmax(0, 1.2fr) !important; font-size: 12px; }
   .linen-row > :nth-child(6) { display: none; }
 }
+
+/* staff app */
+.lang { display: flex; gap: 6px; justify-content: flex-end; margin-bottom: 10px; }
+.staff-card { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); padding: 16px; display: grid; gap: 8px; max-width: 520px; }
+.staff-card.on { border-color: var(--st-vacant); box-shadow: var(--shadow); }
+.duty-state { display: flex; gap: 10px; align-items: center; font-size: 18px; }
+.loc-note { font-weight: 700; color: var(--st-vacant); }
+.btn.big { font-size: 17px; padding: 14px 18px; border-radius: 12px; width: 100%; }
+.sos-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; width: 100%; max-width: 520px; margin: 14px 0 4px; padding: 16px; border: 0; border-radius: 14px;
+  background: var(--st-departing); color: #fff; font-family: var(--f-body); box-shadow: 0 6px 18px color-mix(in srgb, var(--st-departing) 40%, transparent); }
+.sos-btn b { font-size: 22px; letter-spacing: .08em; }
+.sos-btn span { font-size: 12px; opacity: .9; }
+.sos-btn:active { transform: scale(.98); }
+.msg { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: 10px 12px; margin-bottom: 8px; display: grid; gap: 4px; }
+.msg.unread { border-color: var(--accent); }
+.msg.urgent { border-left: 4px solid var(--st-departing); }
+.msg-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.msg-head .small { margin-left: auto; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip.off { opacity: .5; text-decoration: line-through; }
+.att-row { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) 90px 70px 70px !important; }
+.att-row.head, .team-row.head { font-size: 11px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.att-row .selfie { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; vertical-align: middle; margin-right: 6px; background: var(--surface-2); }
+.team-row { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.4fr) 90px 60px !important; }
+.ping-row { grid-template-columns: 70px 90px minmax(0, 1fr) !important; }
+.sos-card { border-color: var(--st-departing); background: color-mix(in srgb, var(--st-departing) 8%, var(--surface)); }
+.sos-card.acknowledged { background: var(--surface); }
+.roster-wrap { overflow: auto; max-height: 62vh; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.roster { border-collapse: collapse; font-size: 13px; width: 100%; }
+.roster th, .roster td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: left; white-space: nowrap; }
+.roster thead th { position: sticky; top: 0; background: var(--surface); z-index: 1; font-size: 11.5px; }
+.roster tbody th { position: sticky; left: 0; background: var(--surface); font-weight: 700; }
+.roster select { font: 500 13px var(--f-body); color: var(--fg); background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 4px 6px; }
+.roster select.edited { border-color: var(--marigold); background: color-mix(in srgb, var(--marigold) 14%, var(--surface)); }
+.settings-form { max-width: 640px; }
+.duty-pill { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(14px + env(safe-area-inset-bottom)); z-index: 60; border: 0; border-radius: 999px; padding: 7px 14px;
+  background: var(--st-vacant); color: #fff; font: 700 13px var(--f-body); box-shadow: var(--shadow); }
+.map-label.staff-label { font-size: 11px; }
+.map-label.staff-label.stale { opacity: .55; }
+@media (max-width: 900px) {
+  .att-row { grid-template-columns: minmax(0, 1.4fr) 80px 60px 60px !important; font-size: 12px; }
+  .att-row > :nth-child(2) { display: none; }
+  .team-row { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) 60px !important; font-size: 12px; }
+  .team-row > :nth-child(3) { display: none; }
+}
+.sos-alert { position: fixed; top: calc(var(--ws-top, 64px) + 8px); left: 50%; transform: translateX(-50%); z-index: 70; border: 0; border-radius: 12px; padding: 12px 18px; max-width: calc(100vw - 32px);
+  background: var(--st-departing); color: #fff; font: 800 15px var(--f-body); box-shadow: var(--shadow); animation: sos-blink 1.2s ease-in-out infinite; }
+@keyframes sos-blink { 50% { box-shadow: 0 0 0 8px color-mix(in srgb, var(--st-departing) 30%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .sos-alert { animation: none; } }

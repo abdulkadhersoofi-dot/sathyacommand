@@ -101,11 +101,15 @@ export abstract class Workspace<Tab extends string> implements WorkspaceHost {
 
   /** Reloads the visible screen (on open, tab change, or a live event from another device). */
   async refresh() {
+    // Another action is still running: try again shortly rather than draw a screen whose data is not loaded.
+    if (this.busy) { setTimeout(() => { if (this.open) void this.refresh() }, 300); return }
+    const tab = this.tab
     await this.guard(async () => {
       await this.beforeLoad()
-      await this.views[this.tab].load()
+      await this.views[tab].load()
     })
-    this.render()
+    // The tab changed while loading: that tab's own refresh draws it.
+    if (tab === this.tab) this.render()
   }
 
   render() {

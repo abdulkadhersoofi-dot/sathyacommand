@@ -14,7 +14,7 @@ export interface SpaceState {
   revenue: number
 }
 
-export type Layer = 'rooms' | 'fnb' | 'events' | 'housekeeping' | 'revenue'
+export type Layer = 'rooms' | 'fnb' | 'events' | 'housekeeping' | 'revenue' | 'staff'
 
 export interface FeedItem { id: string; at: Date; kind: 'kot' | 'checkin' | 'checkout' | 'hk' | 'alert'; text: string; spaceId?: string }
 
@@ -37,6 +37,8 @@ export class Store {
   layers = new Set<Layer>(['rooms', 'fnb', 'events'])
   godMode = false
   live = false
+  /** Live mode and the person may see where staff are (managers, security). */
+  staffAllowed = false
   selectedId: string | null = null
 
   private listeners = new Set<Listener>()
@@ -135,6 +137,11 @@ export class Store {
   private async onSnapshotChanged(e: Extract<DomainEvent, { type: 'snapshot.changed' }>) {
     if (/^(kot|bot|order|order_item)\./.test(e.action)) { await this.reloadOrders(); this.emit('fnb', e); return }
     if (/^(menu_item|menu|outlet|station|table|bar|dry_day|licence|vat_rate|vat_class)\./.test(e.action)) { this.emit('fnb', e); return }
+    if (/^(staff|shift|roster|beacon)\./.test(e.action)) {
+      if (e.action === 'staff.sos') this.pushFeed({ id: `sos-${e.entityId}`, at: new Date(), kind: 'alert', text: `SOS from ${e.actor}` })
+      this.emit('staff', e)
+      return
+    }
     if (/^(hk|minibar|laundry|linen|lost_found|public_area)\./.test(e.action)) {
       this.hk = await this.adapter.getHousekeeping()
       if (e.action === 'hk.room_ready') {

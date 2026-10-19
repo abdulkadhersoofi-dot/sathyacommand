@@ -23,6 +23,7 @@ import { idempotency, printingRoutes } from './routes/printing'
 import { uploadRoutes } from './routes/uploads'
 import { housekeepingRoutes } from './routes/housekeeping'
 import { linenLaundryRoutes } from './routes/linen-laundry'
+import { staffRoutes } from './routes/staff'
 
 export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boolean; appDir?: string } = {}) {
   const ctx: Ctx = {
@@ -62,6 +63,7 @@ export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boo
   uploadRoutes(app, ctx)
   housekeepingRoutes(app, ctx)
   linenLaundryRoutes(app, ctx)
+  staffRoutes(app, ctx)
 
   // Serve the built 3D app and front desk screens from the same address as the API.
   if (opts.appDir && existsSync(opts.appDir)) app.register(fastifyStatic, { root: opts.appDir, index: 'index.html' })

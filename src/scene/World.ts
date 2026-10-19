@@ -4,7 +4,7 @@ import type { Store } from '../data/store'
 import { Site } from './Site'
 import { defaultLayout, type SiteLayout } from '../data/layout'
 import { Rooms } from './Rooms'
-import { Overlays } from './Overlays'
+import { Overlays, type StaffPin } from './Overlays'
 import { ease } from './geo'
 
 export interface WorldCallbacks {
@@ -103,7 +103,24 @@ export class World {
     this.overlays.group.visible = !this.editMode
     this.scene.add(this.site.root, this.rooms.group, this.overlays.group)
     this.setNight(this.night)
+    this.overlays.setStaff(this.staff)
     this.refresh()
+  }
+
+  private staff: StaffPin[] | null = null
+  /** Staff on duty on the map (null hides the layer). */
+  setStaff(list: StaffPin[] | null) {
+    this.staff = list
+    this.overlays.setStaff(list)
+    this.dirty = true
+  }
+
+  /** Flies to a person on duty; false if the map has no position for them. */
+  focusStaff(id: string) {
+    const p = this.overlays.staffAt(id)
+    if (!p) return false
+    this.flyTo(p, 60)
+    return true
   }
 
   invalidate() { this.dirty = true }

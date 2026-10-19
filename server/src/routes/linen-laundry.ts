@@ -6,6 +6,7 @@ import { appendAudit } from '../audit-store'
 import { can, HttpError, type Ctx } from '../context'
 import type { Db } from '../db'
 import { businessDate, folioBalance, LODGING } from '../fo-core'
+import { placeAt } from '../geo'
 import { requireCaller } from './auth'
 
 // Linen stock (on the shelf, at the laundry, lost), guest laundry charged to the room, and public-area
@@ -244,12 +245,13 @@ export function linenLaundryRoutes(app: FastifyInstance, ctx: Ctx) {
     const who = await need(req, 'hk.attend', 'hk.manage')
     const b = req.body as { code?: string; note?: string; photoId?: string }
     return db.tx(async (t) => {
-      const [a] = await t.query<{ id: string; name: string }>('select id, name from public_area where code = $1 and active', [String(b?.code ?? '').trim()])
+      const [a] = await t.query<{ id: string; name: string; space_id: string | null }>('select id, name, space_id from public_area where code = $1 and active', [String(b?.code ?? '').trim()])
       if (!a) throw new HttpError(404, 'That QR code is not a cleaning point. Scan the code fixed in the area.')
       const id = newId('AR')
       await t.query('insert into area_round (id, area_id, by_user, at, business_date, note, photo_id) values ($1,$2,$3,$4,$5,$6,$7)',
         [id, a.id, who.userId, now(), await businessDate(t), b.note?.trim() || null, b.photoId ?? null])
       await appendAudit(t, { actor: who, action: 'hk.round', entity: { type: 'public_area', id: a.id }, after: { area: a.name } }, now())
+      if (a.space_id) await placeAt(t, who.userId, a.space_id, now())
       return reply.status(201).send({ id, area: a.name })
     })
   })

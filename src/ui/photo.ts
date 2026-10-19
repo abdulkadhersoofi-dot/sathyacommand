@@ -4,12 +4,12 @@ import type { Api } from '../live/api'
 // the authenticated API (an <img> tag cannot send the sign-in token itself).
 
 /** Opens the camera (or file picker) and resolves with a resized JPEG data URL, or null if cancelled. */
-export function takePhoto(maxSide = 1280): Promise<string | null> {
+export function takePhoto(maxSide = 1280, facing: 'environment' | 'user' = 'environment'): Promise<string | null> {
   return new Promise((resolve) => {
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = 'image/*'
-    input.setAttribute('capture', 'environment')
+    input.setAttribute('capture', facing)
     input.addEventListener('change', () => {
       const file = input.files?.[0]
       if (!file) { resolve(null); return }

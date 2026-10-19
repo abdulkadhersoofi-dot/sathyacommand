@@ -11,9 +11,14 @@ import type { Rooms } from './Rooms'
 // arriving / departing guests, food runners).
 
 interface Label { el: HTMLElement; pos: THREE.Vector3; lift: number }
+/** Someone on duty, where their phone last placed them (layout metres). */
+export interface StaffPin { id: string; name: string; roles: string; x: number; z: number; sos: boolean; stale: boolean; outside: boolean }
 interface Effect { start: number; dur: number; update: (k: number) => void; done: () => void }
 
 const MARIGOLD = 0xe8a317
+const ROLE_COLOURS: [RegExp, number][] = [[/security/, 0x3b7be0], [/room_attendant|hk_/, 0x2bb3a3], [/captain|steward|chef|kitchen|bartender/, MARIGOLD],
+  [/engineer|maintenance/, 0xe07b2c], [/manager|gm|md|owner|accounts/, 0x9b6bd6], [/reception|front/, 0x35a46b]]
+const roleColour = (roles: string) => ROLE_COLOURS.find(([r]) => r.test(roles))?.[1] ?? 0x8a8f98
 const VENUE_TABLE_TYPES = new Set(['LAWN-GRAND', 'LAWN-GARDEN', 'GROUND-CRICKET', 'GROUND-NORTH', 'PAVILION'])
 
 export class Overlays {
@@ -26,6 +31,10 @@ export class Overlays {
   private markers: THREE.InstancedMesh
   private markerTargets: THREE.Vector3[] = []
   private liveVenues = new Set<string>()
+  private staffGroup = new THREE.Group()
+  private staffPins = new Map<string, { pin: THREE.Group; ring: THREE.Mesh | null }>()
+  private pinGeo = { head: new THREE.SphereGeometry(0.85, 14, 10).translate(0, 3.1, 0), body: new THREE.ConeGeometry(0.75, 2.4, 12).rotateX(Math.PI).translate(0, 1.2, 0),
+    ring: new THREE.RingGeometry(1.6, 2.4, 32).rotateX(-Math.PI / 2).translate(0, 0.15, 0) }
 
   constructor(private site: Site, private rooms: Rooms, private labelLayer: HTMLElement) {
     this.tables = new THREE.InstancedMesh(
@@ -45,7 +54,7 @@ export class Overlays {
       new THREE.MeshStandardMaterial({ color: MARIGOLD, emissive: MARIGOLD, emissiveIntensity: 0.6, roughness: 0.4 }), 80,
     )
     this.markers.count = 0
-    this.group.add(this.tables, this.kitchenRing, this.markers)
+    this.group.add(this.tables, this.kitchenRing, this.markers, this.staffGroup)
     this.buildLabels()
   }
 
@@ -53,7 +62,50 @@ export class Overlays {
   dispose() {
     for (const l of this.labels.values()) l.el.remove()
     this.labels.clear()
+    this.setStaff(null)
   }
+
+  // ---------- staff on duty ----------
+  /** Pins for everyone on duty (null hides them all). An SOS pulses red; a pin not heard from in a while is faded. */
+  setStaff(list: StaffPin[] | null) {
+    const keep = new Set((list ?? []).map((p) => p.id))
+    for (const [id, p] of this.staffPins) {
+      if (keep.has(id)) continue
+      this.staffGroup.remove(p.pin)
+      p.pin.traverse((o) => { const m = (o as THREE.Mesh).material as THREE.Material | undefined; m?.dispose() })
+      this.staffPins.delete(id)
+      this.labels.get(`staff:${id}`)?.el.remove()
+      this.labels.delete(`staff:${id}`)
+    }
+    for (const s of list ?? []) {
+      let p = this.staffPins.get(s.id)
+      if (!p) {
+        const c = roleColour(s.roles)
+        const mat = new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0.55, roughness: 0.45, transparent: true })
+        const pin = new THREE.Group()
+        pin.scale.setScalar(2.2)                  // tall enough to stand above the trees
+        pin.add(new THREE.Mesh(this.pinGeo.head, mat), new THREE.Mesh(this.pinGeo.body, mat))
+        p = { pin, ring: null }
+        this.staffPins.set(s.id, p)
+        this.staffGroup.add(pin)
+        this.addLabel(`staff:${s.id}`, s.name, new THREE.Vector3())
+        this.labels.get(`staff:${s.id}`)!.el.classList.add('staff-label')
+      }
+      p.pin.position.set(s.x, 0, s.z)
+      p.pin.userData.staffId = s.id
+      p.pin.children.forEach((c) => { ((c as THREE.Mesh).material as THREE.MeshStandardMaterial).opacity = s.stale ? 0.45 : 1 })
+      if (s.sos && !p.ring) {
+        p.ring = new THREE.Mesh(this.pinGeo.ring, new THREE.MeshBasicMaterial({ color: 0xe0533d, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide }))
+        p.pin.add(p.ring)
+      } else if (!s.sos && p.ring) { p.pin.remove(p.ring); (p.ring.material as THREE.Material).dispose(); p.ring = null }
+      const l = this.labels.get(`staff:${s.id}`)!
+      l.pos.set(s.x, 10.5, s.z)
+      this.setLabelDetail(`staff:${s.id}`, s.sos ? '<b>SOS</b>' : s.outside ? 'Outside the boundary' : null, s.sos ? 'alert' : s.outside ? 'event' : '')
+      l.el.classList.toggle('stale', s.stale)
+    }
+  }
+
+  staffAt(id: string): THREE.Vector3 | null { return this.staffPins.get(id)?.pin.position.clone() ?? null }
 
   // ---------- labels ----------
   private buildLabels() {
@@ -107,7 +159,7 @@ export class Overlays {
       v.copy(l.pos)
       if (key.startsWith('block:')) v.y += this.rooms.exploded ? 10 : 0
       v.project(camera)
-      const prio = (l.el.classList.contains('has-detail') ? 2 : 0) + (key.startsWith('block:') ? 1 : 0)
+      const prio = (l.el.dataset.tone === 'alert' ? 4 : 0) + (l.el.classList.contains('has-detail') ? 2 : 0) + (key.startsWith('block:') || key.startsWith('staff:') ? 1 : 0)
       return { l, x: ((v.x + 1) / 2) * w, y: ((1 - v.y) / 2) * h, onScreen: v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1, prio, depth: v.z }
     }).sort((a, b) => b.prio - a.prio || a.depth - b.depth)
     for (const it of items) {
@@ -318,6 +370,13 @@ export class Overlays {
         if (!line.visible) continue
         ;(line.material as THREE.LineBasicMaterial).opacity = this.liveVenues.has(id) ? pulse : 0.9
         if (this.liveVenues.has(id)) active = true
+      }
+      for (const p of this.staffPins.values()) {
+        if (!p.ring) continue
+        const k = (t * 1.2) % 1
+        p.ring.scale.setScalar(1 + k * 2.2)
+        ;(p.ring.material as THREE.MeshBasicMaterial).opacity = 0.85 * (1 - k)
+        active = true
       }
       if (this.kitchenRing.visible) {
         this.kitchenRing.scale.setScalar(1 + Math.sin(t * 2) * 0.03)

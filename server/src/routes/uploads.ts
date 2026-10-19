@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { FastifyInstance } from 'fastify'
-import { HttpError, type Ctx } from '../context'
+import { can, HttpError, type Ctx } from '../context'
 import { requireCaller } from './auth'
 
 // Photos from phones (cleaning proof, faults, lost & found, incidents). The app shrinks them before
@@ -26,9 +26,11 @@ export function uploadRoutes(app: FastifyInstance, ctx: Ctx) {
   })
 
   app.get('/api/uploads/:id', async (req, reply) => {
-    await requireCaller(ctx, req)
-    const [u] = await db.query<{ mime: string; bytes: Uint8Array }>('select mime, bytes from upload where id = $1', [(req.params as { id: string }).id])
+    const who = await requireCaller(ctx, req)
+    const [u] = await db.query<{ mime: string; bytes: Uint8Array; kind: string; uploaded_by: string }>('select mime, bytes, kind, uploaded_by from upload where id = $1', [(req.params as { id: string }).id])
     if (!u) throw new HttpError(404, 'No such photo.')
+    // Clock-in selfies are personal: only the person and those who check attendance see them.
+    if (u.kind === 'selfie' && u.uploaded_by !== who.userId && !can(who, 'attendance.view')) throw new HttpError(403, 'Your role cannot see this photo.')
     return reply.type(u.mime).header('cache-control', 'private, max-age=86400').send(Buffer.from(u.bytes))
   })
 }

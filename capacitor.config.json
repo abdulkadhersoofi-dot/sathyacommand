@@ -1,0 +1,13 @@
+{
+  "appId": "in.sathyapark.staff",
+  "appName": "Sathya Staff",
+  "webDir": "dist",
+  "server": {
+    "url": "https://hms.sathyapark.example",
+    "cleartext": false
+  },
+  "android": { "allowMixedContent": false },
+  "plugins": {
+    "BackgroundGeolocation": {}
+  }
+}

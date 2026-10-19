@@ -3,16 +3,17 @@ import { fmtDay, inr, todayKey } from '../data/dates'
 
 // Layers, legend, KPI strip and the date scrubber.
 
-const LAYERS: { id: Layer; label: string; god?: boolean }[] = [
+const LAYERS: { id: Layer; label: string; god?: boolean; staff?: boolean }[] = [
   { id: 'rooms', label: 'Occupancy' },
   { id: 'fnb', label: 'Food & KOTs' },
   { id: 'events', label: 'Events' },
   { id: 'housekeeping', label: 'Housekeeping' },
   { id: 'revenue', label: 'Revenue', god: true },
+  { id: 'staff', label: 'Staff on duty', staff: true },
 ]
 
 export function layersHtml(store: Store) {
-  return `<div class="layers-title">Layers</div>` + LAYERS.map((l) => {
+  return `<div class="layers-title">Layers</div>` + LAYERS.filter((l) => !l.staff || store.staffAllowed).map((l) => {
     const locked = l.god && !store.godMode
     return `<button class="layer" type="button" data-layer="${l.id}" aria-pressed="${store.layers.has(l.id)}" ${locked ? 'disabled title="Unlock God Mode to see revenue"' : ''}>
       <span class="sw"></span>${l.label}${locked ? '<span class="lock">OWNER</span>' : ''}</button>`
