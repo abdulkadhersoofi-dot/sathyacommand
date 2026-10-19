@@ -104,8 +104,8 @@ describe('taking an order', () => {
 
   it('sends one ticket per station, numbered for the day, with allergens and notes', async () => {
     const r = (await R.post(`/api/fnb/orders/${ids.T5}/send`, CAP)).json()
-    expect(r.tickets.map((t: { kind: string; number: number; station_id: string }) => `${t.kind}${t.number}:${t.station_id}`)).toEqual(['KOT1:SI', 'KOT2:NI', 'KOT3:BV'])
-    const si = r.tickets[0]
+    expect(r.tickets.map((t: { kind: string; number: number; station_id: string }) => `${t.kind}${t.number}:${t.station_id}`)).toEqual(['KOT1:BV', 'KOT2:NI', 'KOT3:SI'])
+    const si = r.tickets[2]
     expect(si.order).toMatchObject({ number: 1, table: 'T5', covers: 3, outlet: 'Sathya Dine' })
     expect(si.lines).toEqual([{ qty: 2, name: 'Masala Dosa', note: 'less oil', seat: null, course: 1, alert: [] }])
     expect(r.tickets[1].lines.find((l: { name: string }) => l.name === 'Butter Naan').alert).toEqual(['GLUTEN', 'DAIRY'])
@@ -148,7 +148,7 @@ describe('kitchen screens', () => {
   it('marks reprints as copies and logs them', async () => {
     const kot = (await R.get('/api/fnb/kds?stationId=SI', CHEF)).json().tickets[0]
     const p = (await R.post(`/api/fnb/kots/${kot.id}/reprint`, CAP)).json()
-    expect(p).toMatchObject({ number: 1, kind: 'KOT', prints: 2, copy: true })
+    expect(p).toMatchObject({ number: 3, kind: 'KOT', prints: 2, copy: true })
     expect(p.lines[0]).toMatchObject({ qty: 2, name: 'Masala Dosa', void: false })
     const audit = (await R.get('/api/audit?limit=5', R.md)).json()
     expect(audit[0]).toMatchObject({ action: 'kot.reprint' })

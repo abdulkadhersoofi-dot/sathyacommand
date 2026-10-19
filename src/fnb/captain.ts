@@ -3,6 +3,8 @@ import { val } from '../ui/form-modal'
 import { chips, dietDot, minutesAgo, rs, type Category, type MenuItem, type Table, type Ticket, type Ws } from './common'
 import { printTickets } from './print'
 import { Billing } from './billing'
+import { isNetworkError } from '../live/api'
+import { newKey } from '../live/outbox'
 
 // The captain's tablet: tables of an outlet, then the order screen. Items go into a cart on the tablet
 // and reach the kitchen only on "Send", one ticket per station.
@@ -12,6 +14,8 @@ interface OrderKot { id: string; number: number; kind: string; station_id: strin
 export interface OrderView {
   id: string; number: number; outlet_id: string; outlet: string; kind: string; table_id: string | null; table_label: string | null; room_no: string | null; guest: string | null; reservation_id: string | null
   covers: number; status: string; opened_at: string; items: OrderLine[]; kots: OrderKot[]
+  /** Opened on this tablet while offline; the server has not confirmed it yet. */
+  offline?: boolean
   totals: { food: number; gstRate: number; cgst: number; sgst: number; liquorBeforeVat: number; vat: number; vatMissing: string[]; payable: number }
 }
 interface RoomOrder { id: string; number: number; room_no: string | null; guest: string | null; opened_at: string; kitchen: string | null; subtotal_paise: number; pending_items: number; kind: string; table_label: string | null }
@@ -42,23 +46,30 @@ export class CaptainView {
   async load() {
     if (!this.ws.outlets.some((o) => o.id === this.outletId)) this.outletId = (this.ws.outlets.find((o) => o.kind === 'restaurant') ?? this.ws.outlets[0])?.id ?? ''
     if (!this.outletId) return
-    if (this.order) {
-      this.order = await this.ws.api.get<OrderView>(`/api/fnb/orders/${this.order.id}`)
-      if (!['open', 'billed'].includes(this.order.status)) { this.order = null; this.cart.clear() }
+    const queuedFor = (id: string) => this.ws.outbox.queue.some((q) => q.path.includes(id) || (q.body as { id?: string })?.id === id)
+    if (this.order && !(this.order.offline && queuedFor(this.order.id))) {
+      try {
+        this.order = await this.ws.api.get<OrderView>(`/api/fnb/orders/${this.order.id}`)
+        if (!['open', 'billed'].includes(this.order.status)) { this.order = null; this.cart.clear() }
+      } catch (e) { if (!isNetworkError(e)) throw e; this.ws.offline = true }
     }
     const outletId = this.order?.outlet_id ?? this.outletId
-    if (this.menuFor !== outletId) {
-      this.menu = await this.ws.api.get(`/api/fnb/menu?outletId=${outletId}`)
+    if (this.menuFor !== outletId || this.order) {
+      this.menu = await this.ws.cached(`/api/fnb/menu?outletId=${outletId}`)
+      if (this.menuFor !== outletId) this.cat = ''
       this.menuFor = outletId
-      this.cat = ''
-    } else if (this.order) {
-      this.menu = await this.ws.api.get(`/api/fnb/menu?outletId=${outletId}`)
     }
     if (!this.order) {
-      this.tables = await this.ws.api.get(`/api/fnb/tables?outletId=${this.outletId}`)
-      this.roomOrders = await this.ws.api.get(`/api/fnb/orders?outletId=${this.outletId}`)
+      this.tables = await this.ws.cached(`/api/fnb/tables?outletId=${this.outletId}`)
+      this.roomOrders = await this.ws.cached(`/api/fnb/orders?outletId=${this.outletId}`)
+      // Tables opened on this tablet while offline.
+      for (const q of this.ws.outbox.queue.filter((x) => x.path === '/api/fnb/orders')) {
+        const b = q.body as { id: string; tableId?: string; covers: number }
+        const tb = this.tables.find((x) => x.id === b.tableId)
+        if (tb && !tb.order_id) Object.assign(tb, { order_id: b.id, order_number: 0, covers: b.covers, order_status: 'open', opened_at: new Date(q.at).toISOString(), ready_tickets: 0 })
+      }
     }
-    await this.billing.load(this.order?.status === 'billed' ? this.order.id : null)
+    if (!this.ws.offline) await this.billing.load(this.order?.status === 'billed' ? this.order.id : null)
   }
 
   /** Opens a specific order (e.g. from the kitchen panel). */
@@ -69,6 +80,13 @@ export class CaptainView {
   }
 
   get dirty() { return this.cart.size > 0 }
+
+  private offlineOrder(id: string, tb: Table, covers: number): OrderView {
+    const outlet = this.ws.outlets.find((x) => x.id === tb.outlet_id)
+    return { id, number: 0, outlet_id: tb.outlet_id, outlet: outlet?.name ?? '', kind: 'dine_in', table_id: tb.id, table_label: tb.label, room_no: null, guest: null, reservation_id: null,
+      covers, status: 'open', opened_at: new Date().toISOString(), items: [], kots: [], offline: true,
+      totals: { food: 0, gstRate: 5, cgst: 0, sgst: 0, liquorBeforeVat: 0, vat: 0, vatMissing: [], payable: 0 } }
+  }
 
   html(): string {
     if (!this.outletId) return '<div class="empty">No outlets yet. Add one under Menu.</div>'
@@ -110,7 +128,7 @@ export class CaptainView {
         <div class="ord-items">${this.itemsHtml()}</div>
       </div>
       <div class="ord-ticket">
-        <div class="ord-head"><div><div class="dr-kicker">${esc(o.outlet)} · Order ${o.number}</div><div class="dr-title">${esc(where)}</div>
+        <div class="ord-head"><div><div class="dr-kicker">${esc(o.outlet)} · ${o.offline ? 'New order (not yet on the HMS)' : `Order ${o.number}`}</div><div class="dr-title">${esc(where)}</div>
           <div class="muted small">${o.covers} cover${o.covers > 1 ? 's' : ''} · open ${minutesAgo(o.opened_at)} min</div></div></div>
         ${this.linesHtml(o)}
         ${o.status === 'billed' ? '' : this.totalsHtml(o)}
@@ -118,9 +136,8 @@ export class CaptainView {
           <button type="button" class="btn primary" data-cap="send" ${this.cart.size ? '' : 'disabled'}>Send to kitchen${this.cart.size ? ` (${[...this.cart.values()].reduce((a, c) => a + c.qty, 0)})` : ''}</button>
           ${!this.cart.size && o.items.some((i) => i.status === 'sent') && !o.items.some((i) => i.status === 'pending') && this.ws.can('fnb.bill') ? '<button type="button" class="btn primary" data-bill="bill">Bill</button>' : ''}
           ${this.lastTickets.length ? '<button type="button" class="btn" data-cap="print">Print tickets</button>' : ''}
-          ${o.kind === 'dine_in' ? '<button type="button" class="btn" data-cap="move">Move table</button>' : ''}
-          ${o.kind === 'dine_in' ? '<button type="button" class="btn" data-cap="merge">Merge table</button>' : ''}
-          ${o.items.some((i) => i.status === 'sent') ? '' : '<button type="button" class="btn ghost" data-cap="cancel-order">Cancel order</button>'}
+          ${o.kind === 'dine_in' && !o.offline ? '<button type="button" class="btn" data-cap="move">Move table</button><button type="button" class="btn" data-cap="merge">Merge table</button>' : ''}
+          ${o.items.some((i) => i.status === 'sent') || o.offline ? '' : '<button type="button" class="btn ghost" data-cap="cancel-order">Cancel order</button>'}
         </div>`}
       </div></div>`
   }
@@ -153,6 +170,10 @@ export class CaptainView {
           <span class="mono">${rs(l.price_paise * l.qty)}</span>${l.status === 'sent' ? `<button type="button" class="x" data-void="${esc(l.id)}" aria-label="Cancel ${esc(l.name)}">✕</button>` : '<span></span>'}</div>`).join('')}</div>`
     }
     for (const l of pendingServer) h += `<div class="ord-line pending"><span>${l.qty} × ${esc(l.name)} <i>not sent</i></span><span class="mono">${rs(l.price_paise * l.qty)}</span><button type="button" class="x" data-void="${esc(l.id)}" aria-label="Remove">✕</button></div>`
+    const waiting = this.ws.outbox.queue.filter((q) => q.path === `/api/fnb/orders/${o.id}/items`).flatMap((q) => (q.body as { items: { itemId: string; qty: number }[] }).items)
+    if (waiting.length) {
+      h += `<div class="sec-title">Waiting for the connection</div>` + waiting.map((w) => `<div class="ord-line pending"><span>${w.qty} × ${esc(this.menu.items.find((m) => m.id === w.itemId)?.name ?? w.itemId)} <i>queued on this tablet</i></span><span></span><span></span></div>`).join('')
+    }
     if (this.cart.size) {
       h += `<div class="sec-title">To send</div>` + [...this.cart].map(([id, c]) => {
         const m = this.menu.items.find((i) => i.id === id)
@@ -186,10 +207,16 @@ export class CaptainView {
     const table = d('table')
     if (table) {
       const tb = this.tables.find((x) => x.id === table)!
+      if (tb.order_id && tb.order_number === 0) { this.order = this.offlineOrder(tb.order_id, tb, tb.covers ?? 1); await this.load(); return true }
       if (tb.order_id) { await this.openOrder(tb.order_id); await this.load(); return true }
       this.ws.modal.open(`Table ${tb.label}`, `<div class="form-grid"><label>Guests (covers)<input name="covers" type="number" min="1" max="200" value="${Math.min(2, tb.seats)}"></label></div>`, 'Open order', async (f) => {
-        const o = await api.post<OrderView>('/api/fnb/orders', { outletId: this.outletId, tableId: tb.id, covers: Number(val(f, 'covers')) })
-        this.order = o; this.cart.clear(); await this.load(); this.ws.render(); return ''
+        // The tablet names the order, so items can follow it even if the connection drops right now.
+        const id = `ORD-${newKey().replace(/[^a-z0-9]/gi, '').slice(-12).toUpperCase()}`
+        const covers = Number(val(f, 'covers'))
+        const o = await this.ws.outbox.send<OrderView>('POST', '/api/fnb/orders', { id, outletId: this.outletId, tableId: tb.id, covers }, `open table ${tb.label}`)
+        this.order = o ?? this.offlineOrder(id, tb, covers)
+        this.cart.clear(); await this.load(); this.ws.render()
+        return o ? '' : 'No connection: the order is kept on this tablet and goes to the HMS when it is back.'
       })
       return true
     }
@@ -239,11 +266,14 @@ export class CaptainView {
     if (act === 'send') {
       const o = this.order!
       const items = [...this.cart].map(([itemId, c]) => ({ itemId, qty: c.qty, note: c.note || undefined }))
-      await api.post(`/api/fnb/orders/${o.id}/items`, { items })
+      const where = o.table_label ? `table ${o.table_label}` : o.room_no ? `room ${o.room_no}` : `order ${o.number}`
+      await this.ws.outbox.send('POST', `/api/fnb/orders/${o.id}/items`, { items }, `${items.reduce((a, i) => a + i.qty, 0)} items for ${where}`)
       this.cart.clear()
-      const r = await api.post<{ tickets: Ticket[] }>(`/api/fnb/orders/${o.id}/send`)
-      this.lastTickets = r.tickets
-      toast(`Sent: ${r.tickets.map((x) => `${x.kind} ${x.number} → ${this.ws.stations.find((s) => s.id === x.station_id)?.name ?? x.station_id}`).join(', ')}`)
+      const r = await this.ws.outbox.send<{ tickets: Ticket[] }>('POST', `/api/fnb/orders/${o.id}/send`, {}, `KOT for ${where}`)
+      if (r) {
+        this.lastTickets = r.tickets
+        toast(`Sent: ${r.tickets.map((x) => `${x.kind} ${x.number} → ${this.ws.stations.find((s) => s.id === x.station_id)?.name ?? x.station_id}`).join(', ')}`)
+      } else toast('No connection: the KOT waits on this tablet and goes to the kitchen as soon as the connection is back.')
       await this.load()
     }
     if (act === 'print') printTickets(this.lastTickets, (id) => this.ws.stations.find((s) => s.id === id)?.name ?? id)

@@ -5,7 +5,9 @@ import { chips, DIET, dietDot, rs, type Category, type MenuItem, type Outlet, ty
 // Menu editor: outlets, menu sections and dishes (English and Tamil), prices, kitchen stations and
 // tables. Price changes by anyone but the GM wait in the approval inbox; everything is logged.
 
-type Sub = 'items' | 'tables' | 'stations' | 'outlets'
+type Sub = 'items' | 'tables' | 'stations' | 'outlets' | 'printers'
+interface Printer { id: string; name: string; host: string; port: number; width: number; active: boolean }
+interface PrintJob { id: string; kind: string; ref: string; status: string; attempts: number; error: string | null; created_at: string; printer: string }
 const OUTLET_KIND: Record<string, string> = { restaurant: 'Restaurant', room_service: 'Room service', bar: 'Bar', poolside: 'Poolside', banquet: 'Banquet' }
 
 export class MenuView {
@@ -17,6 +19,8 @@ export class MenuView {
   private allOutlets: Outlet[] = []
   private allStations: Station[] = []
   private brands: { id: string; name: string; liquor_class: string; bottle_ml: number; active: boolean }[] = []
+  private printing: { printers: Printer[]; stations: { id: string; name: string; printer_id: string | null }[]; outlets: { id: string; name: string; bill_printer_id: string | null }[]; agentConfigured: boolean; agentLastSeen: string | null } | null = null
+  private jobs: PrintJob[] = []
 
   constructor(private ws: Ws) {}
 
@@ -30,6 +34,7 @@ export class MenuView {
     }
     this.classes = await this.ws.api.get('/api/vat-rates')
     this.brands = await this.ws.api.get('/api/bar/brands')
+    if (this.sub === 'printers') { this.printing = await this.ws.api.get('/api/printers'); this.jobs = await this.ws.api.get('/api/print-jobs') }
   }
 
   private get canEdit() { return this.ws.can('menu.edit') }
@@ -37,11 +42,11 @@ export class MenuView {
   private station = (id: string) => this.allStations.find((s) => s.id === id)?.name ?? id
 
   html() {
-    const subs: [Sub, string][] = [['items', 'Dishes'], ['tables', 'Tables'], ['stations', 'Kitchen stations'], ['outlets', 'Outlets']]
+    const subs: [Sub, string][] = [['items', 'Dishes'], ['tables', 'Tables'], ['stations', 'Kitchen stations'], ['outlets', 'Outlets'], ['printers', 'Printers']]
     const outletChips = this.sub === 'items' || this.sub === 'tables'
       ? chips(this.allOutlets.filter((o) => o.active).map((o) => [o.id, o.name]), this.outletId, 'moutlet') : ''
     return `<div class="ws-toolbar">${chips(subs, this.sub, 'msub')}</div>${outletChips}` + (
-      this.sub === 'items' ? this.itemsHtml() : this.sub === 'tables' ? this.tablesHtml() : this.sub === 'stations' ? this.stationsHtml() : this.outletsHtml())
+      this.sub === 'items' ? this.itemsHtml() : this.sub === 'tables' ? this.tablesHtml() : this.sub === 'stations' ? this.stationsHtml() : this.sub === 'printers' ? this.printersHtml() : this.outletsHtml())
   }
 
   private itemsHtml() {
@@ -75,6 +80,51 @@ export class MenuView {
       + `<p class="muted small">Each dish goes to one station. Kitchen stations get KOTs, bar stations get BOTs.</p>
       <div class="m-table">${this.allStations.map((s) => `<div class="m-row m-row-4${s.active ? '' : ' retired'}"><span class="mono">${esc(s.id)}</span><b>${esc(s.name)}</b><span class="muted">${s.kind === 'bar' ? 'Bar (BOT)' : 'Kitchen (KOT)'}${s.active ? '' : ' · retired'}</span>
         ${this.canEdit ? `<button type="button" class="btn small" data-edit-station="${esc(s.id)}">Edit</button>` : '<span></span>'}</div>`).join('')}</div>`
+  }
+
+  private printersHtml() {
+    const p = this.printing!
+    const canEdit = this.ws.can('printers.manage')
+    const opts = (cur: string | null) => `<option value="">Screen only</option>${p.printers.filter((x) => x.active).map((x) => `<option value="${esc(x.id)}" ${x.id === cur ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}`
+    const seen = p.agentLastSeen ? Math.round((Date.now() - new Date(p.agentLastSeen).getTime()) / 60000) : null
+    const JOB: Record<string, [string, string]> = { queued: ['Waiting', '--marigold'], printing: ['Printing', '--st-occupied'], done: ['Printed', '--st-vacant'], failed: ['Failed', '--st-departing'] }
+    return `<p class="muted small">Kitchen, bar and bill printers on the resort network print through the print agent on the edge box.
+        ${p.agentConfigured ? (seen == null ? 'The agent has not collected a job yet.' : `The agent last collected jobs ${seen} min ago.`) : '<span class="fd-warn">The print agent is not set up on this server yet (see the edge box guide).</span>'}</p>
+      ${canEdit ? '<div class="ws-toolbar"><button type="button" class="btn primary" data-m="add-printer">Add printer</button></div>' : ''}
+      <div class="m-table">${p.printers.map((x) => `<div class="m-row m-row-4${x.active ? '' : ' retired'}"><b>${esc(x.name)}</b><span class="mono">${esc(x.host)}:${x.port}</span><span class="muted small">${x.width === 48 ? '80 mm' : x.width === 32 ? '58 mm' : `${x.width} chars`}</span>
+        ${canEdit ? `<span><button type="button" class="btn small" data-test-printer="${esc(x.id)}">Test</button> <button type="button" class="btn small" data-edit-printer="${esc(x.id)}">Edit</button></span>` : '<span></span>'}</div>`).join('') || '<div class="empty">No printers yet. Tickets show on the kitchen screens only.</div>'}</div>
+      ${p.printers.length ? `<form class="form-grid print-routes" data-routes>
+        <div class="sec-title span2">Kitchen and bar tickets</div>
+        ${p.stations.map((s) => `<label>${esc(s.name)}<select name="s_${esc(s.id)}" ${canEdit ? '' : 'disabled'}>${opts(s.printer_id)}</select></label>`).join('')}
+        <div class="sec-title span2">Bills</div>
+        ${p.outlets.map((o) => `<label>${esc(o.name)}<select name="o_${esc(o.id)}" ${canEdit ? '' : 'disabled'}>${opts(o.bill_printer_id)}</select></label>`).join('')}
+        ${canEdit ? '<div class="span2"><button type="submit" class="btn">Save routing</button></div>' : ''}</form>` : ''}
+      <div class="sec-title">Recent print jobs</div>
+      ${this.jobs.map((j) => `<div class="row-card"><div class="rc-title">${esc(j.ref)} · ${esc(j.printer)}</div><div class="rc-sub">${new Date(j.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}${j.attempts > 1 ? ` · ${j.attempts} tries` : ''}${j.error ? ` · ${esc(j.error)}` : ''}</div>
+        <div class="rc-right">${tonePill(...JOB[j.status])}${j.status === 'failed' ? `<button type="button" class="btn small" data-retry-job="${esc(j.id)}">Retry</button>` : ''}</div></div>`).join('') || '<div class="empty">Nothing printed yet.</div>'}`
+  }
+
+  async submit(form: HTMLFormElement): Promise<boolean> {
+    if (!form.hasAttribute('data-routes') || !this.printing) return false
+    const stations = Object.fromEntries(this.printing.stations.map((s) => [s.id, val(form, `s_${s.id}`) || null]))
+    const outlets = Object.fromEntries(this.printing.outlets.map((o) => [o.id, val(form, `o_${o.id}`) || null]))
+    await this.ws.api.req('PUT', '/api/printers/routes', { stations, outlets })
+    await this.load()
+    return true
+  }
+
+  private printerForm(p?: Printer) {
+    this.ws.modal.open(p ? `Printer · ${p.name}` : 'Add printer', `<div class="form-grid">
+      <label class="span2">Name<input name="name" maxlength="40" value="${esc(p?.name ?? '')}" placeholder="e.g. Main kitchen"></label>
+      <label>IP address<input name="host" maxlength="64" value="${esc(p?.host ?? '')}" placeholder="192.168.1.50"></label><label>Port<input name="port" type="number" value="${p?.port ?? 9100}"></label>
+      <label>Paper<select name="width"><option value="48" ${p?.width !== 32 ? 'selected' : ''}>80 mm</option><option value="32" ${p?.width === 32 ? 'selected' : ''}>58 mm</option></select></label>
+      ${p ? `<label class="check"><input type="checkbox" name="active" ${p.active ? 'checked' : ''}> In use</label>` : ''}</div>
+      <p class="muted small">Thermal printers on the network listen on port 9100. Print a test page after adding it.</p>`, p ? 'Save' : 'Add', async (f) => {
+      const body = { name: val(f, 'name'), host: val(f, 'host'), port: Number(val(f, 'port')), width: Number(val(f, 'width')) }
+      if (p) await this.ws.api.req('PATCH', `/api/printers/${p.id}`, { ...body, active: checked(f, 'active') })
+      else await this.ws.api.post('/api/printers', body)
+      await this.reload(); return 'Saved'
+    })
   }
 
   private outletsHtml() {
@@ -187,6 +237,9 @@ export class MenuView {
       return true
     }
     const eo = get('edit-outlet'); if (eo) { this.outletForm(this.allOutlets.find((x) => x.id === eo)); return true }
+    const ep = get('edit-printer'); if (ep) { this.printerForm(this.printing!.printers.find((x) => x.id === ep)); return true }
+    const tp = get('test-printer'); if (tp) { await api.post(`/api/printers/${tp}/test`); await this.load(); return true }
+    const rj = get('retry-job'); if (rj) { await api.post(`/api/print-jobs/${rj}/retry`); await this.load(); return true }
     const act = get('m')
     if (!act) return false
     if (act === 'add-item') this.itemForm()
@@ -207,6 +260,7 @@ export class MenuView {
       })
     }
     if (act === 'add-outlet') this.outletForm()
+    if (act === 'add-printer') this.printerForm()
     if (act === 'import') this.importForm()
     return true
   }

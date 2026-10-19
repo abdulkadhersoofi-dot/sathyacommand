@@ -11,6 +11,7 @@ import { issue, nextSeriesNumber, stateName, supplier, type DocLine } from '../i
 import { createApproval, registerApprovalKind } from './approvals'
 import { requireCaller } from './auth'
 import { licencesFor, vatRatesOn } from './settings'
+import { billDoc, queueDoc } from './printing'
 
 // Restaurant and bar bills. One order can be split (equally, or item by item) into several bills; each
 // bill carries food and soft drinks on a GST tax invoice (RST series) and liquor on a TN VAT invoice
@@ -383,27 +384,58 @@ export function fnbBillingRoutes(app: FastifyInstance, ctx: Ctx) {
     })
   })
 
+  // One print of a bill: counted, and logged as a duplicate from the second time.
+  async function loadForPrint(t: Db, id: string, who: Caller) {
+    const [bill] = await t.query<BillRow & { prints: number }>('update fnb_bill set prints = prints + 1 where id = $1 returning *', [id])
+    if (!bill) throw new HttpError(404, 'No such bill.')
+    const [o] = await t.query<{ number: number; outlet: string; outlet_id: string; bill_printer_id: string | null; table_label: string | null; covers: number; captain: string }>(
+      `select o.number, ot.name as outlet, ot.id as outlet_id, ot.bill_printer_id, tb.label as table_label, o.covers, u.name as captain from fnb_order o join outlet ot on ot.id = o.outlet_id
+         join app_user u on u.id = o.opened_by left join dining_table tb on tb.id = o.table_id where o.id = $1`, [bill.order_id])
+    const [p] = await t.query<{ legal_name: string | null; name: string; gstin: string | null; address: string | null; city: string | null; pin: string | null; upi_vpa: string | null; upi_payee: string | null }>(
+      'select legal_name, name, gstin, address, city, pin, upi_vpa, upi_payee from property limit 1')
+    const lic = [...await licencesFor(t, 'fnb_bill'), ...(bill.amounts.liquor.length ? await licencesFor(t, 'vat_bill') : [])]
+      .filter((l, i, all) => all.findIndex((x) => x.kind === l.kind) === i)
+    const [g] = bill.gst_document_id ? await t.query<{ number: string }>('select number from tax_document where id = $1', [bill.gst_document_id]) : []
+    const [v] = bill.vat_invoice_id ? await t.query<{ number: string }>('select number from vat_invoice where id = $1', [bill.vat_invoice_id]) : []
+    if (bill.prints > 1) await appendAudit(t, { actor: who, action: 'fnb_bill.reprint', entity: { type: 'fnb_bill', id }, after: { prints: bill.prints, order: o.number } }, now())
+    return { bill, o, p, lic, gstNo: g?.number ?? null, vatNo: v?.number ?? null }
+  }
+
   // Printable bill: the guest check with a UPI QR before payment; the tax invoice and VAT invoice after.
   app.post('/api/fnb/bills/:id/print', async (req, reply) => {
     const who = await requireCaller(ctx, req)
     if (!can(who, 'fnb.bill') && !can(who, 'fnb.order')) throw new HttpError(403, 'Your role cannot print bills.')
-    const { id } = req.params as { id: string }
     const html = await db.tx(async (t) => {
-      const [bill] = await t.query<BillRow & { prints: number }>('update fnb_bill set prints = prints + 1 where id = $1 returning *', [id])
-      if (!bill) throw new HttpError(404, 'No such bill.')
-      const [o] = await t.query<{ number: number; outlet: string; table_label: string | null; covers: number; captain: string }>(
-        `select o.number, ot.name as outlet, tb.label as table_label, o.covers, u.name as captain from fnb_order o join outlet ot on ot.id = o.outlet_id
-           join app_user u on u.id = o.opened_by left join dining_table tb on tb.id = o.table_id where o.id = $1`, [bill.order_id])
-      const [p] = await t.query<{ legal_name: string | null; name: string; gstin: string | null; address: string | null; city: string | null; pin: string | null; upi_vpa: string | null; upi_payee: string | null }>(
-        'select legal_name, name, gstin, address, city, pin, upi_vpa, upi_payee from property limit 1')
-      const lic = [...await licencesFor(t, 'fnb_bill'), ...(bill.amounts.liquor.length ? await licencesFor(t, 'vat_bill') : [])]
-        .filter((l, i, all) => all.findIndex((x) => x.kind === l.kind) === i)
-      const [g] = bill.gst_document_id ? await t.query<{ number: string; irn_status: string }>('select number, irn_status from tax_document where id = $1', [bill.gst_document_id]) : []
-      const [v] = bill.vat_invoice_id ? await t.query<{ number: string }>('select number from vat_invoice where id = $1', [bill.vat_invoice_id]) : []
-      if (bill.prints > 1) await appendAudit(t, { actor: who, action: 'fnb_bill.reprint', entity: { type: 'fnb_bill', id }, after: { prints: bill.prints, order: o.number } }, now())
-      return billHtml(bill, o, p, lic, g?.number ?? null, v?.number ?? null)
+      const x = await loadForPrint(t, (req.params as { id: string }).id, who)
+      return billHtml(x.bill, x.o, x.p, x.lic, x.gstNo, x.vatNo)
     })
     return reply.type('text/html; charset=utf-8').send(html)
+  })
+
+  // The same bill on the outlet's thermal printer, through the print agent.
+  app.post('/api/fnb/bills/:id/print-job', async (req, reply) => {
+    const who = await requireCaller(ctx, req)
+    if (!can(who, 'fnb.bill') && !can(who, 'fnb.order')) throw new HttpError(403, 'Your role cannot print bills.')
+    return db.tx(async (t) => {
+      const { bill, o, p, lic, gstNo, vatNo } = await loadForPrint(t, (req.params as { id: string }).id, who)
+      if (!o.bill_printer_id) throw new HttpError(409, `${o.outlet} has no bill printer. Choose one under Menu → Printers.`)
+      const [pr] = await t.query<{ width: number }>('select width from printer where id = $1', [o.bill_printer_id])
+      const a = bill.amounts
+      const doc = billDoc({
+        heading: [p.legal_name ?? p.name, o.outlet, [p.address, p.city, p.pin].filter(Boolean).join(', '), ...(p.gstin ? [`GSTIN ${p.gstin}`] : []),
+          ...lic.map((l) => `${l.kind === 'fssai' ? 'FSSAI Lic. No.' : l.kind === 'tn_vat' ? 'TN VAT TIN' : l.kind === 'fl3' ? 'FL-3 Licence' : l.name} ${l.number}`)],
+        duplicate: bill.prints > 1, title: gstNo ? `Tax Invoice ${gstNo}` : 'Food & beverages (SAC 996331)',
+        meta: `Order ${o.number}${o.table_label ? ` - Table ${o.table_label}` : ''} - ${o.covers} pax - ${o.captain}${bill.parts > 1 ? ` - Bill ${bill.part}/${bill.parts}` : ''}`,
+        food: a.food.map((l) => ({ description: l.description, amount: l.gross })),
+        foodTotals: a.food.length ? [...(a.foodDiscount ? [[`Discount ${Number(bill.discount_percent)}%`, -a.foodDiscount] as [string, number]] : []), ['Taxable value', a.foodTaxable], [`CGST ${a.gstRate / 2}%`, a.cgst], [`SGST ${a.gstRate / 2}%`, a.sgst]] : [],
+        liquor: a.liquor.map((l) => ({ description: l.description, amount: l.gross })),
+        liquorTotals: a.liquor.length ? [['Value', a.liquorTaxable], ['TN VAT', a.vat]] : [],
+        total: a.total, roundOff: a.roundOff, payable: a.payable, words: amountInWords(a.payable),
+        footer: [...(vatNo ? [`VAT Invoice ${vatNo}`] : []), ...(a.service ? ['Service charge is optional.'] : []), bill.status === 'settled' ? 'Paid - thank you' : 'Thank you'],
+      }, pr.width)
+      const jobId = await queueDoc(t, o.bill_printer_id, 'bill', `Bill order ${o.number}`, doc, now())
+      return reply.status(201).send({ jobId })
+    })
   })
 }
 

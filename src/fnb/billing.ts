@@ -55,6 +55,7 @@ export class Billing {
         <div class="actions">
           ${b.status === 'open' && this.ws.can('fnb.bill') ? `<button type="button" class="btn primary small" data-settle="${esc(b.id)}">Take payment</button>` : ''}
           <button type="button" class="btn small" data-print-bill="${esc(b.id)}">${b.prints ? 'Reprint' : 'Print'}${b.status === 'settled' ? ' invoice' : ' bill'}</button>
+          <button type="button" class="btn small ghost" data-printer-bill="${esc(b.id)}" title="Send to the outlet's bill printer">To printer</button>
         </div></div>`
     }).join('') + (o.status === 'billed' && !settledAny && this.ws.can('fnb.bill')
       ? '<div class="actions"><button type="button" class="btn small" data-bill="rebill">Change split or discount</button><button type="button" class="btn small ghost" data-bill="unbill">Cancel bill (add more items)</button></div>' : '')
@@ -152,6 +153,8 @@ export class Billing {
     if (settle && o) { this.settleForm(this.bills.find((b) => b.id === settle)!, o); return true }
     const print = t.closest<HTMLElement>('[data-print-bill]')?.dataset.printBill
     if (print) { await api.openDocument(`/api/fnb/bills/${print}/print`, 'POST'); await this.reload(); return true }
+    const toPrinter = t.closest<HTMLElement>('[data-printer-bill]')?.dataset.printerBill
+    if (toPrinter) { await api.post(`/api/fnb/bills/${toPrinter}/print-job`); toast('Sent to the bill printer'); await this.reload(); return true }
     const act = t.closest<HTMLElement>('[data-bill]')?.dataset.bill
     if (!act) return false
     if (act === 'bill' && o) this.billForm(o)

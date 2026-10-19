@@ -20,15 +20,15 @@ export class Api {
     try { t ? sessionStorage.setItem(TOKEN_KEY, t) : sessionStorage.removeItem(TOKEN_KEY) } catch { /* private mode: token stays in memory */ }
   }
 
-  private headers(json: boolean): Record<string, string> {
-    const h: Record<string, string> = {}
+  private headers(json: boolean, extra: Record<string, string> = {}): Record<string, string> {
+    const h: Record<string, string> = { ...extra }
     if (json) h['content-type'] = 'application/json'
     if (this.token) h.authorization = `Bearer ${this.token}`
     return h
   }
 
-  async req<T = unknown>(method: string, path: string, body?: unknown): Promise<T> {
-    const res = await fetch(this.base + path, { method, headers: this.headers(body !== undefined), body: body === undefined ? undefined : JSON.stringify(body) })
+  async req<T = unknown>(method: string, path: string, body?: unknown, extraHeaders?: Record<string, string>): Promise<T> {
+    const res = await fetch(this.base + path, { method, headers: this.headers(body !== undefined, extraHeaders), body: body === undefined ? undefined : JSON.stringify(body) })
     const text = await res.text()
     const data = text && res.headers.get('content-type')?.includes('json') ? JSON.parse(text) : text
     if (!res.ok) {
@@ -88,6 +88,9 @@ export class Api {
     return () => { stopped = true }
   }
 }
+
+/** The server could not be reached at all (Wi-Fi down, server restarting), as opposed to it refusing the request. */
+export const isNetworkError = (e: unknown) => e instanceof TypeError || (e instanceof ApiError && [502, 503, 504].includes(e.status) && !e.body.error)
 
 /** True when an HMS server answers at `base` (the app then runs on live data instead of the sample). */
 export async function serverAvailable(base: string): Promise<boolean> {

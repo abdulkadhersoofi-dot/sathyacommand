@@ -34,6 +34,7 @@ The repo produces two things:
 | `DATABASE_URL` | the Internal Database URL from step 1 |
 | `MD_MOBILE` | the MD's 10-digit mobile number |
 | `OTP_DELIVERY` | `log` (pilot only, see below) |
+| `PRINT_AGENT_KEY` | a long random value, shared with the print agent on the edge box ([edge box guide](EDGE.md)); leave unset until printers are installed |
 
 4. Create the service. On first start it creates the tables, loads the placeholder rooms and roles, and gives the MD login the mobile number above.
 

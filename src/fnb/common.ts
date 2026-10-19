@@ -1,6 +1,7 @@
 import type { Api } from '../live/api'
 import type { Me } from '../live/signin'
 import type { FormModal } from '../ui/form-modal'
+import type { Outbox } from '../live/outbox'
 import { esc } from '../ui/dom'
 
 // Shared pieces for the restaurant screens (orders, kitchen, menu, licences & tax).
@@ -24,6 +25,11 @@ export interface Ws {
   can(...permissions: string[]): boolean
   outlets: Outlet[]
   stations: Station[]
+  outbox: Outbox
+  /** True while the server cannot be reached (screens show the last copy they saw). */
+  offline: boolean
+  /** GET that falls back to the last good copy kept on this tablet when the server cannot be reached. */
+  cached<T>(path: string): Promise<T>
   /** Checked-in guests, for room-service orders. */
   inHouse(): { id: string; guest: string; roomNo: string | null }[]
   render(): void

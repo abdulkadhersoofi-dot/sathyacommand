@@ -32,6 +32,7 @@ sign_in:
 #   kitchen.stock    kitchen ingredients, recipes, receipts into the kitchen, counts
 #   kitchen.approve  approve kitchen wastage above a role's limit
 #   food_cost.view   food cost and menu engineering report
+#   printers.manage  network printers, which station / outlet prints where, test pages
 #   menu.edit        add and edit menu items and tables (price changes go to menu.price for approval)
 #   menu.price       change menu prices and import the menu
 #   bar.settings     licensed bar hours and dry days
@@ -44,7 +45,7 @@ roles:
     permissions: ['*']
     limits: unlimited
   general_manager:
-    permissions: [inventory.edit, devices.approve, users.manage, front_desk, folio.reverse, discount.approve, night_audit, invoice.view, invoice.credit_note, site.edit, site.publish, fnb.order, fnb.void, fnb.bill, fnb.discount, menu.edit, menu.price, bar.settings, bar.stock, bar.approve, kitchen.stock, kitchen.approve, food_cost.view, licences.edit]
+    permissions: [inventory.edit, devices.approve, users.manage, front_desk, folio.reverse, discount.approve, night_audit, invoice.view, invoice.credit_note, site.edit, site.publish, fnb.order, fnb.void, fnb.bill, fnb.discount, menu.edit, menu.price, bar.settings, bar.stock, bar.approve, kitchen.stock, kitchen.approve, food_cost.view, printers.manage, licences.edit]
     limits: { discount_percent: 25, breakage_per_entry: 10000, refund: 50000, comp_room_nights: 5, purchase_order: 500000, rate_override_below_floor: true }
   operations_manager:
     permissions: [front_desk, folio.reverse, discount.approve, site.edit, fnb.order, fnb.void, fnb.bill, fnb.discount]
@@ -68,7 +69,7 @@ roles:
   room_attendant:
     limits: {}
   fnb_manager:
-    permissions: [fnb.order, fnb.void, fnb.bill, fnb.discount, kitchen, menu.edit, kitchen.stock, kitchen.approve, food_cost.view]
+    permissions: [fnb.order, fnb.void, fnb.bill, fnb.discount, kitchen, menu.edit, kitchen.stock, kitchen.approve, food_cost.view, printers.manage]
     limits: { discount_percent: 15, void_per_bill: 3000, staff_meal: true, menu_price_change_needs: general_manager }
   captain:
     permissions: [fnb.order, fnb.bill]

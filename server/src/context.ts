@@ -27,6 +27,8 @@ export interface Ctx {
   sms: SmsSender
   now: () => Date
   einvoice?: EInvoiceProvider
+  /** Shared secret of the print agent on the edge box (PRINT_AGENT_KEY). */
+  printAgentKey?: string
 }
 
 export interface Caller extends Actor {

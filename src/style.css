@@ -565,3 +565,9 @@ button.row-card { width: 100%; text-align: left; font: inherit; background: var(
 .kpi-strip b { font: 700 15px var(--f-display); }
 .count-grid label:has(input:only-of-type) { grid-template-columns: minmax(0, 1fr) 120px; }
 @media (max-width: 900px) { .m-row-fc { grid-template-columns: 52px minmax(0, 1fr) 70px 80px; } .m-row-fc > :nth-child(5), .m-row-fc > :nth-child(6) { display: none; } }
+
+/* offline and printing */
+.ws-offline { background: color-mix(in srgb, var(--marigold) 18%, var(--surface)); border-bottom: 1px solid var(--line); padding: 8px 16px; font-size: 13px; font-weight: 600; }
+.ws-offline.failed { background: color-mix(in srgb, var(--st-departing) 14%, var(--surface)); display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+.print-routes { margin-top: 12px; max-width: 640px; }
+.print-routes select { font: 500 14px var(--f-body); color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; }

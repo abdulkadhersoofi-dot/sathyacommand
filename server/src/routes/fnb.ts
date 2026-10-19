@@ -10,6 +10,7 @@ import { requireCaller } from './auth'
 import { vatRatesOn } from './settings'
 import { pourStock, unpourStock } from './bar'
 import { consumeRecipes } from './kitchen-stock'
+import { queueTickets, type TicketForPrint } from './printing'
 
 // Restaurant, room service and bar: menus, tables, orders and the KOT / BOT tickets that send each item
 // to its kitchen or bar station. Cancelling an item after its ticket went to the kitchen needs a manager,
@@ -89,8 +90,9 @@ export async function orderView(ctx: Ctx, db: Db, id: string) {
     beforeVat: gst.total + liquor, payable: gst.total + liquor + vat } }
 }
 
-function ticket(k: { id: string; number: number; kind: string; station_id: string; prints: number }, order: Record<string, unknown>, lines: unknown[]) {
-  return { ...k, copy: k.prints > 1, order: { number: order.number, outlet: order.outlet, table: order.table_label, room: order.room_no, covers: order.covers }, lines }
+function ticket(k: { id: string; number: number; kind: string; station_id: string; prints: number }, order: Record<string, unknown>, lines: TicketForPrint['lines']): TicketForPrint & { id: string; prints: number } {
+  const o = order as { number: number; outlet: string; table_label: string | null; room_no: string | null; covers: number }
+  return { ...k, copy: k.prints > 1, order: { number: o.number, outlet: o.outlet, table: o.table_label, room: o.room_no, covers: o.covers }, lines }
 }
 
 /** Applies a cancellation of an item that already went to the kitchen (directly by a manager, or once approved). */
@@ -485,7 +487,7 @@ export function fnbRoutes(app: FastifyInstance, ctx: Ctx) {
   // ---------- orders ----------
   app.post('/api/fnb/orders', async (req, reply) => {
     const who = await need(ctx, req, 'fnb.order')
-    const b = req.body as { outletId?: string; tableId?: string; reservationId?: string; covers?: number; note?: string; kind?: string }
+    const b = req.body as { id?: string; outletId?: string; tableId?: string; reservationId?: string; covers?: number; note?: string; kind?: string }
     return db.tx(async (t) => {
       const [o] = await t.query<{ id: string; kind: string }>('select id, kind from outlet where id = $1 and active', [b?.outletId])
       if (!o) throw new HttpError(400, `No outlet ${b?.outletId}.`)
@@ -502,7 +504,10 @@ export function fnbRoutes(app: FastifyInstance, ctx: Ctx) {
       }
       if (b.covers !== undefined && !(Number.isInteger(b.covers) && b.covers >= 1 && b.covers <= 200)) throw new HttpError(400, 'Covers: 1–200.')
       const date = await businessDate(t)
-      const id = newId('ORD')
+      // Tablets that lost their connection make up the order id themselves, so items queued offline can follow it.
+      if (b.id !== undefined && !/^ORD-[A-Z0-9-]{6,24}$/.test(b.id)) throw new HttpError(400, 'Order id looks like ORD-XXXXXXXX.')
+      const id = b.id ?? newId('ORD')
+      if (b.id) { const [dup] = await t.query('select 1 from fnb_order where id = $1', [b.id]); if (dup) throw new HttpError(409, 'That order id is already used.') }
       const number = await nextCounter(t, date, 'order')
       try {
         await t.query(
@@ -589,7 +594,7 @@ export function fnbRoutes(app: FastifyInstance, ctx: Ctx) {
       if (pending.some((p) => p.liquor_class)) await checkLiquorAllowed(ctx, t)
       const view = await orderView(ctx, t, id)
       const allergens = new Map((await t.query<{ id: string; allergens: string[]; jain: boolean }>('select id, allergens, jain from menu_item where id = any($1)', [pending.map((p) => p.item_id)])).map((m) => [m.id, m]))
-      const stations = await t.query<{ id: string; kind: string; name: string }>('select id, kind, name from station')
+      const stations = await t.query<{ id: string; kind: string; name: string }>('select id, kind, name from station order by kind desc, id')
       const tickets = []
       for (const st of stations.filter((s) => pending.some((p) => p.station_id === s.id))) {
         const kind = st.kind === 'bar' ? 'BOT' : 'KOT'
@@ -609,6 +614,7 @@ export function fnbRoutes(app: FastifyInstance, ctx: Ctx) {
           alert: [...(allergens.get(l.item_id)?.allergens ?? []).map((a) => a.toUpperCase()), ...(allergens.get(l.item_id)?.jain ? ['JAIN'] : [])],
         }))))
       }
+      await queueTickets(t, tickets, now())
       return { order: await orderView(ctx, t, id), tickets }
     })
   })
@@ -723,7 +729,9 @@ export function fnbRoutes(app: FastifyInstance, ctx: Ctx) {
       const view = await orderView(ctx, t, k.order_id)
       const lines = (view.items as unknown as { kot_id: string; qty: number; name: string; note: string | null; seat: number | null; course: number; status: string }[])
         .filter((i) => i.kot_id === id).map((i) => ({ qty: i.qty, name: i.name, note: i.note, seat: i.seat, course: i.course, void: i.status === 'void' }))
-      return ticket(k, view, lines)
+      const tk = ticket(k, view, lines)
+      await queueTickets(t, [tk], now())
+      return tk
     })
   })
 }

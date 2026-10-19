@@ -19,6 +19,7 @@ import { settingsRoutes } from './routes/settings'
 import { fnbBillingRoutes } from './routes/fnb-billing'
 import { barRoutes } from './routes/bar'
 import { kitchenStockRoutes } from './routes/kitchen-stock'
+import { idempotency, printingRoutes } from './routes/printing'
 
 export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boolean; appDir?: string } = {}) {
   const ctx: Ctx = {
@@ -28,6 +29,7 @@ export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boo
     sms: opts.sms ?? consoleSms,
     now: opts.now ?? (() => new Date()),
     einvoice: opts.einvoice,
+    printAgentKey: opts.printAgentKey,
   }
   const app = Fastify({ logger: opts.logger ?? false })
 
@@ -38,6 +40,7 @@ export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boo
     return reply.status(status).send({ error: status === 500 ? 'Something went wrong on the server.' : err.message })
   })
 
+  idempotency(app, ctx)
   authRoutes(app, ctx)
   approvalRoutes(app, ctx)
   inventoryRoutes(app, ctx)
@@ -52,6 +55,7 @@ export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boo
   fnbBillingRoutes(app, ctx)
   barRoutes(app, ctx)
   kitchenStockRoutes(app, ctx)
+  printingRoutes(app, ctx)
 
   // Serve the built 3D app and front desk screens from the same address as the API.
   if (opts.appDir && existsSync(opts.appDir)) app.register(fastifyStatic, { root: opts.appDir, index: 'index.html' })
