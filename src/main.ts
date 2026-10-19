@@ -4,6 +4,7 @@ import type { HmsAdapter } from './data/adapters/HmsAdapter'
 import { Api, serverAvailable } from './live/api'
 import { signIn, type Me } from './live/signin'
 import { FrontDesk } from './ui/frontdesk'
+import { FnbWorkspace } from './fnb/workspace'
 import { Store, type Layer } from './data/store'
 import type { DomainEvent, HkStatus } from './data/types'
 import { addDays, fmtDay, inr, setToday, todayKey } from './data/dates'
@@ -35,6 +36,7 @@ const adapter: HmsAdapter = liveAdapter ?? new MockAdapter()
 const store = new Store(adapter)
 store.live = liveMode
 let fd: FrontDesk | null = null
+let fnb: FnbWorkspace | null = null
 
 let tab: Tab = 'live'
 let tipId: string | null = null
@@ -155,6 +157,11 @@ function renderAll() {
 store.on((why, payload) => {
   if (why === 'select') return
   if (why === 'site') { if (!studio.open) void refreshLayout(); return }
+  if (why === 'fnb') {
+    // Another tablet changed an order or the menu: refresh the restaurant screen unless a form is open there.
+    if (fnb?.open && !fnb.modal.isOpen) void fnb.refresh()
+    if (!/^(kot|bot|order)/.test((payload as { action: string }).action)) return
+  }
   if (why === 'live') {
     const e = payload as DomainEvent
     if (store.feed[0]) fresh.add(store.feed[0].id)
@@ -178,6 +185,8 @@ document.addEventListener('click', async (e) => {
   const t = e.target as HTMLElement
   const layer = t.closest<HTMLElement>('[data-layer]')
   if (layer) { store.toggleLayer(layer.dataset.layer as Layer); return }
+  const fnbOrder = t.closest<HTMLElement>('[data-fnb-order]')
+  if (fnbOrder && fnb) { e.stopPropagation(); void fnb.openOrder(fnbOrder.dataset.fnbOrder!); return }
   const fdBtn = t.closest<HTMLElement>('[data-fd]')
   if (fdBtn && fd) { e.stopPropagation(); fd.handle(fdBtn); return }
 
@@ -328,7 +337,10 @@ $('#pin-form').addEventListener('submit', (e) => {
   toast('God Mode on: revenue, rates and owner actions unlocked')
 })
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') { if (studio.open) return; if (!modal.hidden) modal.hidden = true; else if (fd && document.querySelector('.fd-modal:not([hidden])')) fd.close(); else if (drawerId) closeDrawer(); else hideTip() }
+  if (e.key === 'Escape') {
+    if (document.querySelector('.fd-modal:not([hidden])')) { document.querySelectorAll<HTMLElement>('.fd-modal:not([hidden])').forEach((m) => m.querySelector<HTMLElement>('[data-x]')?.click()); return }
+    if (fnb?.open) { fnb.hide(); return }
+    if (studio.open) return; if (!modal.hidden) modal.hidden = true; else if (fd && document.querySelector('.fd-modal:not([hidden])')) fd.close(); else if (drawerId) closeDrawer(); else hideTip() }
 })
 
 // clock + ageing KOTs
@@ -354,6 +366,10 @@ if (api && me && liveAdapter) {
   out.addEventListener('click', async () => { try { await api!.post('/auth/sign-out') } finally { api!.setToken(null); location.reload() } })
   document.querySelector('.topbar-actions')!.appendChild(out)
   fd = new FrontDesk(api, store, me, () => renderSide())
+  fnb = new FnbWorkspace(api, me, () => store.reservations.filter((r) => r.status === 'in-house').map((r) => ({ id: r.id, guest: r.guest, roomNo: r.roomNo ?? null })), () => renderSide())
+  const fnbBtn = $('#btn-fnb')
+  fnbBtn.hidden = false
+  fnbBtn.addEventListener('click', () => { if (fnb!.open) fnb!.hide(); else void fnb!.show() })
   setTab('arrivals')
 }
 store.load().then(renderAll).catch((err) => toast(`Couldn't load HMS data: ${err.message}`))

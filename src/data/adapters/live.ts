@@ -16,6 +16,11 @@ interface ServerReservation {
   requests: string | null; room_type_id: string; space_id: string | null; twin_id: string | null; room_no: string | null
   bill_to_company: string | null; rate_paise: number; balance_paise: number; folio_id: string
 }
+interface ServerOrder {
+  id: string; number: number; outlet_id: string; outlet: string; outlet_twin_id: string | null; kind: string; table_label: string | null
+  room_no: string | null; twin_id: string | null; guest: string | null; status: string; opened_at: string; kitchen: 'new' | 'cooking' | 'ready' | null
+  last_kot_at: string | null; items: { name: string; qty: number; price: number; status: string }[]
+}
 interface Snapshot { businessDate: string; lodgingKinds: string[]; spaces: ServerSpace[]; reservations: ServerReservation[] }
 
 const KIND_TO_TYPE: Record<string, SpaceType> = {
@@ -69,7 +74,19 @@ export class LiveAdapter implements HmsAdapter {
 
   // Phases 3, 4 and 7 bring the restaurant, housekeeping and events into the live HMS.
   async getEvents(): Promise<EventBooking[]> { return [] }
-  async getOrders(): Promise<Order[]> { return [] }
+  // Restaurant, bar and room-service orders that reached the kitchen, for the 3D map and the kitchen panel.
+  async getOrders(date: string): Promise<Order[]> {
+    const rows = await this.api.get<ServerOrder[]>(`/api/fnb/orders?date=${date}&status=open,billed,closed`)
+    return rows.filter((o) => o.last_kot_at).map((o) => ({
+      id: `Order ${o.number}`, serverId: o.id, outletId: o.outlet_id,
+      origin: o.kind === 'room_service' ? (o.twin_id ?? 'KITCHEN') : (o.outlet_twin_id ?? 'RESTAURANT'),
+      originLabel: o.kind === 'room_service' ? `Room ${o.room_no ?? '?'}` : `${o.outlet}${o.table_label ? ` · ${o.table_label}` : ''}`,
+      kind: o.kind === 'room_service' ? 'room' : 'table',
+      items: o.items.map((i) => ({ name: i.name, qty: i.qty, price: Number(i.price) / 100 })),
+      status: o.kitchen === 'new' ? 'placed' : o.kitchen ?? 'served',
+      placedAt: o.opened_at, updatedAt: o.last_kot_at!,
+    }))
+  }
   async getHousekeeping(): Promise<Record<string, HkStatus>> { return {} }
 
   subscribe(onEvent: (e: DomainEvent) => void) {

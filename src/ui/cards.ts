@@ -163,7 +163,7 @@ export function kotCard(store: Store, orderId: string, withFrom = false) {
       <div class="kot-foot">
         <span class="pill" style="--c: var(${color})">${o.status}</span>
         ${store.godMode ? `<span class="mono">${inr(orderTotal(o))}</span>` : ''}
-        ${live && next ? `<button class="btn small" data-act="advance" data-order="${o.id}">${next}</button>` : ''}
+        ${o.serverId ? `<button class="btn small" data-fnb-order="${esc(o.serverId)}">Open</button>` : live && next ? `<button class="btn small" data-act="advance" data-order="${o.id}">${next}</button>` : ''}
       </div>
     </div>`
 }

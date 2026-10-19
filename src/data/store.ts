@@ -114,7 +114,26 @@ export class Store {
     await this.reload()
   }
 
+  /** Fetch the day's restaurant orders again and animate what changed: new tickets fly to the kitchen, ready room service walks out. */
+  async reloadOrders() {
+    const before = new Map(this.orders.map((o) => [o.id, o]))
+    this.orders = await this.adapter.getOrders(this.date)
+    this.stateCache.clear()
+    if (!this.isToday) return
+    for (const o of this.orders) {
+      const was = before.get(o.id)
+      if (!was || was.updatedAt !== o.updatedAt) {
+        this.pushFeed({ id: `${o.id}-${o.updatedAt}`, at: new Date(o.updatedAt), kind: 'kot', spaceId: o.origin, text: `New KOT for ${o.id} from ${o.originLabel}: ${o.items.map((i) => i.name).join(', ')}` })
+        this.emit('live', { type: 'order.created', order: o })
+      } else if (was.status !== o.status) {
+        this.emit('live', { type: 'order.updated', order: o })
+      }
+    }
+  }
+
   private async onSnapshotChanged(e: Extract<DomainEvent, { type: 'snapshot.changed' }>) {
+    if (/^(kot|bot|order|order_item)\./.test(e.action)) { await this.reloadOrders(); this.emit('fnb', e); return }
+    if (/^(menu_item|menu|outlet|station|table|bar|dry_day|licence|vat_rate|vat_class)\./.test(e.action)) { this.emit('fnb', e); return }
     if (e.action === 'site.published' || e.action === 'site.restored' || e.action.startsWith('room.')) {
       await this.reloadSpaces()
       if (e.action.startsWith('site.')) {

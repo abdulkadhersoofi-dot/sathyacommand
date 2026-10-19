@@ -22,9 +22,9 @@ export async function testResort(today = '2026-11-01', opts: { taxDetails?: bool
     app.inject({ method: 'POST', url, headers: { authorization: `Bearer ${token}` }, payload: payload as object })
   const get = (url: string, token: string) => app.inject({ url, headers: { authorization: `Bearer ${token}` } })
 
-  async function signIn(mobile: string) {
+  async function signIn(mobile: string, deviceId?: string) {
     const { challengeId } = (await app.inject({ method: 'POST', url: '/auth/otp', payload: { mobile } })).json()
-    return app.inject({ method: 'POST', url: '/auth/otp/verify', payload: { challengeId, code: sms[normaliseMobile(mobile)] } })
+    return app.inject({ method: 'POST', url: '/auth/otp/verify', payload: { challengeId, code: sms[normaliseMobile(mobile)], deviceId } })
   }
 
   // MD: first sign-in enrols the authenticator, which leaves a full session.
@@ -35,7 +35,12 @@ export async function testResort(today = '2026-11-01', opts: { taxDetails?: bool
 
   async function staff(name: string, mobile: string, roles: string[]) {
     await post('/api/users', md, { name, mobile, roles })
-    const r = (await signIn(mobile)).json()
+    const deviceId = `test-device-${mobile}`
+    let r = (await signIn(mobile, deviceId)).json()
+    if (r.stage === 'device_pending') {   // accounts, HR, stores: the MD approves the device first
+      await post(`/api/approvals/${r.approvalId}/decide`, md, { decision: 'approve' })
+      r = (await signIn(mobile, deviceId)).json()
+    }
     if (r.stage === 'enroll_2fa') {   // GM, accounts, HR: set up the authenticator on first sign-in
       const { secret } = (await post('/auth/totp/enroll', r.token)).json()
       await post('/auth/totp/confirm', r.token, { code: totpCode(secret, clock) })

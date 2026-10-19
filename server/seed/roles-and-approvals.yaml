@@ -27,7 +27,9 @@ sign_in:
 #   fnb.void         cancel an item after its KOT went to the kitchen (others need this role's approval)
 #   menu.edit        add and edit menu items and tables (price changes go to menu.price for approval)
 #   menu.price       change menu prices and import the menu
-#   bar.settings     licensed bar hours, dry days, FSSAI number
+#   bar.settings     licensed bar hours and dry days
+#   licences.edit    add and edit licences and permits (FSSAI, FL-3, TN VAT, fire NOC, ...) and their renewal dates
+#   tax.vat          TN VAT rates and liquor classes
 #   '*'              everything, including deciding approvals
 roles:
   managing_director:
@@ -35,7 +37,7 @@ roles:
     permissions: ['*']
     limits: unlimited
   general_manager:
-    permissions: [inventory.edit, devices.approve, users.manage, front_desk, folio.reverse, discount.approve, night_audit, invoice.view, invoice.credit_note, site.edit, site.publish, fnb.order, fnb.void, menu.edit, menu.price, bar.settings]
+    permissions: [inventory.edit, devices.approve, users.manage, front_desk, folio.reverse, discount.approve, night_audit, invoice.view, invoice.credit_note, site.edit, site.publish, fnb.order, fnb.void, menu.edit, menu.price, bar.settings, licences.edit]
     limits: { discount_percent: 25, refund: 50000, comp_room_nights: 5, purchase_order: 500000, rate_override_below_floor: true }
   operations_manager:
     permissions: [front_desk, folio.reverse, discount.approve, site.edit, fnb.order, fnb.void]
@@ -50,7 +52,7 @@ roles:
     permissions: [front_desk, night_audit]
     limits: {}
   accounts:
-    permissions: [invoice.view, invoice.credit_note, einvoice.generate]
+    permissions: [invoice.view, invoice.credit_note, einvoice.generate, licences.edit, tax.vat]
     limits: { vendor_payment_needs_approval_above: 25000, delete_vouchers: false }
   stores:
     limits: { purchase_order: 25000, stock_adjustment: 0 }

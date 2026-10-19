@@ -57,6 +57,9 @@ export interface Order {
   status: OrderStatus
   placedAt: string      // ISO
   updatedAt: string
+  // Live HMS only
+  serverId?: string
+  outletId?: string
 }
 
 export interface EventBooking {

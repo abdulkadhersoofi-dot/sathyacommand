@@ -3,7 +3,8 @@ import type { Reservation } from '../data/types'
 import { fmtDay, fmtTime, inr, setToday, todayKey } from '../data/dates'
 import type { Api } from '../live/api'
 import type { Me } from '../live/signin'
-import { esc, statusPill, toast, tonePill } from './dom'
+import { esc, statusPill, tonePill } from './dom'
+import { FormModal, val } from './form-modal'
 
 // Front desk on the live HMS: the desk panel plus forms for booking, check-in, payment,
 // check-out (with the tax invoice), cashier shift and closing the day.
@@ -17,14 +18,9 @@ const rs = (p: number) => inr(Math.round(p / 100))
 
 export class FrontDesk {
   cashier: Cashier = { open: false }
-  private modal: HTMLDivElement
+  private modal = new FormModal()
 
   constructor(private api: Api, private store: Store, public me: Me, private rerender: () => void) {
-    this.modal = document.createElement('div')
-    this.modal.className = 'modal fd-modal'
-    this.modal.hidden = true
-    document.getElementById('app')!.appendChild(this.modal)
-    this.modal.addEventListener('click', (e) => { if (e.target === this.modal) this.close() })
     void this.refreshCashier()
   }
 
@@ -80,33 +76,9 @@ export class FrontDesk {
   }
 
   // ---------- modal plumbing ----------
-  private open(title: string, body: string, submitLabel: string, onSubmit: (f: HTMLFormElement) => Promise<string | void>, extra = '') {
-    this.modal.innerHTML = `<form class="pin-card fd-card" novalidate>
-      <div class="fd-head"><div class="pin-title">${esc(title)}</div><button type="button" class="dr-close" data-x aria-label="Close">✕</button></div>
-      ${body}<div class="pin-error" hidden></div>
-      <div class="pin-actions">${extra}${submitLabel === 'Done' ? '' : '<button type="button" class="btn ghost" data-x>Cancel</button>'}<button type="submit" class="btn primary">${esc(submitLabel)}</button></div></form>`
-    this.modal.hidden = false
-    const form = this.modal.querySelector('form')!
-    form.querySelectorAll('[data-x]').forEach((b) => b.addEventListener('click', () => this.close()))
-    form.querySelector<HTMLInputElement>('input, select')?.focus()
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault()
-      const btn = form.querySelector<HTMLButtonElement>('button[type=submit]')!
-      const err = form.querySelector<HTMLElement>('.pin-error')!
-      btn.disabled = true
-      err.hidden = true
-      try {
-        const msg = await onSubmit(form)
-        if (msg !== undefined) { this.close(); if (msg) toast(msg) }
-      } catch (x) {
-        err.textContent = (x as Error).message
-        err.hidden = false
-      } finally { btn.disabled = false }
-    })
-    return form
-  }
-  close() { this.modal.hidden = true; this.modal.innerHTML = '' }
-  private val = (f: HTMLFormElement, name: string) => (f.elements.namedItem(name) as HTMLInputElement | null)?.value.trim() ?? ''
+  private open(...a: Parameters<FormModal['open']>) { return this.modal.open(...a) }
+  close() { this.modal.close() }
+  private val = val
   private async after() { await this.store.reload(); await this.refreshCashier() }
   private find(id: string) {
     const r = this.store.reservations.find((x) => x.id === id)
@@ -238,7 +210,7 @@ export class FrontDesk {
     this.open('Checked out', `<p>Tax invoice <b>${esc(inv.number)}</b> issued.</p>
       ${inv.irnStatus === 'pending' ? '<p class="muted">Company bill: accounts will generate the e-invoice (IRN).</p>' : ''}`, 'Done', async () => '',
     `<button type="button" class="btn" data-print>Print invoice</button>`)
-    this.modal.querySelector('[data-print]')!.addEventListener('click', () => void this.api.openDocument(`/api/tax-documents/${inv.id}/print`))
+    this.modal.el.querySelector('[data-print]')!.addEventListener('click', () => void this.api.openDocument(`/api/tax-documents/${inv.id}/print`))
   }
 
   async openShift() {

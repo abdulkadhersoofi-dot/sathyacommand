@@ -7,6 +7,7 @@ import type { Db } from '../db'
 import { businessDate } from '../fo-core'
 import { createApproval, registerApprovalKind } from './approvals'
 import { requireCaller } from './auth'
+import { vatRatesOn } from './settings'
 
 // Restaurant, room service and bar: menus, tables, orders and the KOT / BOT tickets that send each item
 // to its kitchen or bar station. Cancelling an item after its ticket went to the kitchen needs a manager,
@@ -73,7 +74,17 @@ export async function orderView(ctx: Ctx, db: Db, id: string) {
   const liquor = live.filter((i) => i.liquor_class).reduce((a, i) => a + i.price_paise * i.qty, 0)
   const { rate } = restaurantRate(ctx.tax, financialYear(o.business_date))
   const gst = splitGst(food, rate)
-  return { ...o, items, kots, totals: { food, gstRate: rate, cgst: gst.cgst, sgst: gst.sgst, liquorBeforeVat: liquor, beforeVat: gst.total + liquor } }
+  // VAT per liquor class at the rate in force on the order's business date; classes without a rate are flagged.
+  const vatRates = await vatRatesOn(db, o.business_date)
+  let vat = 0
+  const vatMissing = new Set<string>()
+  for (const i of live.filter((x) => x.liquor_class)) {
+    const r = vatRates[i.liquor_class!]
+    if (r == null) vatMissing.add(i.liquor_class!)
+    else vat += Math.round((i.price_paise * i.qty * r) / 100)
+  }
+  return { ...o, items, kots, totals: { food, gstRate: rate, cgst: gst.cgst, sgst: gst.sgst, liquorBeforeVat: liquor, vat, vatMissing: [...vatMissing],
+    beforeVat: gst.total + liquor, payable: gst.total + liquor + vat } }
 }
 
 function ticket(k: { id: string; number: number; kind: string; station_id: string; prints: number }, order: Record<string, unknown>, lines: unknown[]) {
@@ -121,8 +132,9 @@ async function checkItemInput(ctx: Ctx, t: Db, b: ItemInput, partial: boolean) {
     if (!s) throw new HttpError(400, `No kitchen or bar station ${b.stationId}.`)
     if (b.liquorClass && s.kind !== 'bar') throw new HttpError(400, 'Liquor must go to a bar station.')
   }
-  if (b.liquorClass && !ctx.tax.tn_vat.rate_table.some((r) => r.class === b.liquorClass)) {
-    throw new HttpError(400, `Unknown liquor class ${b.liquorClass}. Use one of: ${ctx.tax.tn_vat.rate_table.map((r) => r.class).join(', ')}.`)
+  if (b.liquorClass) {
+    const classes = (await t.query<{ id: string }>('select id from liquor_class where active')).map((c) => c.id)
+    if (!classes.includes(b.liquorClass)) throw new HttpError(400, `Unknown liquor class ${b.liquorClass}. Use one of: ${classes.join(', ')} (add classes under VAT rates).`)
   }
 }
 
@@ -145,19 +157,125 @@ export function fnbRoutes(app: FastifyInstance, ctx: Ctx) {
   // ---------- outlets, stations, menu ----------
   app.get('/api/fnb/outlets', async (req) => {
     await requireCaller(ctx, req)
-    const outlets = await db.query('select id, name, kind, space_id, serves_liquor from outlet where active order by name')
-    const stations = await db.query('select id, name, kind from station where active order by kind, name')
+    const all = (req.query as { all?: string }).all === 'true'
+    const outlets = await db.query(`select id, name, kind, space_id, serves_liquor, active from outlet ${all ? '' : 'where active'} order by active desc, name`)
+    const stations = await db.query(`select id, name, kind, active from station ${all ? '' : 'where active'} order by active desc, kind, name`)
     return { outlets, stations }
+  })
+
+  const OUTLET_KINDS = ['restaurant', 'room_service', 'bar', 'poolside', 'banquet']
+  app.post('/api/fnb/outlets', async (req, reply) => {
+    const who = await need(ctx, req, 'menu.edit')
+    const b = req.body as { id?: string; name?: string; kind?: string; spaceId?: string | null; servesLiquor?: boolean }
+    if (!/^[A-Z0-9]{2,10}$/.test(b?.id ?? '')) throw new HttpError(400, 'Outlet code: 2–10 capital letters or digits (e.g. CAFE).')
+    if (!b.name?.trim() || b.name.length > 60) throw new HttpError(400, 'Give the outlet a name (up to 60 characters).')
+    if (!OUTLET_KINDS.includes(b.kind ?? '')) throw new HttpError(400, `Kind: ${OUTLET_KINDS.join(', ')}.`)
+    return db.tx(async (t) => {
+      const [dup] = await t.query('select 1 from outlet where id = $1', [b.id])
+      if (dup) throw new HttpError(409, `Outlet ${b.id} already exists.`)
+      if (b.spaceId) { const [sp] = await t.query('select 1 from space where id = $1', [b.spaceId]); if (!sp) throw new HttpError(400, `No place ${b.spaceId}.`) }
+      await t.query('insert into outlet (id, name, kind, space_id, serves_liquor) values ($1, $2, $3, $4, $5)', [b.id, b.name!.trim(), b.kind, b.spaceId ?? null, !!b.servesLiquor])
+      await appendAudit(t, { actor: who, action: 'outlet.create', entity: { type: 'outlet', id: b.id! }, after: b }, now())
+      return reply.status(201).send({ id: b.id })
+    })
+  })
+
+  app.patch('/api/fnb/outlets/:id', async (req) => {
+    const who = await need(ctx, req, 'menu.edit')
+    const { id } = req.params as { id: string }
+    const b = (req.body ?? {}) as { name?: string; kind?: string; spaceId?: string | null; servesLiquor?: boolean; active?: boolean }
+    if (b.name !== undefined && (!b.name.trim() || b.name.length > 60)) throw new HttpError(400, 'Give the outlet a name (up to 60 characters).')
+    if (b.kind !== undefined && !OUTLET_KINDS.includes(b.kind)) throw new HttpError(400, `Kind: ${OUTLET_KINDS.join(', ')}.`)
+    return db.tx(async (t) => {
+      const [before] = await t.query('select * from outlet where id = $1 for update', [id])
+      if (!before) throw new HttpError(404, 'No such outlet.')
+      if (b.active === false) {
+        const [open] = await t.query(`select number from fnb_order where outlet_id = $1 and status in ('open', 'billed') limit 1`, [id])
+        if (open) throw new HttpError(409, 'Close this outlet\'s open orders first.')
+      }
+      await t.query(`update outlet set name = coalesce($2, name), kind = coalesce($3, kind), space_id = case when $4::boolean then $5 else space_id end,
+                       serves_liquor = coalesce($6, serves_liquor), active = coalesce($7, active) where id = $1`,
+        [id, b.name?.trim() ?? null, b.kind ?? null, b.spaceId !== undefined, b.spaceId ?? null, b.servesLiquor ?? null, b.active ?? null])
+      const [after] = await t.query('select * from outlet where id = $1', [id])
+      await appendAudit(t, { actor: who, action: 'outlet.update', entity: { type: 'outlet', id }, before, after }, now())
+      return after
+    })
+  })
+
+  app.post('/api/fnb/stations', async (req, reply) => {
+    const who = await need(ctx, req, 'menu.edit')
+    const b = req.body as { id?: string; name?: string; kind?: string }
+    if (!/^[A-Z0-9]{2,10}$/.test(b?.id ?? '')) throw new HttpError(400, 'Station code: 2–10 capital letters or digits (e.g. TANDOOR).')
+    if (!b.name?.trim() || b.name.length > 40) throw new HttpError(400, 'Give the station a name (up to 40 characters).')
+    if (!['kitchen', 'bar'].includes(b.kind ?? '')) throw new HttpError(400, 'Kind: kitchen or bar.')
+    return db.tx(async (t) => {
+      const [dup] = await t.query('select 1 from station where id = $1', [b.id])
+      if (dup) throw new HttpError(409, `Station ${b.id} already exists.`)
+      await t.query('insert into station (id, name, kind) values ($1, $2, $3)', [b.id, b.name!.trim(), b.kind])
+      await appendAudit(t, { actor: who, action: 'station.create', entity: { type: 'station', id: b.id! }, after: b }, now())
+      return reply.status(201).send({ id: b.id })
+    })
+  })
+
+  app.patch('/api/fnb/stations/:id', async (req) => {
+    const who = await need(ctx, req, 'menu.edit')
+    const { id } = req.params as { id: string }
+    const b = (req.body ?? {}) as { name?: string; active?: boolean }
+    if (b.name !== undefined && (!b.name.trim() || b.name.length > 40)) throw new HttpError(400, 'Give the station a name (up to 40 characters).')
+    return db.tx(async (t) => {
+      const [before] = await t.query('select * from station where id = $1 for update', [id])
+      if (!before) throw new HttpError(404, 'No such station.')
+      if (b.active === false) {
+        const [used] = await t.query<{ name: string }>('select name from menu_item where station_id = $1 and active limit 1', [id])
+        if (used) throw new HttpError(409, `${used.name} is still made here. Move those menu items to another station first.`)
+      }
+      await t.query('update station set name = coalesce($2, name), active = coalesce($3, active) where id = $1', [id, b.name?.trim() ?? null, b.active ?? null])
+      const [after] = await t.query('select * from station where id = $1', [id])
+      await appendAudit(t, { actor: who, action: 'station.update', entity: { type: 'station', id }, before, after }, now())
+      return after
+    })
+  })
+
+  app.post('/api/fnb/categories', async (req, reply) => {
+    const who = await need(ctx, req, 'menu.edit')
+    const b = req.body as { outletId?: string; name?: string }
+    if (!b?.name?.trim() || b.name.length > 40) throw new HttpError(400, 'Give the section a name (up to 40 characters).')
+    return db.tx(async (t) => {
+      const [o] = await t.query('select 1 from outlet where id = $1', [b.outletId])
+      if (!o) throw new HttpError(400, `No outlet ${b.outletId}.`)
+      const [dup] = await t.query('select 1 from menu_category where outlet_id = $1 and name = $2', [b.outletId, b.name!.trim()])
+      if (dup) throw new HttpError(409, `${b.name} already exists.`)
+      const id = await categoryFor(t, b.outletId!, { category: b.name })
+      await appendAudit(t, { actor: who, action: 'menu_category.create', entity: { type: 'menu_category', id: id! }, after: b }, now())
+      return reply.status(201).send({ id })
+    })
+  })
+
+  app.patch('/api/fnb/categories/:id', async (req) => {
+    const who = await need(ctx, req, 'menu.edit')
+    const { id } = req.params as { id: string }
+    const b = (req.body ?? {}) as { name?: string; sort?: number }
+    if (b.name !== undefined && (!b.name.trim() || b.name.length > 40)) throw new HttpError(400, 'Give the section a name (up to 40 characters).')
+    if (b.sort !== undefined && !Number.isInteger(b.sort)) throw new HttpError(400, 'sort is a whole number.')
+    return db.tx(async (t) => {
+      const [before] = await t.query('select * from menu_category where id = $1 for update', [id])
+      if (!before) throw new HttpError(404, 'No such section.')
+      try { await t.query('update menu_category set name = coalesce($2, name), sort = coalesce($3, sort) where id = $1', [id, b.name?.trim() ?? null, b.sort ?? null]) }
+      catch { throw new HttpError(409, `${b.name} already exists.`) }
+      const [after] = await t.query('select * from menu_category where id = $1', [id])
+      await appendAudit(t, { actor: who, action: 'menu_category.update', entity: { type: 'menu_category', id }, before, after }, now())
+      return after
+    })
   })
 
   app.get('/api/fnb/menu', async (req) => {
     await requireCaller(ctx, req)
-    const { outletId } = req.query as { outletId?: string }
+    const { outletId, all } = req.query as { outletId?: string; all?: string }
     if (!outletId) throw new HttpError(400, 'Send outletId.')
     const categories = await db.query('select id, name, sort from menu_category where outlet_id = $1 order by sort, name', [outletId])
     const items = await db.query(
-      `select id, category_id, code, name, name_ta, price_paise, liquor_class, station_id, diet, jain, allergens, available, placeholder
-         from menu_item where outlet_id = $1 and active order by code`, [outletId])
+      `select id, category_id, code, name, name_ta, price_paise, liquor_class, station_id, diet, jain, allergens, available, placeholder, active
+         from menu_item where outlet_id = $1 ${all === 'true' ? '' : 'and active'} order by active desc, code`, [outletId])
     return { categories, items }
   })
 
@@ -292,26 +410,48 @@ export function fnbRoutes(app: FastifyInstance, ctx: Ctx) {
     })
   })
 
+  app.patch('/api/fnb/tables/:id', async (req) => {
+    const who = await need(ctx, req, 'menu.edit')
+    const { id } = req.params as { id: string }
+    const b = (req.body ?? {}) as { label?: string; seats?: number; section?: string | null; active?: boolean }
+    if (b.label !== undefined && !/^[A-Za-z0-9 -]{1,10}$/.test(b.label)) throw new HttpError(400, 'Table label: up to 10 letters or digits.')
+    if (b.seats !== undefined && !(Number.isInteger(b.seats) && b.seats >= 1 && b.seats <= 40)) throw new HttpError(400, 'Seats: 1–40.')
+    return db.tx(async (t) => {
+      const [before] = await t.query('select * from dining_table where id = $1 for update', [id])
+      if (!before) throw new HttpError(404, 'No such table.')
+      if (b.active === false) {
+        const [open] = await t.query(`select 1 from fnb_order where table_id = $1 and status in ('open', 'billed')`, [id])
+        if (open) throw new HttpError(409, 'This table has an open order.')
+      }
+      try {
+        await t.query(`update dining_table set label = coalesce($2, label), seats = coalesce($3, seats), section = case when $4::boolean then $5 else section end,
+                         active = coalesce($6, active) where id = $1`, [id, b.label ?? null, b.seats ?? null, b.section !== undefined, b.section ?? null, b.active ?? null])
+      } catch { throw new HttpError(409, `Table ${b.label} already exists.`) }
+      const [after] = await t.query('select * from dining_table where id = $1', [id])
+      await appendAudit(t, { actor: who, action: b.active === false ? 'table.archive' : 'table.update', entity: { type: 'dining_table', id }, before, after }, now())
+      return after
+    })
+  })
+
   // ---------- bar licence settings ----------
   app.get('/api/fnb/bar-settings', async (req) => {
     await requireCaller(ctx, req)
-    const [p] = await db.query<{ bar_open: string | null; bar_close: string | null; fssai_no: string | null }>('select bar_open, bar_close, fssai_no from property limit 1')
+    const [p] = await db.query<{ bar_open: string | null; bar_close: string | null }>('select bar_open, bar_close from property limit 1')
     const dryDays = await db.query('select day::text, reason from dry_day order by day')
     let liquorNow: { allowed: boolean; reason: string | null }
     try { await checkLiquorAllowed(ctx, db); liquorNow = { allowed: true, reason: null } } catch (e) { liquorNow = { allowed: false, reason: (e as Error).message } }
-    return { open: p.bar_open, close: p.bar_close, fssaiNo: p.fssai_no, dryDays, liquorNow, legalAge: ctx.tax.liquor_controls.legal_age }
+    return { open: p.bar_open, close: p.bar_close, dryDays, liquorNow, legalAge: ctx.tax.liquor_controls.legal_age }
   })
 
   app.put('/api/fnb/bar-settings', async (req) => {
     const who = await need(ctx, req, 'bar.settings')
-    const b = req.body as { open?: string; close?: string; fssaiNo?: string }
+    const b = req.body as { open?: string; close?: string }
     if (b.open !== undefined && !HHMM.test(b.open)) throw new HttpError(400, 'Opening time as HH:MM (24-hour).')
     if (b.close !== undefined && !HHMM.test(b.close)) throw new HttpError(400, 'Closing time as HH:MM (24-hour).')
-    if (b.fssaiNo !== undefined && !/^\d{14}$/.test(b.fssaiNo)) throw new HttpError(400, 'FSSAI licence number has 14 digits.')
     return db.tx(async (t) => {
-      const [before] = await t.query('select bar_open, bar_close, fssai_no from property limit 1')
-      await t.query('update property set bar_open = coalesce($1, bar_open), bar_close = coalesce($2, bar_close), fssai_no = coalesce($3, fssai_no)', [b.open ?? null, b.close ?? null, b.fssaiNo ?? null])
-      const [after] = await t.query('select bar_open, bar_close, fssai_no from property limit 1')
+      const [before] = await t.query('select bar_open, bar_close from property limit 1')
+      await t.query('update property set bar_open = coalesce($1, bar_open), bar_close = coalesce($2, bar_close)', [b.open ?? null, b.close ?? null])
+      const [after] = await t.query('select bar_open, bar_close from property limit 1')
       await appendAudit(t, { actor: who, action: 'bar.settings', entity: { type: 'property', id: 'sathya' }, before, after }, now())
       return after
     })
@@ -380,13 +520,18 @@ export function fnbRoutes(app: FastifyInstance, ctx: Ctx) {
     const q = req.query as { outletId?: string; status?: string; date?: string }
     const statuses = q.status ? q.status.split(',') : ['open', 'billed']
     return db.query(
-      `select o.id, o.number, o.outlet_id, o.kind, o.table_id, tb.label as table_label, o.reservation_id, s.room_no, s.twin_id, o.covers, o.status,
-              o.business_date::text, o.opened_at, u.name as opened_by,
+      `select o.id, o.number, o.outlet_id, ot.name as outlet, os.twin_id as outlet_twin_id, o.kind, o.table_id, tb.label as table_label, o.reservation_id,
+              s.room_no, s.twin_id, g.name as guest, o.covers, o.status, o.business_date::text, o.opened_at, u.name as opened_by,
+              coalesce((select json_agg(json_build_object('name', i.name, 'qty', i.qty, 'price', i.price_paise, 'status', i.status) order by i.added_at)
+                          from order_item i where i.order_id = o.id and i.status <> 'void'), '[]') as items,
               coalesce((select sum(i.price_paise * i.qty) from order_item i where i.order_id = o.id and i.status <> 'void'), 0)::bigint as subtotal_paise,
               (select count(*)::int from order_item i where i.order_id = o.id and i.status = 'pending') as pending_items,
-              (select min(k.status) from kot k where k.order_id = o.id and k.status <> 'served') as kitchen
-         from fnb_order o join app_user u on u.id = o.opened_by left join dining_table tb on tb.id = o.table_id
-         left join reservation r on r.id = o.reservation_id left join space s on s.id = r.space_id
+              (select (array['new', 'cooking', 'ready'])[min(case k.status when 'new' then 1 when 'cooking' then 2 else 3 end)]
+                 from kot k where k.order_id = o.id and k.status <> 'served') as kitchen,
+              (select max(k.created_at) from kot k where k.order_id = o.id) as last_kot_at
+         from fnb_order o join app_user u on u.id = o.opened_by join outlet ot on ot.id = o.outlet_id left join space os on os.id = ot.space_id
+         left join dining_table tb on tb.id = o.table_id
+         left join reservation r on r.id = o.reservation_id left join space s on s.id = r.space_id left join guest g on g.id = r.guest_id
         where o.status = any($1) and ($2::text is null or o.outlet_id = $2) and ($3::date is null or o.business_date = $3)
         order by o.opened_at`, [statuses, q.outletId ?? null, q.date ?? null])
   })

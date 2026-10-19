@@ -5,6 +5,7 @@ import { appendAudit } from './audit-store'
 import { loadRolesConfig, syncRoles } from './context'
 import { ensureSiteLayout } from './routes/site'
 import { ensureRestaurant } from './fnb-seed'
+import { ensureLiquorClasses } from './routes/settings'
 import type { Db } from './db'
 
 // First-run data. Rooms come from seed/rooms.placeholder.csv until the resort's real
@@ -101,6 +102,7 @@ async function seedInto(db: Db, opts: { today?: string; mdMobile?: string }) {
   await db.query(`insert into user_role (user_id, role_id) values ('u-md', 'managing_director')`)
 
   await ensureSiteLayout(db)
+  await ensureLiquorClasses(db, { tax })
   await ensureRestaurant(db)
 
   await appendAudit(db, {
