@@ -35,7 +35,12 @@ export async function testResort(today = '2026-11-01', opts: { taxDetails?: bool
 
   async function staff(name: string, mobile: string, roles: string[]) {
     await post('/api/users', md, { name, mobile, roles })
-    return (await signIn(mobile)).json().token as string
+    const r = (await signIn(mobile)).json()
+    if (r.stage === 'enroll_2fa') {   // GM, accounts, HR: set up the authenticator on first sign-in
+      const { secret } = (await post('/auth/totp/enroll', r.token)).json()
+      await post('/auth/totp/confirm', r.token, { code: totpCode(secret, clock) })
+    }
+    return r.token as string
   }
 
   return {

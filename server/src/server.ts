@@ -5,6 +5,7 @@ import { migrate, openPglite, openPostgres } from './db'
 import { normaliseMobile } from './routes/auth'
 import { seed } from './seed'
 import { ensureSiteLayout } from './routes/site'
+import { ensureRestaurant } from './fnb-seed'
 
 // DATABASE_URL set → PostgreSQL (production). Otherwise a local PGlite database in ./data.
 // MD_MOBILE gives the Managing Director's login its mobile number on first start.
@@ -15,6 +16,7 @@ const seeded = await seed(db, { mdMobile })
 await syncRoles(db, loadRolesConfig())
 if (mdMobile) await db.query(`update app_user set mobile = $1 where id = 'u-md' and mobile is null`, [mdMobile])
 await ensureSiteLayout(db)
+await ensureRestaurant(db)
 const app = buildApp(db, { logger: true, appDir: process.env.APP_DIR ?? fileURLToPath(new URL('../../dist/', import.meta.url)) })
 app.log.info({ engine: db.engine, migrationsApplied: applied, seeded }, 'database ready')
 await app.listen({ host: '0.0.0.0', port: Number(process.env.PORT ?? 8080) })

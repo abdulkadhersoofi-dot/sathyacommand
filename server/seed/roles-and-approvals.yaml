@@ -22,6 +22,12 @@ sign_in:
 #   einvoice.generate    register invoices with the GST portal (IRN)
 #   site.edit        draft changes to the 3D resort layout (Twin Studio)
 #   site.publish     publish a new version of the 3D resort layout
+#   fnb.order        open restaurant / bar / room-service orders, add items, send KOTs, mark served
+#   kitchen          kitchen and bar screens: cooking, ready, recall; mark items sold out
+#   fnb.void         cancel an item after its KOT went to the kitchen (others need this role's approval)
+#   menu.edit        add and edit menu items and tables (price changes go to menu.price for approval)
+#   menu.price       change menu prices and import the menu
+#   bar.settings     licensed bar hours, dry days, FSSAI number
 #   '*'              everything, including deciding approvals
 roles:
   managing_director:
@@ -29,16 +35,16 @@ roles:
     permissions: ['*']
     limits: unlimited
   general_manager:
-    permissions: [inventory.edit, devices.approve, users.manage, front_desk, folio.reverse, discount.approve, night_audit, invoice.view, invoice.credit_note, site.edit, site.publish]
+    permissions: [inventory.edit, devices.approve, users.manage, front_desk, folio.reverse, discount.approve, night_audit, invoice.view, invoice.credit_note, site.edit, site.publish, fnb.order, fnb.void, menu.edit, menu.price, bar.settings]
     limits: { discount_percent: 25, refund: 50000, comp_room_nights: 5, purchase_order: 500000, rate_override_below_floor: true }
   operations_manager:
-    permissions: [front_desk, folio.reverse, discount.approve, site.edit]
+    permissions: [front_desk, folio.reverse, discount.approve, site.edit, fnb.order, fnb.void]
     limits: { discount_percent: 20, void_per_bill: 5000, room_move: true, mark_out_of_order: true, overtime_hours_per_week: 12 }
   front_office_manager:
     permissions: [front_desk, folio.reverse, night_audit, invoice.credit_note]
     limits: { discount_percent: 15, refund: 10000, cashier_variance_writeoff: 500 }
   reception:
-    permissions: [front_desk]
+    permissions: [front_desk, fnb.order]
     limits: { discount_percent: 10, refund: 0 }
   night_auditor:
     permissions: [front_desk, night_audit]
@@ -53,14 +59,19 @@ roles:
   room_attendant:
     limits: {}
   fnb_manager:
+    permissions: [fnb.order, fnb.void, kitchen, menu.edit]
     limits: { discount_percent: 15, void_per_bill: 3000, staff_meal: true, menu_price_change_needs: general_manager }
   captain:
+    permissions: [fnb.order]
     limits: { void_after_kot_print: false }
   chef:
+    permissions: [kitchen]
     limits: { wastage_per_entry: 1000 }
   bar_manager:
+    permissions: [fnb.order, fnb.void, kitchen, bar.settings]
     limits: { breakage_per_entry: 1500 }
   bartender:
+    permissions: [fnb.order, kitchen]
     limits: {}
   sales_banquets:
     limits: { package_discount_percent: 10, hold_dates_days: 7 }

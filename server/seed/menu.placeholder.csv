@@ -1,0 +1,25 @@
+outlets,category,code,name,name_ta,price,station,diet,liquor_class,allergens
+DINE|IRD|POOL,Breakfast,BF01,Idli (2),இட்லி,90,SI,veg,,
+DINE|IRD|POOL,Breakfast,BF02,Masala Dosa,மசாலா தோசை,140,SI,veg,,
+DINE|IRD,Breakfast,BF03,Ven Pongal,வெண் பொங்கல்,120,SI,veg,,dairy
+DINE|IRD|POOL,Breakfast,BF04,Poori Masala,பூரி மசாலா,130,SI,veg,,gluten
+DINE|IRD,South Indian,SI01,Chettinad Chicken,செட்டிநாடு சிக்கன்,380,SI,non_veg,,
+DINE|IRD,South Indian,SI02,Meals (unlimited),சாப்பாடு,260,SI,veg,,
+DINE|IRD,South Indian,SI03,Curd Rice,தயிர் சாதம்,150,SI,veg,,dairy
+DINE|IRD|POOL,North Indian & Tandoor,NI01,Paneer Butter Masala,பனீர் பட்டர் மசாலா,320,NI,veg,,dairy
+DINE|IRD|POOL,North Indian & Tandoor,NI02,Butter Naan,பட்டர் நான்,70,NI,veg,,gluten|dairy
+DINE|IRD,North Indian & Tandoor,NI03,Chicken Biryani,சிக்கன் பிரியாணி,360,NI,non_veg,,
+DINE|IRD,North Indian & Tandoor,NI04,Veg Biryani,வெஜ் பிரியாணி,280,NI,veg,,
+DINE|IRD|POOL,Chinese,CH01,Gobi 65,கோபி 65,220,CH,veg,,gluten
+DINE|IRD|POOL,Chinese,CH02,Veg Fried Rice,வெஜ் ஃப்ரைட் ரைஸ்,240,CH,veg,,soy
+DINE|IRD,Chinese,CH03,Chilli Chicken,சில்லி சிக்கன்,320,CH,non_veg,,soy|gluten
+DINE|IRD|POOL,Desserts,DS01,Gulab Jamun (2),குலாப் ஜாமூன்,110,DS,veg,,dairy|gluten
+DINE|IRD|POOL,Desserts,DS02,Ice Cream,ஐஸ்கிரீம்,120,DS,veg,,dairy
+DINE|IRD|POOL,Beverages,BV01,Filter Coffee,ஃபில்டர் காபி,60,BV,veg,,dairy
+DINE|IRD|POOL,Beverages,BV02,Fresh Lime Soda,ஃப்ரெஷ் லைம் சோடா,90,BV,veg,,
+DINE|IRD|POOL|BAR,Beverages,BV03,Mineral Water 1L,மினரல் வாட்டர்,40,BV,veg,,
+DINE|BAR|POOL,Beer,BR01,Beer 650 ml,,320,BAR,veg,beer,
+DINE|BAR,Spirits,SP01,Whisky (30 ml),,180,BAR,veg,imfl_spirits,
+DINE|BAR,Spirits,SP02,Rum (30 ml),,150,BAR,veg,imfl_spirits,
+DINE|BAR,Wine,WN01,Red Wine (glass),,350,BAR,veg,wine,
+BAR,Snacks,BS01,Masala Peanuts,மசாலா கடலை,120,BAR,veg,,peanut

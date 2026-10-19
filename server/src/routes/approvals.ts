@@ -8,12 +8,12 @@ import { requireCaller } from './auth'
 
 // The approval inbox. Each kind says who may decide it and what happens when it is approved.
 
-interface Kind {
+export interface ApprovalKind {
   permission: string                 // '*' means God Mode only
-  apply(t: Db, payload: Record<string, unknown>, decider: Caller): Promise<void>
+  apply(t: Db, payload: Record<string, unknown>, decider: Caller, ctx: Ctx): Promise<void>
 }
 
-const KINDS: Record<string, Kind> = {
+const KINDS: Record<string, ApprovalKind> = {
   'rate.above_limit': {
     permission: '*',
     async apply(t, p, decider) {
@@ -37,6 +37,9 @@ const KINDS: Record<string, Kind> = {
     },
   },
 }
+
+/** Modules add their own kinds (e.g. the restaurant's cancellations after KOT). */
+export function registerApprovalKind(kind: string, k: ApprovalKind) { KINDS[kind] = k }
 
 export async function createApproval(ctx: Ctx, db: Db, kind: string, requestedBy: string, payload: Record<string, unknown>, reason?: string) {
   if (!KINDS[kind]) throw new Error(`Unknown approval kind ${kind}`)
@@ -76,7 +79,7 @@ export function approvalRoutes(app: FastifyInstance, ctx: Ctx) {
       if (a.status !== 'pending') throw new HttpError(409, `Already ${a.status}.`)
       if (!canDecide(who, a.kind)) throw new HttpError(403, 'You cannot decide this approval.')
       if (a.requested_by === who.userId && !who.permissions.has('*')) throw new HttpError(403, 'You cannot approve your own request.')
-      if (b.decision === 'approve') await KINDS[a.kind].apply(t, a.payload, who)
+      if (b.decision === 'approve') await KINDS[a.kind].apply(t, a.payload, who, ctx)
       const status = b.decision === 'approve' ? 'approved' : 'rejected'
       await t.query('update approval set status = $2, decided_by = $3, decided_at = $4 where id = $1', [id, status, who.userId, ctx.now()])
       await appendAudit(t, { actor: who, action: `approval.${status}`, entity: { type: 'approval', id },

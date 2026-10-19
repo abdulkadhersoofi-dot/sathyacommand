@@ -14,6 +14,7 @@ import { nightAuditRoutes } from './routes/nightaudit'
 import { invoiceRoutes } from './routes/invoices'
 import { dashboardRoutes } from './routes/dashboard'
 import { siteRoutes } from './routes/site'
+import { fnbRoutes } from './routes/fnb'
 
 export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boolean; appDir?: string } = {}) {
   const ctx: Ctx = {
@@ -42,6 +43,7 @@ export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boo
   invoiceRoutes(app, ctx)
   dashboardRoutes(app, ctx)
   siteRoutes(app, ctx)
+  fnbRoutes(app, ctx)
 
   // Serve the built 3D app and front desk screens from the same address as the API.
   if (opts.appDir && existsSync(opts.appDir)) app.register(fastifyStatic, { root: opts.appDir, index: 'index.html' })
