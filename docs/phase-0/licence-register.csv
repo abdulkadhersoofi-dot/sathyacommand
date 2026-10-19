@@ -1,0 +1,26 @@
+licence,issuing_authority,licence_number,valid_from,valid_to,renewal_lead_days,owner_role,document_location,status,notes
+Bar licence (FL-3 or as issued),Prohibition & Excise Dept / TASMAC,,,,90,general_manager,,,
+FSSAI licence,FSSAI,,,,60,fnb_manager,,,
+GST registration,GSTN,,,,0,accounts,,,Permanent; check details yearly
+TN VAT registration (liquor),Commercial Taxes Dept TN,,,,0,accounts,,,
+Fire NOC,TN Fire & Rescue Services,,,,90,engineering,,,
+Trade licence,Local body,,,,60,general_manager,,,
+TNPCB consent to operate (water),TN Pollution Control Board,,,,120,engineering,,,
+TNPCB consent to operate (air),TN Pollution Control Board,,,,120,engineering,,,
+Electrical safety inspection,Electrical Inspectorate,,,,60,engineering,,,
+DG set approval,Electrical Inspectorate,,,,60,engineering,,,
+Lift licence (if any),Electrical Inspectorate,,,,60,engineering,,,
+Legal metrology – peg measures,Legal Metrology Dept,,,,30,bar_manager,,,
+Legal metrology – weighing scales,Legal Metrology Dept,,,,30,stores,,,
+Music licence – PPL,Phonographic Performance Ltd,,,,30,sales_banquets,,,
+Music licence – IPRS,Indian Performing Right Society,,,,30,sales_banquets,,,
+Music licence – Novex (if used),Novex Communications,,,,30,sales_banquets,,,
+Shops & Establishments registration,Labour Dept TN,,,,60,hr_payroll,,,
+PF registration,EPFO,,,,0,hr_payroll,,,
+ESI registration,ESIC,,,,0,hr_payroll,,,
+Professional tax registration,Local body,,,,0,hr_payroll,,,
+Tourism dept registration / star classification,Ministry of Tourism / TN Tourism,,,,90,general_manager,,,
+Building insurance,Insurer,,,,45,accounts,,,
+Public liability insurance,Insurer,,,,45,accounts,,,
+Swimming pool water testing,Lab,,,,15,engineering,,,Monthly
+Fire extinguisher refill,Vendor,,,,30,engineering,,,Annual

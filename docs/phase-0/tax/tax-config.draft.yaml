@@ -1,0 +1,162 @@
+# Sathya HMS · tax configuration (DRAFT for CA review)
+#
+# The HMS loads these tables at runtime. Every rule carries an effective date,
+# so a rate change is a new entry, never an edit of history.
+# ca_status: pending | confirmed | changed   (CA fills this in)
+# Law as understood in October 2026. Nothing here is final until the CA confirms.
+
+meta:
+  version: 0.1-draft
+  prepared: 2026-10-19
+  state: Tamil Nadu
+  state_code: "33"
+  financial_year_start: "04-01"
+
+# ---------------------------------------------------------------- GST
+gst:
+  place_of_supply_accommodation: property_location   # always intra-state: CGST + SGST
+
+  accommodation:
+    sac: "996311"
+    basis: value_of_supply_per_unit_per_day     # actual amount charged after discounts
+    slabs:
+      - { max_value: 7500, rate: 5,  itc: false, effective_from: 2025-09-22, ca_status: pending }
+      - { min_value: 7500.01, rate: 18, itc: true, effective_from: 2025-09-22, ca_status: pending }
+    open_questions:
+      - Does an extra-bed / extra-person charge add to the per-unit-per-day value?
+      - Treatment of complimentary upgrades (value of supply = amount actually charged?)
+
+  restaurant:
+    sac: "996331"
+    specified_premises:
+      rule: any_unit_value_above_7500_in_preceding_fy_or_declaration
+      tracked_automatically: true          # system flags at FY end if any night crossed ₹7,500
+      opted_in_by_declaration: null        # CA to confirm
+    rates:
+      - { premises: specified, rate: 18, itc: true,  effective_from: 2025-04-01, ca_status: pending }
+      - { premises: other,     rate: 5,  itc: false, effective_from: 2025-04-01, ca_status: pending }
+    room_service_follows_restaurant: true   # ca_status: pending
+
+  banquets:
+    hall_and_lawn_rental: { sac: null, rate: 18, itc: true, ca_status: pending }   # CA to give SAC
+    event_catering:       { sac: "996334", rate_follows: restaurant_premises_status, ca_status: pending }
+    composite_packages:   { treatment: principal_supply, ca_status: pending }
+
+  other_services:
+    laundry:   { rate: 18, ca_status: pending }
+    transport: { rate: null, ca_status: pending }
+    activities_and_sports: { rate: 18, ca_status: pending }
+
+  liquor: outside_gst   # billed under TN VAT, separate invoice
+
+  e_invoice:
+    mandatory_above_aato: 50000000          # ₹5 crore
+    report_within_days_if_aato_at_least: { aato: 100000000, days: 30 }
+    applies_to: [b2b_invoice, b2b_credit_note, b2b_debit_note]
+
+  reverse_charge:
+    - { service: legal_services_by_advocate, ca_status: pending }
+    - { service: goods_transport_agency, ca_status: pending }
+    - { service: security_services_from_non_body_corporate, ca_status: pending }
+    - { service: renting_commercial_property_from_unregistered_person, effective_from: 2024-10-10, ca_status: pending }
+    - { service: sponsorship, ca_status: pending }
+
+  credits_to_track:
+    gst_tds_by_government:   { rate: 2, contract_value_above: 250000, ca_status: pending }
+    gst_tcs_by_ota:          { rate: 0.5, effective_from: 2024-07-10, ca_status: pending }
+
+  itc:
+    match_against: GSTR-2B
+    use_invoice_management_system: true
+    common_credit_reversal: rules_42_43     # needed because 5% room nights carry no ITC
+    blocked_credits_section: "17(5)"
+
+  e_way_bill_threshold: 50000
+
+# ---------------------------------------------------------------- Income tax
+income_tax:
+  act_in_force: Income-tax Act, 2025       # from 2026-04-01; 1961 Act refs kept for history
+  new_act_section_refs: TBC_by_CA          # TDS consolidated in one table-based section
+  tds:
+    - code: contractor
+      old_section: 194C
+      rate: { individual_huf: 1, others: 2 }
+      threshold: { single: 30000, annual: 100000 }
+      ca_status: pending
+    - code: professional_fees
+      old_section: 194J
+      rate: 10
+      threshold: { annual: 50000 }
+      ca_status: pending
+    - code: technical_services
+      old_section: 194J
+      rate: 2
+      threshold: { annual: 50000 }
+      ca_status: pending
+    - code: rent_land_building_furniture
+      old_section: 194-I
+      rate: 10
+      threshold: { monthly: 50000 }
+      ca_status: pending
+    - code: rent_plant_machinery
+      old_section: 194-I
+      rate: 2
+      threshold: { monthly: 50000 }
+      ca_status: pending
+    - code: commission_brokerage
+      old_section: 194H
+      rate: 2
+      threshold: { annual: 20000 }
+      ca_status: pending
+    - code: purchase_of_goods
+      old_section: 194Q
+      rate: 0.1
+      threshold: { annual_per_vendor: 5000000 }
+      applies_if_buyer_turnover_above: 100000000
+      ca_status: pending
+    - code: partner_payments
+      old_section: 194T
+      rate: 10
+      threshold: { annual: 20000 }
+      applies_if_entity: partnership_firm
+      ca_status: pending
+    - code: salary
+      old_section: "192"
+      rate: slab
+      ca_status: pending
+  no_pan_rate: 20                          # old 206AA
+  deposit_due: { normal: "7th of next month", march: "April 30" }
+
+  deducted_from_resort:                    # credits to chase in Form 26AS / AIS
+    - { by: ota, nature: e_commerce, old_section: 194-O, rate: 0.1 }
+    - { by: corporate_rate_contract, nature: rent, old_section: 194-I, rate: 10 }
+    - { by: banquet_client, nature: contract, old_section: 194C, rate: 2 }
+
+  tcs_paid_by_resort:
+    - { on: liquor_purchases_from_tasmac, old_section: "206C(1)", rate: 1, ca_status: pending }
+
+  controls:
+    block_cash_receipt_at_or_above: 200000     # per person per day / event (old 269ST)
+    warn_cash_expense_above: 10000             # per party per day (old 40A(3))
+    msme_payment_days: { with_agreement: 45, without_agreement: 15 }   # old 43B(h)
+    advance_tax_dates: ["06-15", "09-15", "12-15", "03-15"]
+
+# ---------------------------------------------------------------- TN VAT & liquor
+tn_vat:
+  act: Tamil Nadu Value Added Tax Act, 2006
+  applies_to: alcoholic_liquor_for_human_consumption
+  rate_table:                               # CA to fill from the current TNVAT schedule
+    - { class: imfl_spirits, rate: null, ca_status: pending }
+    - { class: beer, rate: null, ca_status: pending }
+    - { class: wine, rate: null, ca_status: pending }
+  separate_invoice_series: true
+  return_frequency: monthly                 # CA to confirm
+
+liquor_controls:
+  licence: FL-3                             # confirm from licence
+  legal_age: 21
+  licensed_hours: { open: null, close: null }   # from licence
+  dry_days: []                              # loaded yearly from state notifications
+  purchase_only_from: [TASMAC]
+  peg_sizes_ml: [30, 60]
+  variance_alert_percent: 3

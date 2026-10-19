@@ -1,0 +1,82 @@
+# Sathya HMS · roles, approval limits and God Mode alerts (DRAFT for MD review)
+# Amounts in ₹. Change any number; the software reads this file as configuration.
+
+sign_in:
+  personal: mobile_otp
+  second_factor_required: [managing_director, general_manager, accounts, hr_payroll]
+  shared_tablets: quick_switch_pin_4_digits
+  device_registration_required: [accounts, hr_payroll, stores, front_office_manager]
+  shift_bound: [reception, captain, chef, bartender, room_attendant, security, engineering]
+  session_timeout_minutes: { god_mode: 15, back_office: 30, operations: 240 }
+
+roles:
+  managing_director:
+    god_mode: true
+    limits: unlimited
+  general_manager:
+    limits: { discount_percent: 25, refund: 50000, comp_room_nights: 5, purchase_order: 500000, rate_override_below_floor: true }
+  operations_manager:
+    limits: { discount_percent: 20, void_per_bill: 5000, room_move: true, mark_out_of_order: true, overtime_hours_per_week: 12 }
+  front_office_manager:
+    limits: { discount_percent: 15, refund: 10000, cashier_variance_writeoff: 500 }
+  reception:
+    limits: { discount_percent: 10, refund: 0 }
+  night_auditor:
+    limits: {}
+  accounts:
+    limits: { vendor_payment_needs_approval_above: 25000, delete_vouchers: false }
+  stores:
+    limits: { purchase_order: 25000, stock_adjustment: 0 }
+  executive_housekeeper:
+    limits: { linen_writeoff: 2000 }
+  room_attendant:
+    limits: {}
+  fnb_manager:
+    limits: { discount_percent: 15, void_per_bill: 3000, staff_meal: true, menu_price_change_needs: general_manager }
+  captain:
+    limits: { void_after_kot_print: false }
+  chef:
+    limits: { wastage_per_entry: 1000 }
+  bar_manager:
+    limits: { breakage_per_entry: 1500 }
+  bartender:
+    limits: {}
+  sales_banquets:
+    limits: { package_discount_percent: 10, hold_dates_days: 7 }
+  engineering:
+    limits: { spares_issue: 5000 }
+  security:
+    limits: {}
+  hr_payroll:
+    limits: { salary_advance: 10000, payroll_release_needs: [general_manager, managing_director] }
+  employee_self_service:
+    limits: {}
+  external_auditor:
+    read_only: true
+    access_expires_days: 30
+
+god_mode_alerts:
+  - { id: void_after_kot, notify: [managing_director, fnb_manager], channel: push }
+  - { id: bill_reprint_count_above, value: 1, notify: [managing_director], channel: push }
+  - { id: discount_above_role_limit_attempt, notify: [managing_director], channel: push }
+  - { id: cashier_variance_above, value: 500, notify: [managing_director, front_office_manager], channel: push }
+  - { id: liquor_pour_variance_percent_above, value: 3, notify: [managing_director, general_manager], channel: push }
+  - { id: sleeper_skipper_discrepancy, notify: [managing_director, front_office_manager], channel: push }
+  - { id: rate_below_floor, notify: [managing_director], channel: push }
+  - { id: sign_in_outside_shift_or_new_device, notify: [managing_director], channel: push }
+  - { id: staff_outside_zone_minutes, value: 15, notify: [operations_manager], channel: push }
+  - { id: stock_adjustment_above, value: 2000, notify: [managing_director, general_manager], channel: push }
+  - { id: accounting_edit_after_day_close, notify: [managing_director], channel: push }
+  - { id: cash_receipt_at_or_above, value: 200000, action: block, notify: [managing_director], channel: push }
+  - { id: sos_pressed, notify: [managing_director, operations_manager, security], channel: [push, call] }
+
+md_flash_report:
+  time: "08:00"
+  channel: whatsapp
+  contents: [occupancy, revenue_by_department, cash_position, alerts_last_24h, arrivals_today, events_today]
+
+staff_location:
+  only_on_shift: true
+  ping_seconds_moving: 30
+  history_days: 90
+  staff_can_view_own_history: true

@@ -32,3 +32,8 @@ To switch to live data, build with `VITE_GATEWAY_URL=https://gateway.example/api
 
 Room count and numbering in the Park Wing (assumed 3 floors × 12), number of villas (assumed 6),
 restaurant and kitchen location, use of the south-west white-roof building, hall and lawn capacities.
+
+## Plans & Phase 0
+
+- [HMS Blueprint](docs/HMS_BLUEPRINT.md): full phased plan for the hotel management system ([formatted HTML](docs/hms-blueprint.html))
+- [Phase 0 workspace](docs/phase-0/README.md): owner intake, department workshops, tax pack for the CA, roles and limits, licence register, site survey, Tamil glossary

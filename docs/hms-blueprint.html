@@ -1,0 +1,1183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sathya HMS Blueprint</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: sticky table of contents on the left, one long reading column on the right; tables and diagrams scroll inside their own boxes. */
+:root {
+  --bg: #eef2ef;
+  --surface: #fbfcfb;
+  --surface-2: #e5ebe7;
+  --fg: #14211e;
+  --muted: #55665f;
+  --line: rgba(20, 33, 30, 0.13);
+  --accent: #0d7672;
+  --marigold: #a86c00;
+  --marigold-soft: #f6e6c2;
+  --god: #b3541e;
+  --god-soft: #f7e1d3;
+  --ok: #2c8a57;
+  --f-display: 'Unbounded', 'Manrope', system-ui, sans-serif;
+  --f-body: 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --f-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b1412; --surface: #111c1a; --surface-2: #192824; --fg: #e3ece9; --muted: #93a6a0;
+    --line: rgba(227, 236, 233, 0.12); --accent: #3cc2b6; --marigold: #f2b441; --marigold-soft: #3a2c10;
+    --god: #ef8a4c; --god-soft: #3b2216; --ok: #5cc98b; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0b1412; --surface: #111c1a; --surface-2: #192824; --fg: #e3ece9; --muted: #93a6a0;
+  --line: rgba(227, 236, 233, 0.12); --accent: #3cc2b6; --marigold: #f2b441; --marigold-soft: #3a2c10;
+  --god: #ef8a4c; --god-soft: #3b2216; --ok: #5cc98b; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font: 15px/1.6 var(--f-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 64px; -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.page { max-width: 1240px; margin: 0 auto; display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 48px; }
+nav.toc { position: sticky; top: env(safe-area-inset-top, 0px); align-self: start; padding-top: 32px; max-height: 100vh; overflow-y: auto; }
+.toc-brand { font: 700 13px var(--f-display); margin-bottom: 14px; display: flex; gap: 8px; align-items: center; }
+.toc-brand i { width: 18px; height: 18px; border-radius: 5px; background: conic-gradient(from 210deg, var(--accent), var(--marigold), var(--accent)); display: inline-block; }
+.toc ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+.toc a { display: flex; gap: 8px; color: var(--muted); text-decoration: none; font-size: 13px; font-weight: 600; padding: 4px 8px; border-radius: 6px; }
+.toc a:hover { background: var(--surface-2); color: var(--fg); }
+.toc a span { font: 600 11px var(--f-mono); color: var(--muted); min-width: 18px; padding-top: 2px; }
+main { min-width: 0; padding-top: 32px; }
+
+header.hero { padding-bottom: 28px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+.eyebrow { font-size: 11.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+h1 { font: 700 clamp(30px, 5vw, 46px)/1.08 var(--f-display); margin: 10px 0 14px; letter-spacing: -0.01em; text-wrap: balance; }
+.lead { font-size: 18px; max-width: 64ch; margin: 0; color: var(--fg); }
+.facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 22px; }
+.fact { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+.fact b { display: block; font: 700 24px/1.2 var(--f-display); font-variant-numeric: tabular-nums; }
+.fact span { font-size: 12.5px; color: var(--muted); font-weight: 600; }
+.note { margin-top: 18px; background: var(--marigold-soft); border-radius: 10px; padding: 12px 16px; font-size: 14px; max-width: 80ch; }
+.note b { color: var(--marigold); }
+
+section { padding-top: 40px; scroll-margin-top: 12px; }
+h2 { font: 700 24px/1.2 var(--f-display); margin: 0 0 6px; text-wrap: balance; display: flex; gap: 12px; align-items: baseline; }
+h2 .num { font: 600 13px var(--f-mono); color: var(--accent); }
+.intro { color: var(--muted); max-width: 70ch; margin: 0 0 18px; }
+h3 { font-size: 17px; font-weight: 800; margin: 26px 0 8px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+h4 { font-size: 13px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 18px 0 6px; }
+p { max-width: 72ch; }
+ul.list { margin: 0; padding-left: 18px; display: grid; gap: 5px; }
+ul.list li { padding-left: 2px; }
+ul.cols { columns: 2; column-gap: 32px; }
+ul.cols li { break-inside: avoid; margin-bottom: 5px; }
+.tag { font: 700 10.5px var(--f-body); letter-spacing: .06em; text-transform: uppercase; padding: 2px 7px; border-radius: 4px; white-space: nowrap; }
+.tag.ca { background: var(--marigold-soft); color: var(--marigold); }
+.tag.god { background: var(--god-soft); color: var(--god); }
+.tag.ph { background: var(--surface-2); color: var(--muted); }
+.tag.done { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+
+.principles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.principle { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.principle b { display: block; font-weight: 800; margin-bottom: 3px; }
+.principle span { color: var(--muted); font-size: 14px; }
+
+.scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); margin: 10px 0 6px; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font-size: 11.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: var(--surface-2); white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+td.k { font-weight: 700; white-space: nowrap; }
+td.n { font-family: var(--f-mono); font-size: 12.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wide table { min-width: 860px; }
+
+.module { border-top: 1px solid var(--line); padding-top: 4px; }
+.module:first-of-type { border-top: 0; }
+.mod-id { font: 600 12px var(--f-mono); color: var(--accent); }
+
+.flow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0 4px; }
+.flow span { background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 4px 11px; font-size: 13px; font-weight: 600; }
+.flow i { color: var(--muted); font-style: normal; }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; overflow-x: auto; margin: 10px 0; font-size: 13px; }
+
+.god-box { background: var(--god-soft); border-radius: 12px; padding: 4px 18px 16px; margin-top: 12px; }
+.god-box h3 { color: var(--god); }
+
+.timeline { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: 14px 16px; margin: 12px 0 8px; overflow-x: auto; }
+.tl-grid { min-width: 640px; }
+.tl-axis, .tl-row { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 12px; align-items: center; }
+.tl-axis { font: 600 11px var(--f-mono); color: var(--muted); margin-bottom: 6px; }
+.tl-scale { position: relative; height: 16px; }
+.tl-scale span { position: absolute; transform: translateX(-50%); }
+.tl-row { padding: 4px 0; border-top: 1px dashed var(--line); }
+.tl-label { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tl-label small { font: 600 11px var(--f-mono); color: var(--accent); margin-right: 6px; }
+.tl-track { position: relative; height: 18px; background: repeating-linear-gradient(90deg, transparent 0 calc(25% - 1px), var(--line) 0 25%); }
+.tl-bar { position: absolute; top: 3px; bottom: 3px; border-radius: 4px; background: var(--accent); }
+.tl-bar.go { background: var(--marigold); }
+.tl-bar.done { background: var(--ok); }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12.5px; color: var(--muted); margin-top: 10px; }
+.legend i { display: inline-block; width: 12px; height: 8px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+
+.phase { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 4px 18px 16px; margin-top: 14px; }
+.phase h3 { margin-top: 14px; }
+.phase .when { font: 600 12px var(--f-mono); color: var(--muted); }
+.phase-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 20px; }
+.exit { background: var(--surface-2); border-radius: 8px; padding: 10px 14px; font-size: 14px; }
+.exit b { display: block; font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 3px; }
+
+.qs { counter-reset: q; list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.qs li { counter-increment: q; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px 10px 48px; position: relative; }
+.qs li::before { content: counter(q); position: absolute; left: 14px; top: 10px; font: 700 13px var(--f-mono); color: var(--accent); }
+footer { margin-top: 48px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); padding-top: 16px; }
+
+@media (max-width: 960px) {
+  .page { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  nav.toc { position: static; max-height: none; padding-top: 20px; }
+  .toc ol { flex-direction: row; overflow-x: auto; gap: 4px; padding-bottom: 6px; scrollbar-width: thin; }
+  .toc a { white-space: nowrap; background: var(--surface); border: 1px solid var(--line); }
+  .toc-brand { display: none; }
+  main { padding-top: 16px; }
+}
+@media (max-width: 680px) {
+  .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .principles { grid-template-columns: minmax(0, 1fr); }
+  ul.cols { columns: 1; }
+  .phase-grid { grid-template-columns: minmax(0, 1fr); }
+  .tl-axis, .tl-row { grid-template-columns: 150px minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+</head>
+<body>
+<div class="page">
+<nav class="toc" aria-label="Contents">
+  <div class="toc-brand"><i></i>Sathya HMS</div>
+  <ol>
+    <li><a href="#principles"><span>01</span>Principles</a></li>
+    <li><a href="#map"><span>02</span>System map</a></li>
+    <li><a href="#roles"><span>03</span>Logins &amp; roles</a></li>
+    <li><a href="#god"><span>04</span>God Mode</a></li>
+    <li><a href="#modules"><span>05</span>All modules</a></li>
+    <li><a href="#kot"><span>06</span>Restaurant &amp; KOT</a></li>
+    <li><a href="#hk"><span>07</span>Housekeeping</a></li>
+    <li><a href="#gst"><span>08</span>GST</a></li>
+    <li><a href="#tds"><span>09</span>Income tax, TDS, TCS</a></li>
+    <li><a href="#vat"><span>10</span>TN VAT &amp; liquor</a></li>
+    <li><a href="#statutory"><span>11</span>Other statutory</a></li>
+    <li><a href="#gps"><span>12</span>Staff app &amp; GPS</a></li>
+    <li><a href="#studio"><span>13</span>Editing the 3D resort</a></li>
+    <li><a href="#integrations"><span>14</span>Integrations &amp; hardware</a></li>
+    <li><a href="#tech"><span>15</span>Technology</a></li>
+    <li><a href="#phases"><span>16</span>Phases</a></li>
+    <li><a href="#delivery"><span>17</span>Team, testing, go-live</a></li>
+    <li><a href="#decisions"><span>18</span>Decisions needed</a></li>
+  </ol>
+</nav>
+
+<main>
+<header class="hero">
+  <div class="eyebrow">Sathya Park &amp; Resorts · Product plan · October 2026</div>
+  <h1>Sathya HMS Blueprint</h1>
+  <p class="lead">The complete hotel management system behind the Sathya Command 3D dashboard. It runs every department of the resort, has its own login for every role, builds in GST, TDS and Tamil Nadu VAT, and gives the owner a God Mode that sees and records every action as it happens.</p>
+  <div class="facts">
+    <div class="fact"><b>17</b><span>modules</span></div>
+    <div class="fact"><b>19</b><span>login roles</span></div>
+    <div class="fact"><b>11</b><span>phases (1 already done)</span></div>
+    <div class="fact"><b>~12 mo</b><span>to full system, first go-live in month 5</span></div>
+  </div>
+  <div class="note"><b>About the tax content.</b> Rates and rules here reflect the law as of October 2026 as far as I know it. In the software, every rate sits in a dated tax table that the accounts team can change without new code. Your chartered accountant signs off the full tax set-up in Phase 0. Items marked <span class="tag ca">CA check</span> need that confirmation before go-live.</div>
+</header>
+
+<!-- 01 -->
+<section id="principles">
+  <h2><span class="num">01</span>Principles</h2>
+  <p class="intro">Seven rules that every screen and every feature must follow.</p>
+  <div class="principles">
+    <div class="principle"><b>One system, one record</b><span>Rooms, restaurant, bar, stores, accounts and HR share one database. Nothing is typed twice. A room-service order lands on the guest's bill, reduces kitchen stock and appears in the accounts without anyone re-entering it.</span></div>
+    <div class="principle"><b>The 3D resort is the front door</b><span>Every module appears on the map, and every building, room, lawn, store and machine on the map opens its module.</span></div>
+    <div class="principle"><b>Every action is an event</b><span>Each action records who did it, what changed (before and after), where, when and on which device. The same stream feeds God Mode, the audit log and the live 3D view.</span></div>
+    <div class="principle"><b>Compliance as a by-product</b><span>GST invoices, TDS, VAT registers, excise stock books, Form C and FSSAI records come out of normal daily work instead of month-end paperwork.</span></div>
+    <div class="principle"><b>Nimble</b><span>Screens open in under 2 seconds and point-of-sale taps respond in under 0.15 seconds. Kitchen tickets, billing and housekeeping keep working through internet cuts.</span></div>
+    <div class="principle"><b>Easy for every employee</b><span>Tamil and English throughout, large touch targets, common jobs in three taps, and it runs on low-cost Android phones.</span></div>
+    <div class="principle"><b>Owner stays in control</b><span>Approval limits by role, no silent deletions, and corrections made only by visible reversal entries. Owner-level actions need two-factor sign-in.</span></div>
+  </div>
+</section>
+
+<!-- 02 -->
+<section id="map">
+  <h2><span class="num">02</span>System map</h2>
+  <p class="intro">Each person uses one app made for their job, and all of them talk to the same core. A small on-site box keeps printing and billing working if the internet goes down.</p>
+<pre class="mermaid">
+flowchart LR
+  subgraph People["Devices on site"]
+    MD["MD / GM<br/>3D Command + God Mode"]
+    FD["Front desk portal"]
+    POS["Captain tablets<br/>orders and KOT"]
+    KDS["Kitchen and bar screens"]
+    STAFF["Staff phone app<br/>tasks, attendance, GPS"]
+    BO["Back office<br/>accounts, stores, HR"]
+  end
+  subgraph Edge["On-site edge box"]
+    SYNC["Offline sync"]
+    PRINT["Print bridge<br/>KOT, BOT, bills"]
+    HUB["Beacons and<br/>biometric hub"]
+  end
+  subgraph Cloud["Sathya HMS cloud"]
+    API["API and live updates"]
+    DB[("Database")]
+    LOG["Event stream<br/>and God log"]
+    JOBS["Night audit, returns,<br/>reports, alerts"]
+  end
+  subgraph Outside["Outside services"]
+    OTA["Channel manager / OTAs"]
+    GOV["GST e-invoice portal"]
+    PAY["UPI, cards, gateway"]
+    WA["WhatsApp"]
+    TALLY["Tally"]
+    LOCK["Door locks, CCTV"]
+  end
+  People --> Edge --> API
+  API --> DB
+  API --> LOG
+  LOG --> MD
+  JOBS --> DB
+  API <--> Outside
+</pre>
+</section>
+
+<!-- 03 -->
+<section id="roles">
+  <h2><span class="num">03</span>Logins &amp; roles</h2>
+  <p class="intro">Each person signs in with their own login and sees only what their job needs. These are starting templates. The MD can create new roles by ticking permissions, give one person several roles, and change any approval limit. The limits shown are examples to agree in Phase 0.</p>
+  <div class="scroll wide"><table>
+    <thead><tr><th>Role</th><th>Sees</th><th>Can do</th><th>Approval limits (example)</th><th>Device</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Managing Director <span class="tag god">God Mode</span></td><td>Everything, live: every department, every rupee, every staff position, the full audit log and replay</td><td>Approve anything, lock or log out any user, change roles and limits, publish 3D layout changes, view rates and revenue</td><td>Unlimited</td><td>Any; two-factor or biometric required</td></tr>
+      <tr><td class="k">General Manager</td><td>All operations, financial summaries, staff map</td><td>Approve discounts, complimentary stays, refunds, rate overrides, purchases above store limits</td><td>Discount up to 25%, refunds up to ₹50,000</td><td>Laptop, tablet, phone</td></tr>
+      <tr><td class="k">Operations Manager</td><td>Front office, housekeeping, F&amp;B, engineering, security, staff map</td><td>Assign staff, approve voids, room moves, out-of-order, overtime</td><td>Voids up to ₹5,000 per bill</td><td>Tablet, phone</td></tr>
+      <tr><td class="k">Front Office Manager</td><td>Reservations, room rack on 3D, guest profiles, folios, city ledger</td><td>Everything reception does, plus rate changes, refunds and cashier variances within limit</td><td>Discount up to 15%</td><td>Desk PC, tablet</td></tr>
+      <tr><td class="k">Reception (front desk)</td><td>Arrivals, departures, room status, guest folios</td><td>Book, check in and out, take payments, issue keys, room moves, Form C</td><td>Discount up to 10%</td><td>Desk PC with ID scanner</td></tr>
+      <tr><td class="k">Night Auditor</td><td>Day's transactions, cashier shifts, exceptions</td><td>Run night audit and day close, post room charges, print report pack</td><td>None</td><td>Desk PC</td></tr>
+      <tr><td class="k">Accounts (back office)</td><td>Invoices, payables, receivables, banks, GST, TDS, VAT, payroll postings</td><td>Post vouchers, reconcile, prepare return data, pay vendors after approval. Corrections only by reversal entries; nothing can be deleted</td><td>Vendor payments per approval matrix</td><td>PC</td></tr>
+      <tr><td class="k">Stores &amp; pantry</td><td>Stock in all stores, purchase orders, goods received, issues</td><td>Raise indents and POs, receive goods, issue to departments, stock counts</td><td>PO up to ₹25,000; above needs GM</td><td>PC, phone with scanner</td></tr>
+      <tr><td class="k">Executive Housekeeper / HK Supervisor</td><td>Room status board, attendants' positions and tasks, linen, lost &amp; found</td><td>Assign rooms, inspect, release rooms to reception, mark out-of-order (with Ops approval)</td><td>Linen write-off up to ₹2,000</td><td>Tablet, phone</td></tr>
+      <tr><td class="k">Room attendant</td><td>Own task list only</td><td>Start and finish rooms, checklists with photos, minibar, report faults, lost &amp; found</td><td>None</td><td>Phone (staff app)</td></tr>
+      <tr><td class="k">F&amp;B / Restaurant Manager</td><td>All outlets, tables, menus, KOT and sales reports, food cost</td><td>Edit menus and prices (with GM approval), approve voids, discounts and staff meals</td><td>Discount up to 15%, voids up to ₹3,000</td><td>Tablet</td></tr>
+      <tr><td class="k">Captain / steward</td><td>Assigned tables and menu</td><td>Take orders, send KOT, request bill, settle payment. Cannot cancel an item after its KOT has printed</td><td>None</td><td>Captain tablet or phone</td></tr>
+      <tr><td class="k">Chef / kitchen</td><td>Kitchen screen, recipes, prep lists, stock in kitchen store</td><td>Mark orders cooking or ready, mark items sold out, log wastage, raise indents</td><td>Wastage up to ₹1,000 per entry</td><td>Kitchen screen, tablet</td></tr>
+      <tr><td class="k">Bar manager / bartender</td><td>Bar order tickets (BOT), bar stock by bottle and peg</td><td>Serve, log breakage and spillage, count open bottles</td><td>Breakage needs manager approval</td><td>Bar screen, tablet</td></tr>
+      <tr><td class="k">Sales &amp; banquets</td><td>Enquiries, venue calendar, quotes, event orders (BEO)</td><td>Hold dates, send quotes, confirm events, collect advances</td><td>Package discount up to 10%</td><td>Laptop, phone</td></tr>
+      <tr><td class="k">Engineering &amp; maintenance</td><td>Tickets, assets on 3D, preventive schedules, meters</td><td>Close tickets, log readings, request spares</td><td>Spares up to ₹5,000</td><td>Phone, tablet</td></tr>
+      <tr><td class="k">Security</td><td>Gate register, patrol route, incidents, CCTV links</td><td>Log vehicles and visitors, scan patrol checkpoints, raise incidents</td><td>None</td><td>Phone</td></tr>
+      <tr><td class="k">HR &amp; payroll</td><td>Employees, rosters, attendance, leave, payroll</td><td>Onboard staff, approve leave, run payroll (MD/GM approves release)</td><td>Salary advances up to ₹10,000</td><td>PC</td></tr>
+      <tr><td class="k">Every employee (self-service)</td><td>Own roster, attendance, tasks, payslips, leave balance</td><td>Clock in and out, apply for leave, receive tasks, SOS button</td><td>None</td><td>Phone (staff app)</td></tr>
+      <tr><td class="k">External auditor / CA</td><td>Read-only accounts, tax data and audit trail</td><td>View and export only</td><td>None</td><td>PC, time-limited access</td></tr>
+    </tbody>
+  </table></div>
+  <h4>How people sign in</h4>
+  <ul class="list">
+    <li>Mobile number with a one-time code for personal logins. MD, GM and Accounts also need a second factor (authenticator app or fingerprint/face on their phone).</li>
+    <li>Shared tablets at the restaurant and bar use quick-switch: each captain taps their name and enters a 4-digit PIN, so every order is tied to a person.</li>
+    <li>Device registration: back-office logins only work on approved devices. A new device needs MD or GM approval.</li>
+    <li>Shift-bound access: operational staff can sign in only during their rostered shift, apart from self-service screens.</li>
+    <li>Instant lock: the MD can log any user out of every device in one tap, and the reason is recorded.</li>
+  </ul>
+</section>
+
+<!-- 04 -->
+<section id="god">
+  <h2><span class="num">04</span>God Mode</h2>
+  <p class="intro">The MD's live view of the whole resort, and a permanent record of everything that happens in it. Recording starts in Phase 2, so each module is logged from its first day.</p>
+  <div class="god-box">
+    <h3>What it records, live</h3>
+    <ul class="list cols">
+      <li>Every sign-in and sign-out, with person, device, place and time</li>
+      <li>Every booking, change, cancellation, check-in, check-out and room move</li>
+      <li>Every KOT and BOT, item cancellation, void, reprint, discount and complimentary</li>
+      <li>Every bill, its printed copies and reprints, and every payment and refund</li>
+      <li>Every rate override, waived charge and late checkout decision</li>
+      <li>Every cash drawer opening, cashier shift close and variance</li>
+      <li>Every stock receipt, issue, adjustment, wastage and breakage entry</li>
+      <li>Every accounting voucher and every edit to it, with before and after</li>
+      <li>Every permission, role or approval-limit change</li>
+      <li>Every export or download of guest or financial data</li>
+      <li>Staff positions while on duty, plus zone entries and exits</li>
+      <li>Every change to the 3D resort layout</li>
+    </ul>
+    <h3>How the record is protected</h3>
+    <ul class="list">
+      <li>Append-only: entries can be added but never edited or deleted, by anyone, including the MD.</li>
+      <li>Tamper-evident: each entry carries a fingerprint (hash) of the entry before it, so any later change breaks the chain and shows up.</li>
+      <li>A copy goes every night to separate locked storage that nobody can change during the retention period.</li>
+      <li>Kept for at least 8 years, which covers GST and income-tax record rules.</li>
+    </ul>
+    <h3>What the MD sees and can do</h3>
+    <ul class="list">
+      <li><b>Live stream:</b> every action as it happens, filterable by person, department, zone on the 3D map, or rupee value.</li>
+      <li><b>3D live layer:</b> actions appear where they happen. A void flashes at the restaurant, a room move draws a line between rooms, and staff show as dots.</li>
+      <li><b>Replay:</b> drag the timeline to any minute in the past and watch the resort as it was: rooms, orders, events and staff positions.</li>
+      <li><b>Person view:</b> tap any employee to see their shift, location trail and every action they took today.</li>
+      <li><b>Approval inbox:</b> discounts, refunds, POs and payments waiting for approval, approved in one tap from the phone.</li>
+      <li><b>MD flash report:</b> on WhatsApp every morning at 8: yesterday's occupancy, revenue by department, cash position, alerts and today's arrivals and events.</li>
+    </ul>
+    <h3>Alerts that reach the MD's phone (all editable)</h3>
+    <div class="scroll"><table>
+      <thead><tr><th>Alert</th><th>Why it matters</th></tr></thead>
+      <tbody>
+        <tr><td class="k">Item cancelled after its KOT printed</td><td>The most common restaurant leakage</td></tr>
+        <tr><td class="k">Bill reprinted more than once</td><td>Can hide a cash bill that was never recorded</td></tr>
+        <tr><td class="k">Discount or comp above the role's limit attempted</td><td>Attempted policy breach</td></tr>
+        <tr><td class="k">Cashier variance over ₹500 at shift close</td><td>Cash control</td></tr>
+        <tr><td class="k">Bar pour variance over 3% at stock count</td><td>Liquor leakage</td></tr>
+        <tr><td class="k">Reception shows a room vacant, housekeeping finds it occupied</td><td>Possible unbilled stay (a "sleeper")</td></tr>
+        <tr><td class="k">Room rate below the floor price</td><td>Rate manipulation</td></tr>
+        <tr><td class="k">Sign-in outside shift or from a new device</td><td>Account misuse</td></tr>
+        <tr><td class="k">Staff outside their assigned zone for over 15 minutes during shift</td><td>Coverage gap</td></tr>
+        <tr><td class="k">Stock adjustment or write-off above ₹2,000</td><td>Inventory leakage</td></tr>
+        <tr><td class="k">Accounting entry edited after the day is closed</td><td>Books integrity</td></tr>
+        <tr><td class="k">Cash receipt that would cross ₹2 lakh from one person</td><td>Illegal under income-tax rules, so the system blocks it and alerts</td></tr>
+        <tr><td class="k">SOS pressed by any employee</td><td>Safety</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+</section>
+
+<!-- 05 -->
+<section id="modules">
+  <h2><span class="num">05</span>All modules</h2>
+  <p class="intro">Everything needed to run and maintain the resort. Each module notes the phase it is built in. The restaurant, housekeeping, tax and GPS modules each have a deeper section further down.</p>
+
+  <div class="module">
+    <h3><span class="mod-id">M01</span>Front office <span class="tag ph">Phase 2</span></h3>
+    <ul class="list cols">
+      <li>Room rack and tape chart, also on the 3D map: drag a booking onto another room to move it</li>
+      <li>Check-in: scan passport, driving licence or Aadhaar (Aadhaar stored masked), guest photo, signature on tablet, deposit or card pre-authorisation, key card encoding, welcome WhatsApp</li>
+      <li>Form C for foreign guests, pre-filled and tracked until submitted</li>
+      <li>Walk-ins, early check-in and late checkout charged by rule</li>
+      <li>Folios: several bills per room, routing (room to company, extras to guest), split and merge, advance deposits</li>
+      <li>Charges post automatically from restaurant, bar, minibar, laundry and activities</li>
+      <li>Room moves, upgrades, extensions and early departures, each with a reason</li>
+      <li>Check-out: express checkout, bill sent on WhatsApp or email, GST e-invoice for business guests, payment by cash, card, UPI, company account or OTA prepaid</li>
+      <li>Cashier shifts: opening float, closing cash count by note denomination, variance, handover</li>
+      <li>Night audit: posts room and tax, handles no-shows, closes the day, produces the report pack</li>
+      <li>City ledger: company and travel-agent accounts with credit limits, statements, ageing and reminders</li>
+      <li>Guest profiles: history, preferences, allergies, VIP, anniversaries, blacklist, marketing consent</li>
+      <li>Concierge: cabs, tours, wake-up calls, messages, guest requests with response timers</li>
+      <li>Guest register and ID records for police inspection</li>
+    </ul>
+  </div>
+
+  <div class="module">
+    <h3><span class="mod-id">M02</span>Reservations &amp; revenue <span class="tag ph">Phase 2, channels in Phase 7</span></h3>
+    <ul class="list cols">
+      <li>Room types, rooms and villas linked to the 3D model</li>
+      <li>Meal plans: EP (room only), CP (with breakfast), MAP (breakfast and one meal), AP (all meals)</li>
+      <li>Rate plans: standard, weekend, seasonal, corporate contracts, packages (weekend getaway, honeymoon, wedding), and rates derived from a base rate</li>
+      <li>Restrictions: minimum stay, closed to arrival or departure, stop-sell</li>
+      <li>Group and wedding room blocks with rooming-list import, cut-off dates and automatic release</li>
+      <li>Deposits and cancellation policies, no-show charges, refunds with approval</li>
+      <li>Waitlist and overbooking guard</li>
+      <li>GST rate picked automatically for each room-night from the actual charge, and recalculated when a discount changes it (see GST section)</li>
+      <li>Booking sources and market segments for reporting</li>
+      <li>Forecast: occupancy on the books, pickup and pace by date</li>
+      <li>Website booking engine and two-way channel manager sync (Phase 7)</li>
+    </ul>
+  </div>
+
+  <div class="module">
+    <h3><span class="mod-id">M03</span>Housekeeping &amp; laundry <span class="tag ph">Phase 4</span></h3>
+    <p>Full room status, task assignment, inspection, linen, laundry and public-area cleaning. Detail in <a href="#hk">section 07</a>.</p>
+  </div>
+
+  <div class="module">
+    <h3><span class="mod-id">M04</span>Restaurant, KOT &amp; kitchen <span class="tag ph">Phase 3</span></h3>
+    <p>Outlets, menus, captain ordering, KOT routing, kitchen screens, room service, billing, recipes and food cost. Detail in <a href="#kot">section 06</a>.</p>
+  </div>
+
+  <div class="module">
+    <h3><span class="mod-id">M05</span>Bar &amp; liquor <span class="tag ph">Phase 3, excise registers in Phase 5</span></h3>
+    <p>Bottle and peg tracking, TASMAC purchases, VAT billing, excise registers, dry days and licensed hours. Detail in <a href="#vat">section 10</a>.</p>
+  </div>
+
+  <div class="module">
+    <h3><span class="mod-id">M06</span>Banquets, events &amp; sales <span class="tag ph">Phase 7</span></h3>
+    <ul class="list cols">
+      <li>Event flow: enquiry, site visit, quote, contract, advance schedule, event order (BEO), event day, final bill, feedback</li>
+      <li>Venue calendar for John Samuel Hall, the Convention Hall, Grand Lawn, Garden Lawn, Pavilion and grounds, with clash checks and tentative, hold and definite states</li>
+      <li>Packages: hall plus per-plate menus plus decor plus room blocks, minimum guarantees, extra-plate charges</li>
+      <li>Setup styles (theatre, banquet rounds, U-shape, cocktail) and capacities, with a floor plan drawn on the venue</li>
+      <li>The BEO goes automatically to kitchen (production quantities), housekeeping (setup), engineering (power, sound, lights) and security (parking, gate)</li>
+      <li>Advances recorded with GST receipt vouchers; refund vouchers on cancellation</li>
+      <li>Vendor coordination for decorators, DJs, photographers and tent suppliers, with TDS applied on payments</li>
+      <li>Permissions checklist per event: music licence, police permission, fire safety</li>
+      <li>Wedding room blocks linked to the event</li>
+      <li>Event-day timeline shown live on the 3D venue</li>
+      <li>Sales CRM: corporate accounts, contracted rates, follow-ups, pipeline value, lost-reason tracking</li>
+    </ul>
+  </div>
+
+  <div class="module">
+    <h3><span class="mod-id">M07</span>Stores, purchase &amp; inventory <span class="tag ph">Phase 5</span></h3>
+    <ul class="list cols">
+      <li>Separate stores: main store, kitchen and pantry, bar (liquor), housekeeping and linen, engineering spares</li>
+      <li>Item master with units and conversions (kg to g, case to bottle), HSN code, GST rate and whether input tax credit is allowed</li>
+      <li>Purchase flow: indent, approval, purchase order, goods receipt with photo and quality check, invoice match (PO vs receipt vs bill), payment</li>
+      <li>Vendor master: GSTIN validated online, PAN, TDS category, MSME status, bank details, rate contracts</li>
+      <li>MSME 45-day payment tracker. Late payments to micro and small suppliers lose the income-tax deduction, so the system warns before day 45</li>
+      <li>Department requisitions, issues and inter-store transfers</li>
+      <li>Stock valuation by weighted average, with batch and expiry for perishables (first to expire, first out)</li>
+      <li>Par levels, reorder suggestions, and a daily market list for vegetables, fish and meat</li>
+      <li>Physical stock counts on the phone, variance report, GM approval of adjustments</li>
+      <li>Barcode and QR labels</li>
+      <li>Crockery, cutlery and glassware breakage register</li>
+    </ul>
+  </div>
+
+  <div class="module">
+    <h3><span class="mod-id">M08</span>Accounts &amp; finance <span class="tag ph">Phase 6</span></h3>
+    <ul class="list cols">
+      <li>Double-entry ledgers with a hotel chart of accounts and department P&amp;L (rooms, F&amp;B, banquets, bar, other income), following the hotel-industry USALI standard</li>
+      <li>Every operational transaction posts automatically: sales, purchases, payroll, depreciation</li>
+      <li>Accounts payable and receivable with ageing</li>
+      <li>Bank, UPI, card and gateway reconciliation by statement import and auto-matching</li>
+      <li>OTA reconciliation: booking value, commission, GST on commission, GST TCS and income-tax TDS deducted by the OTA, and net payout</li>
+      <li>Cash: cashier shifts, petty cash, bank deposits</li>
+      <li>Budgets and cost centres, monthly department P&amp;L</li>
+      <li>Fixed assets with depreciation under both Companies Act and income-tax rules</li>
+      <li>Edit log that cannot be switched off, as required for company accounting software</li>
+      <li>Period lock after returns are filed</li>
+      <li>GST, TDS/TCS and VAT engines (sections 08 to 10)</li>
+      <li>Export or sync to Tally Prime for your CA</li>
+      <li>Ready for more than one GSTIN or property later</li>
+    </ul>
+  </div>
+
+  <div class="module">
+    <h3><span class="mod-id">M09</span>HR &amp; payroll <span class="tag ph">Phase 8 (attendance in Phase 4)</span></h3>
+    <ul class="list cols">
+      <li>Employee records and documents, onboarding checklist, ID cards with QR</li>
+      <li>Departments, designations, shifts and drag-and-drop rosters, weekly offs</li>
+      <li>Attendance from biometric devices and geofenced phone punch with optional selfie; late, early and overtime</li>
+      <li>Leave types, approvals and the Tamil Nadu holiday calendar</li>
+      <li>Payroll: PF, ESI, Tamil Nadu professional tax and labour welfare fund, TDS on salary (old or new regime, declarations and proofs), bonus, gratuity provision, advances and loans, full and final settlement</li>
+      <li>Wage structures set up to match the Labour Codes in force since November 2025 <span class="tag ca">CA check</span></li>
+      <li>Service-charge or tips distribution, if collected</li>
+      <li>Staff meals, uniforms, lockers and staff accommodation</li>
+      <li>Training and certificates: FSSAI food-handler training, fire drills, first aid</li>
+      <li>Appraisals and disciplinary records</li>
+      <li>Payslips and Form 16 in the staff app</li>
+    </ul>
+  </div>
+
+  <div class="module">
+    <h3><span class="mod-id">M10</span>Staff app &amp; GPS <span class="tag ph">Phase 4</span></h3>
+    <p>One app for every employee: tasks, attendance, location on duty, SOS. Detail in <a href="#gps">section 12</a>.</p>
+  </div>
+
+  <div class="module">
+    <h3><span class="mod-id">M11</span>Engineering &amp; maintenance <span class="tag ph">Phase 4</span></h3>
+    <ul class="list cols">
+      <li>Asset register pinned on the 3D map: ACs, DG sets, pumps, transformer, STP, pool plant, kitchen equipment, CCTV, lifts if any</li>
+      <li>Preventive maintenance schedules and checklists, AMC contracts and expiry</li>
+      <li>Fault tickets from anyone, with photo and a pin on the 3D map; response timers and escalation</li>
+      <li>Spares drawn from the engineering store</li>
+      <li>Utilities: daily electricity meter, DG running hours and diesel, solar, water, LPG; cost per occupied room</li>
+      <li>Pool water log (pH, chlorine), STP log, fire extinguisher and hydrant checks</li>
+      <li>Licence and compliance calendar with expiry alerts (list in section 11)</li>
+    </ul>
+  </div>
+
+  <div class="module">
+    <h3><span class="mod-id">M12</span>Security <span class="tag ph">Phase 4</span></h3>
+    <ul class="list cols">
+      <li>Gate register for vehicles, visitors, vendors and deliveries; guest vehicle tags; parking on the 3D map</li>
+      <li>Guard patrols with QR checkpoints and missed-checkpoint alerts</li>
+      <li>Incident reports with photos</li>
+      <li>CCTV camera pins on the 3D map that open the camera's live view</li>
+      <li>Key control register</li>
+      <li>Emergency mode: evacuation roll-call using the staff app, assembly points on the map</li>
+    </ul>
+  </div>
+
+  <div class="module">
+    <h3><span class="mod-id">M13</span>Guest experience <span class="tag ph">Phase 7</span></h3>
+    <ul class="list cols">
+      <li>Website booking engine with payment link</li>
+      <li>Online pre-arrival check-in: ID upload, arrival time, preferences</li>
+      <li>WhatsApp: confirmation, directions, pre-arrival message, requests during the stay, bill, feedback</li>
+      <li>QR in every room: menu and room service, housekeeping requests, resort information, feedback</li>
+      <li>Reviews: collect feedback, alert managers to low scores before they reach Google or TripAdvisor, draft replies</li>
+      <li>Repeat-guest recognition and loyalty</li>
+      <li>Digital room key on the phone (Phase 10)</li>
+    </ul>
+  </div>
+
+  <div class="module">
+    <h3><span class="mod-id">M14</span>Activities &amp; leisure <span class="tag ph">Phase 7</span></h3>
+    <ul class="list cols">
+      <li>Pool hours and headcount</li>
+      <li>Cricket ground and sports bookings, equipment hire</li>
+      <li>Tours and excursions, kids' activities</li>
+      <li>Spa or wellness if added later</li>
+      <li>All chargeable to the room bill</li>
+    </ul>
+  </div>
+
+  <div class="module">
+    <h3><span class="mod-id">M15</span>Reports &amp; analytics <span class="tag ph">Each phase, complete in Phase 9</span></h3>
+    <ul class="list cols">
+      <li>Rooms: occupancy, ADR (average daily rate), RevPAR (revenue per available room), source and channel mix, pickup, pace, forecast</li>
+      <li>F&amp;B: covers, average bill, top items, food cost %, pour cost %, wastage</li>
+      <li>Banquets: enquiry conversion, revenue per event, lawn and hall utilisation</li>
+      <li>Profit: total revenue and gross operating profit per available room, department P&amp;L, labour cost %</li>
+      <li>Housekeeping productivity, room turnaround time, inspection scores</li>
+      <li>Maintenance: open tickets, response time, energy per occupied room</li>
+      <li>Night-audit pack and statutory registers</li>
+      <li>Every report exports to Excel and PDF</li>
+    </ul>
+  </div>
+
+  <div class="module">
+    <h3><span class="mod-id">M16</span>Platform &amp; settings <span class="tag ph">Phase 2</span></h3>
+    <ul class="list cols">
+      <li>Property set-up, invoice number series, tax tables with effective dates</li>
+      <li>Roles editor and approval-matrix editor</li>
+      <li>Printers, devices and kitchen-station routing</li>
+      <li>Notification rules (WhatsApp, push, SMS, email)</li>
+      <li>Data import and export, backups, languages (Tamil and English)</li>
+    </ul>
+  </div>
+
+  <div class="module">
+    <h3><span class="mod-id">M17</span>Twin Studio: editing the 3D resort <span class="tag ph">Phase 2, extended in Phase 9</span></h3>
+    <p>Add, change or remove buildings, rooms, lawns and paths without code. Detail in <a href="#studio">section 13</a>.</p>
+  </div>
+</section>
+
+<!-- 06 -->
+<section id="kot">
+  <h2><span class="num">06</span>Restaurant, KOT &amp; kitchen</h2>
+  <p class="intro">From the captain's tablet to the kitchen and back to the bill, with every step timed, costed and recorded.</p>
+<pre class="mermaid">
+sequenceDiagram
+  participant G as Guest (table 5)
+  participant C as Captain tablet
+  participant H as HMS
+  participant K as Kitchen screen
+  participant B as Bar screen
+  participant M as God Mode
+  G->>C: 2 biryani, 1 beer
+  C->>H: Send order
+  H->>K: KOT, biryani x2, South Indian station
+  H->>B: BOT, beer x1
+  H->>M: Logged, arc drawn on 3D map
+  K-->>H: Cooking, then ready (timer runs)
+  H-->>C: Ready for pickup
+  C->>H: Request bill
+  H-->>C: Food bill (GST) and liquor bill (VAT), one UPI QR
+  Note over H,M: Cancelling after KOT print needs a manager PIN and alerts the MD
+</pre>
+  <h3>Outlets &amp; menus</h3>
+  <ul class="list cols">
+    <li>Outlets: Sathya Dine, room service, poolside, bar, banquet kitchen, each with its own menu, prices, taxes and printers</li>
+    <li>Items with variants, add-ons, combos, and veg, non-veg, Jain and allergen tags; names in Tamil and English; photos</li>
+    <li>Time-based menus (breakfast, lunch, dinner) and happy-hour pricing</li>
+    <li>Sold-out ("86") from the kitchen updates every captain's tablet instantly</li>
+    <li>Guest QR menu for room service and poolside ordering</li>
+  </ul>
+  <h3>Taking orders</h3>
+  <ul class="list cols">
+    <li>Table plan on screen and on the 3D map; merge and transfer tables; covers count; captain assigned per section</li>
+    <li>Order in three taps, with seat and course numbers and special instructions</li>
+    <li>Repeat round, hold and fire courses</li>
+    <li>Works offline. Orders queue on the tablet and the edge box still prints KOTs if the internet is down</li>
+  </ul>
+  <h3>KOT routing &amp; kitchen screens</h3>
+  <ul class="list cols">
+    <li>Each item goes to its station: South Indian, North Indian and tandoor, Chinese, desserts, beverages; liquor goes to the bar as a BOT</li>
+    <li>Printer or screen per station, or both; reprints are marked "COPY" and counted</li>
+    <li>Kitchen screen with timers that turn green, amber, then red; bump, recall, all-day item counts</li>
+    <li>Allergen and Jain alerts printed in bold on the ticket</li>
+    <li>Room-service delivery tracked from kitchen to room, shown on the 3D map</li>
+    <li>Banquet production sheets from each BEO (quantities per dish)</li>
+  </ul>
+  <h3>Billing &amp; controls</h3>
+  <ul class="list cols">
+    <li>Split a bill by seat, item or amount; merge bills; post to a room bill</li>
+    <li>Food and soft drinks on a GST bill, liquor on a separate TN VAT bill, with one combined payment</li>
+    <li>Discounts within role limits; staff meals and complimentaries need approval</li>
+    <li>Service charge only as an optional, removable line, following consumer-protection rules</li>
+    <li>Payment by cash, card, UPI QR printed on the bill, split payment, company credit</li>
+    <li>Cancelling an item after its KOT prints needs a reason and a manager PIN. All cancellations, voids and reprints go to God Mode</li>
+    <li>FSSAI licence number printed on every bill</li>
+  </ul>
+  <h3>Kitchen management</h3>
+  <ul class="list cols">
+    <li>Recipes with exact ingredient quantities and yields; each sale reduces stock automatically</li>
+    <li>Theoretical vs actual food cost per day, per outlet and per dish</li>
+    <li>Wastage log with reason and photo</li>
+    <li>Prep lists from in-house guests, meal plans and banquet orders</li>
+    <li>Indents to stores, with par levels per kitchen</li>
+    <li>Menu engineering: each dish rated on popularity and profit to decide what to promote, re-price or drop</li>
+    <li>Food safety: fridge and freezer temperature logs, cleaning schedules, food-handler training records</li>
+    <li>Per-table feedback by QR</li>
+  </ul>
+</section>
+
+<!-- 07 -->
+<section id="hk">
+  <h2><span class="num">07</span>Housekeeping</h2>
+  <p class="intro">Every room's state is live on the 3D map, every attendant has a task list on their phone, and reception sees a room ready the moment it passes inspection.</p>
+  <h3>Room cycle</h3>
+  <div class="flow"><span>Guest checks out</span><i>→</i><span>Dirty (automatic)</span><i>→</i><span>Assigned to attendant</span><i>→</i><span>In progress (timer)</span><i>→</i><span>Cleaned + photos</span><i>→</i><span>Inspected (score)</span><i>→</i><span>Ready: reception notified</span></div>
+  <div class="scroll"><table>
+    <thead><tr><th>Status</th><th>Meaning</th><th>3D colour</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Vacant clean</td><td>Clean, not yet inspected</td><td>Green</td></tr>
+      <tr><td class="k">Inspected</td><td>Passed supervisor check, ready to sell</td><td>Teal</td></tr>
+      <tr><td class="k">Vacant dirty</td><td>Needs cleaning</td><td>Purple</td></tr>
+      <tr><td class="k">Occupied clean / dirty</td><td>Guest in room, daily service done or pending</td><td>Blue / blue with purple ring</td></tr>
+      <tr><td class="k">Do not disturb</td><td>Guest asked not to be disturbed; reminder to call after 2 pm</td><td>Blue with lock icon</td></tr>
+      <tr><td class="k">Out of order</td><td>Cannot be sold (repair); removed from inventory</td><td>Grey</td></tr>
+      <tr><td class="k">Out of service</td><td>Minor issue; can be sold in an emergency</td><td>Light grey</td></tr>
+      <tr><td class="k">Sleeper / skipper</td><td>Reception and housekeeping disagree on occupancy</td><td>Flashing red; alert to God Mode</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Features</h3>
+  <ul class="list cols">
+    <li>Automatic assignment by section and workload credits (a checkout room counts more than a stay-over); rebalance in one tap</li>
+    <li>Attendant's phone: rooms in order, start and finish timer, checklist with photos, report a fault, record minibar use (posts to the guest's bill), lost &amp; found with photo</li>
+    <li>Supervisor inspection with scoring and re-clean</li>
+    <li>Discrepancy report comparing reception and housekeeping records</li>
+    <li>Linen: par levels per room type, clean and soiled counts, in-house laundry or vendor, losses and damage</li>
+    <li>Guest laundry: price list, pickup and delivery, charge to room</li>
+    <li>Public areas (lobby, washrooms, halls, lawns, pool deck): cleaning rounds confirmed by scanning QR codes on site</li>
+    <li>Turndown service, deep-cleaning cycles (mattress turning, curtain washing), pest control log</li>
+    <li>Guest amenities issued from stores; consumption per occupied room tracked</li>
+    <li>Lost &amp; found register with photos, guest contact and handover record</li>
+    <li>Banquet setup and teardown tasks from each event order</li>
+  </ul>
+</section>
+
+<!-- 08 -->
+<section id="gst">
+  <h2><span class="num">08</span>GST</h2>
+  <p class="intro">The tax is decided per line, per night, from the actual value. Rates are stored in dated tables, so a future GST Council change becomes a settings update, not new code.</p>
+  <div class="scroll wide"><table>
+    <thead><tr><th>Supply</th><th>Rate</th><th>Input tax credit</th><th>SAC</th><th>How the system handles it</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Room, up to ₹7,500 per night</td><td class="n">5%</td><td>Not available</td><td class="n">996311</td><td>Rate chosen per room per night from the actual charge after discounts</td></tr>
+      <tr><td class="k">Room, above ₹7,500 per night</td><td class="n">18%</td><td>Available</td><td class="n">996311</td><td>Villas at ₹9,500 fall here</td></tr>
+      <tr><td class="k">Restaurant in "specified premises"</td><td class="n">18%</td><td>Available</td><td class="n">996331</td><td>The premises become "specified" if any room was charged above ₹7,500 in the previous financial year, or if the hotel opts in. The system tracks this and warns before the new year starts</td></tr>
+      <tr><td class="k">Restaurant, other premises</td><td class="n">5%</td><td>Not available</td><td class="n">996331</td><td>Applies if no room crossed ₹7,500 last year</td></tr>
+      <tr><td class="k">Room service, minibar food</td><td class="n">Restaurant rate</td><td>As above</td><td class="n">996331</td><td><span class="tag ca">CA check</span></td></tr>
+      <tr><td class="k">Hall and lawn rental</td><td class="n">18%</td><td>Available</td><td class="n">CA to confirm</td><td><span class="tag ca">CA check</span></td></tr>
+      <tr><td class="k">Event catering</td><td class="n">5% or 18%</td><td>Follows rate</td><td class="n">996334</td><td>Depends on specified-premises status <span class="tag ca">CA check</span></td></tr>
+      <tr><td class="k">Packages (MAP/AP, wedding packages)</td><td class="n">Principal supply</td><td>Follows rate</td><td class="n">—</td><td>Taxed as a composite supply at the rate of the main service; package split rules agreed with CA <span class="tag ca">CA check</span></td></tr>
+      <tr><td class="k">Laundry, transport, activities</td><td class="n">18% (typical)</td><td>Available</td><td class="n">Per service</td><td>Configured per charge code</td></tr>
+      <tr><td class="k">Liquor</td><td class="n">Outside GST</td><td>—</td><td class="n">—</td><td>Billed separately under TN VAT (section 10)</td></tr>
+    </tbody>
+  </table></div>
+  <h3>What the GST engine does</h3>
+  <ul class="list cols">
+    <li>Tax invoices with every field the GST invoice rules require, separate number series per financial year and document type; credit and debit notes</li>
+    <li>GSTIN captured and validated at booking or check-in, to separate business (B2B) and consumer (B2C) invoices</li>
+    <li>Place of supply for accommodation is the property itself, so CGST + SGST always applies</li>
+    <li>E-invoicing (IRN and QR code) for business invoices once yearly turnover crosses ₹5 crore; reported within 30 days where turnover is ₹10 crore or more</li>
+    <li>Advances (such as wedding bookings): GST at receipt, receipt vouchers, refund vouchers on cancellation, adjustment in the final invoice</li>
+    <li>Input tax credit: purchase invoices matched to GSTR-2B and accepted or rejected in the GST portal's Invoice Management System; blocked credits flagged</li>
+    <li>Credit reversal: because 5% room nights carry no ITC, common credits are split by formula every month</li>
+    <li>Reverse charge on advocates' fees, goods transport, security services from non-company agencies, renting commercial property from unregistered landlords, and sponsorship</li>
+    <li>Credits to claim: 2% GST TDS when government departments book events, and 0.5% GST TCS deducted by OTAs</li>
+    <li>Return data for GSTR-1/1A, GSTR-3B and annual GSTR-9/9C, ready to file through a GST Suvidha Provider or as upload files</li>
+    <li>E-way bills for goods moved above ₹50,000</li>
+    <li>Period lock after filing; amendments only through the next return</li>
+  </ul>
+  <h3>Tax test book</h3>
+  <p>Before go-live, the CA signs off a set of more than 100 real scenarios that run automatically on every software change. Examples: a ₹7,400 room plus a ₹600 extra bed (does the night cross ₹7,500?), a 10% discount that takes a villa below the limit, a MAP package with dinner, a wedding with hall, catering, liquor and 20 rooms, a cancelled advance, an OTA booking with commission.</p>
+</section>
+
+<!-- 09 -->
+<section id="tds">
+  <h2><span class="num">09</span>Income tax: TDS &amp; TCS</h2>
+  <div class="note"><b>New Income-tax Act.</b> The Income-tax Act, 2025 replaced the 1961 Act from 1 April 2026, with the "tax year" replacing the previous year and assessment year. Rates and thresholds were largely carried over, but section numbers and form names changed, and TDS is now consolidated into one table-based section. The system records each deduction by nature of payment and maps it to both the old and new section references, so records from before April 2026 still reconcile. <span class="tag ca">CA check</span></div>
+  <h3>TDS you deduct when paying others</h3>
+  <div class="scroll wide"><table>
+    <thead><tr><th>Payment</th><th>Examples at the resort</th><th>Rate</th><th>Threshold</th><th>Old section</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Contractors</td><td>Housekeeping or security agency, transport, decor and tent contractors, outsourced catering</td><td class="n">1% individual/HUF, 2% others</td><td class="n">₹30,000 per bill or ₹1 lakh a year</td><td class="n">194C</td></tr>
+      <tr><td class="k">Professional fees</td><td>CA, lawyer, architect, consultants, performing artists</td><td class="n">10%</td><td class="n">₹50,000 a year</td><td class="n">194J</td></tr>
+      <tr><td class="k">Technical services</td><td>Software support, technical maintenance contracts</td><td class="n">2%</td><td class="n">₹50,000 a year</td><td class="n">194J</td></tr>
+      <tr><td class="k">Rent: land, building, furniture</td><td>Leased land, staff quarters</td><td class="n">10%</td><td class="n">₹50,000 per month</td><td class="n">194-I</td></tr>
+      <tr><td class="k">Rent: plant, machinery, equipment</td><td>Hired generators, sound and light systems</td><td class="n">2%</td><td class="n">₹50,000 per month</td><td class="n">194-I</td></tr>
+      <tr><td class="k">Commission and brokerage</td><td>Travel agents, event agents</td><td class="n">2%</td><td class="n">₹20,000 a year</td><td class="n">194H</td></tr>
+      <tr><td class="k">Salaries</td><td>All employees</td><td class="n">Slab rates</td><td class="n">Above exemption</td><td class="n">192</td></tr>
+      <tr><td class="k">Purchase of goods</td><td>Large suppliers (only if your turnover exceeds ₹10 crore)</td><td class="n">0.1%</td><td class="n">Above ₹50 lakh per supplier a year</td><td class="n">194Q</td></tr>
+      <tr><td class="k">Payments to partners</td><td>Only if the resort is a partnership firm</td><td class="n">10%</td><td class="n">₹20,000 a year</td><td class="n">194T</td></tr>
+      <tr><td class="k">Supplier without PAN</td><td>Any of the above</td><td class="n">20% (or the higher rate)</td><td class="n">—</td><td class="n">206AA</td></tr>
+    </tbody>
+  </table></div>
+  <h3>How the TDS engine works</h3>
+  <ul class="list cols">
+    <li>Each vendor gets a TDS category at onboarding; deduction is automatic when the bill is booked or paid, whichever comes first</li>
+    <li>Thresholds tracked per vendor per year; deduction starts the moment a threshold is crossed</li>
+    <li>Lower-deduction certificates with their limit and validity dates</li>
+    <li>Challan payment due by the 7th of the next month (30 April for March), with interest and late-fee calculator</li>
+    <li>Quarterly TDS statement data for salary and non-salary, in the government utility format</li>
+    <li>TDS certificates generated and emailed to vendors; matched against Form 26AS and the AIS</li>
+  </ul>
+  <h3>Tax deducted or collected from you (credits to claim)</h3>
+  <ul class="list cols">
+    <li>OTAs deduct 0.1% income-tax TDS on e-commerce payouts; tracked booking by booking</li>
+    <li>Corporates on regular rate contracts may deduct 10% treating room bookings as rent; banquet clients may deduct 2% as contract work</li>
+    <li>TASMAC collects 1% TCS on liquor bought for resale; recorded as a credit <span class="tag ca">CA check</span></li>
+    <li>Every expected credit is followed until it appears in Form 26AS; missing credits are listed for follow-up</li>
+  </ul>
+  <h3>Other income-tax controls built in</h3>
+  <ul class="list cols">
+    <li>Blocks cash receipts of ₹2 lakh or more from one person for one event or day</li>
+    <li>Warns on cash expenses above ₹10,000 to one party in a day (not deductible)</li>
+    <li>MSME 45-day payment tracker</li>
+    <li>Advance-tax reminders for 15 June, 15 September, 15 December and 15 March</li>
+  </ul>
+</section>
+
+<!-- 10 -->
+<section id="vat">
+  <h2><span class="num">10</span>Tamil Nadu VAT &amp; liquor</h2>
+  <p class="intro">Liquor sold for drinking is outside GST, so bar sales are taxed under the Tamil Nadu Value Added Tax Act, 2006. The bar runs under its liquor licence (FL-3 for hotels) under the Tamil Nadu Liquor (Licence and Permit) Rules. The VAT rate sits in the tax table by product class and is confirmed against the current schedule. <span class="tag ca">CA and excise check</span></p>
+  <h3>Billing &amp; VAT</h3>
+  <ul class="list cols">
+    <li>Separate VAT invoice series with the VAT registration number</li>
+    <li>Liquor on its own bill, even when the table also ordered food</li>
+    <li>VAT sales register and purchase register (TASMAC invoices)</li>
+    <li>Monthly VAT return data</li>
+  </ul>
+  <h3>Bar stock &amp; excise</h3>
+  <ul class="list cols">
+    <li>Brand master with bottle sizes (180, 375, 750, 1000 ml) and peg sizes (30, 60 ml); cocktail recipes</li>
+    <li>Open bottles tracked in millilitres: each peg sold lowers the bottle level</li>
+    <li>Purchases only from licensed sources (TASMAC); liquor items can't be bought from other vendors</li>
+    <li>Daily stock register by brand and size (opening, received, sold, closing) in the format the licence requires</li>
+    <li>Breakage and spillage with photo and manager approval</li>
+    <li>Monthly physical count; variance against sales approved by the GM and flagged in God Mode</li>
+    <li>Peg measures and scales: legal metrology stamping due dates</li>
+    <li>Licence fee and renewal calendar</li>
+  </ul>
+  <h3>Rules the system enforces</h3>
+  <ul class="list cols">
+    <li>Dry-day calendar (national holidays, election days and others notified by the state): liquor orders blocked for the whole day</li>
+    <li>Licensed hours: liquor orders blocked outside the permitted times</li>
+    <li>Age check prompt: guests must be 21 or older in Tamil Nadu</li>
+    <li>Prompt reminding staff not to serve visibly intoxicated guests</li>
+  </ul>
+</section>
+
+<!-- 11 -->
+<section id="statutory">
+  <h2><span class="num">11</span>Other statutory requirements</h2>
+  <div class="scroll wide"><table>
+    <thead><tr><th>Requirement</th><th>What the system does</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Form C (foreign guests)</td><td>Pre-fills Form C from the passport scan and reminds until it is submitted to the Bureau of Immigration within 24 hours of arrival</td></tr>
+      <tr><td class="k">Guest register &amp; IDs</td><td>Register and ID copies ready for police inspection; Aadhaar stored only in masked form</td></tr>
+      <tr><td class="k">FSSAI</td><td>Licence number on every bill, annual return reminder, hygiene and temperature logs, food-handler training records</td></tr>
+      <tr><td class="k">Labour laws</td><td>PF, ESI, TN professional tax, TN labour welfare fund, Shops and Establishments registers, wage structure aligned with the Labour Codes <span class="tag ca">CA check</span></td></tr>
+      <tr><td class="k">Consumer protection</td><td>Service charge only optional and removable; prices shown inclusive of tax on menus</td></tr>
+      <tr><td class="k">Data protection (DPDP Act 2023 and its Rules)</td><td>Consent notices at booking and onboarding, purpose limits, retention schedules, deletion on request, breach response plan, access logs</td></tr>
+      <tr><td class="k">Company accounting audit trail</td><td>Edit log on all accounting records that cannot be disabled (applies if the resort is a company)</td></tr>
+      <tr><td class="k">Record retention</td><td>Accounts and tax records kept at least 8 years</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Licence &amp; compliance calendar</h3>
+  <p>Each licence has an owner, document copies, an expiry date, and alerts 60, 30 and 7 days before expiry. Overdue items appear in God Mode.</p>
+  <ul class="list cols">
+    <li>Bar licence (FL-3) and renewals</li>
+    <li>FSSAI licence</li>
+    <li>Fire NOC and extinguisher refills</li>
+    <li>Trade licence (local body)</li>
+    <li>TNPCB consent to operate (water and air)</li>
+    <li>Electrical safety inspection, DG set approval, lift licence if any</li>
+    <li>Legal metrology: peg measures and weighing scales</li>
+    <li>Music licences (PPL, IPRS, Novex) for events and public areas</li>
+    <li>Swimming pool safety and water testing</li>
+    <li>Insurance policies (building, public liability, staff)</li>
+    <li>Tourism department registration and star classification</li>
+    <li>GST, VAT and Shops and Establishments registrations</li>
+  </ul>
+</section>
+
+<!-- 12 -->
+<section id="gps">
+  <h2><span class="num">12</span>Staff app &amp; GPS tracking</h2>
+  <p class="intro">One app for every employee, in Tamil and English, on Android and iPhone. It handles attendance, tasks and safety, and shows managers who is where while they are on duty.</p>
+  <h3>Features</h3>
+  <ul class="list cols">
+    <li>Clock in and out only inside the resort boundary (geofence), with optional selfie; works alongside biometric devices</li>
+    <li>Task inbox by role: rooms to clean, fault tickets, room-service deliveries, banquet setup, patrol rounds</li>
+    <li>Push notifications and broadcast messages from managers</li>
+    <li>SOS button that shows the person on the 3D map to security and managers</li>
+    <li>Evacuation roll-call in an emergency</li>
+    <li>Own roster, attendance, leave and payslips</li>
+    <li>Works offline and syncs when back on Wi-Fi</li>
+  </ul>
+  <h3>How location works</h3>
+  <div class="scroll"><table>
+    <thead><tr><th>Layer</th><th>Accuracy</th><th>Used for</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Phone GPS</td><td>About 3–10 m outdoors</td><td>Lawns, grounds, paths, parking</td></tr>
+      <tr><td class="k">Bluetooth beacons</td><td>Which building and floor</td><td>Indoors, where GPS is weak: Park Wing floors, kitchen, halls, stores</td></tr>
+      <tr><td class="k">QR checkpoints</td><td>Exact spot</td><td>Security patrols, public-area cleaning rounds</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Privacy rules</h3>
+  <ul class="list">
+    <li>Location is shared only while the person is on shift; the app shows a visible "Location on: on duty" notice</li>
+    <li>No tracking off duty or outside the resort</li>
+    <li>Staff can see their own location history; it is kept for 90 days (adjustable) unless needed for an incident</li>
+    <li>Written consent and a tracking policy at onboarding, as data-protection law requires</li>
+  </ul>
+  <p><b>Technical note.</b> A web page can't track location in the background, so the staff app is packaged as a real phone app (using Capacitor) built from the same code as the web portal. It needs good Wi-Fi coverage across the whole site, which is checked in the Phase 0 survey.</p>
+</section>
+
+<!-- 13 -->
+<section id="studio">
+  <h2><span class="num">13</span>Editing the 3D resort (Twin Studio)</h2>
+  <p class="intro">Anyone with permission can add, change or remove parts of the resort in a few minutes, without a developer. Every change is a draft until published, and any version can be restored.</p>
+  <div class="flow"><span>Open "Edit resort"</span><i>→</i><span>Change on the plan</span><i>→</i><span>Preview in 3D</span><i>→</i><span>Check bookings affected</span><i>→</i><span>Publish</span><i>→</i><span>Logged in God Mode</span></div>
+  <ul class="list cols">
+    <li><b>Plan view and 3D side by side:</b> top-down plan over your drone photo, with live 3D preview</li>
+    <li><b>Add from templates:</b> room block, villa, hall, restaurant, kitchen, lawn, pool, tent or pavilion, path, parking, gate, tree group, or any custom building</li>
+    <li><b>Draw:</b> tap the corners of a new building on the plan, then set floors, height, roof type and colour</li>
+    <li><b>Edit:</b> drag to move, handles to resize and rotate, rename, recolour, add or remove floors</li>
+    <li><b>Rooms in one step:</b> set rooms per floor and a numbering pattern (for example 401–412) and the rooms are created in the HMS too, after confirmation</li>
+    <li><b>Safe deletion:</b> removing a room or venue with future bookings is blocked until those bookings are moved; deleted items are archived, not erased</li>
+    <li><b>Links:</b> every 3D object is linked to its HMS record: room number, venue, outlet, store or asset</li>
+    <li><b>Architect models:</b> upload a detailed 3D model (.glb) for any building</li>
+    <li><b>Temporary set-ups:</b> a wedding stage or mandap on the Grand Lawn for a date range, shown only on those dates</li>
+    <li><b>History:</b> undo and redo, every published version kept, compare versions, one-tap rollback</li>
+    <li><b>Permissions:</b> Ops Manager can draft; MD or GM publishes</li>
+  </ul>
+</section>
+
+<!-- 14 -->
+<section id="integrations">
+  <h2><span class="num">14</span>Integrations &amp; hardware</h2>
+  <h3>Outside services</h3>
+  <div class="scroll wide"><table>
+    <thead><tr><th>Service</th><th>Purpose</th><th>Example providers (choose in Phase 0)</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Channel manager</td><td>Rates and availability on every OTA, bookings in automatically</td><td>STAAH, eZee Centrix, SiteMinder, Su</td></tr>
+      <tr><td class="k">OTAs</td><td>Through the channel manager</td><td>MakeMyTrip/Goibibo, Booking.com, Agoda, Expedia, Airbnb</td></tr>
+      <tr><td class="k">Payments</td><td>UPI QR on bills, card machines, payment links, refunds</td><td>Razorpay, Cashfree, PayU; card machines from Pine Labs, Paytm, Razorpay</td></tr>
+      <tr><td class="k">GST e-invoice and returns</td><td>IRN generation, return filing data</td><td>A GST Suvidha Provider such as ClearTax, Masters India, IRIS</td></tr>
+      <tr><td class="k">WhatsApp Business</td><td>Guest messages, MD flash report, staff alerts</td><td>Gupshup, Interakt, WATI</td></tr>
+      <tr><td class="k">SMS and email</td><td>Sign-in codes, notices, invoices</td><td>Any Indian SMS provider with DLT registration</td></tr>
+      <tr><td class="k">Accounting</td><td>Data for your CA</td><td>Tally Prime</td></tr>
+      <tr><td class="k">Door locks</td><td>Key card encoding at check-in</td><td>Depends on installed brand (Hafele, ASSA ABLOY/VingCard, dormakaba)</td></tr>
+      <tr><td class="k">Biometric attendance</td><td>Staff punch</td><td>eSSL, ZKTeco</td></tr>
+      <tr><td class="k">CCTV</td><td>Camera views from the 3D map</td><td>Existing recorder (Hikvision, CP Plus)</td></tr>
+      <tr><td class="k">ID verification</td><td>Verified guest IDs</td><td>DigiLocker (optional)</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Hardware on site</h3>
+  <p>Quantities are estimates and are confirmed in the Phase 0 site survey.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>Item</th><th>Qty</th><th>Where</th></tr></thead>
+    <tbody>
+      <tr><td class="k">10" Android tablets with rugged cases</td><td class="n">6–8</td><td>Captains, bar, housekeeping supervisor</td></tr>
+      <tr><td class="k">Kitchen display screens</td><td class="n">4–5</td><td>One per kitchen station, one at the bar</td></tr>
+      <tr><td class="k">80 mm thermal printers (network)</td><td class="n">6–8</td><td>Kitchen stations, bar, restaurant cashier, front desk</td></tr>
+      <tr><td class="k">Front desk PCs, ID scanner, signature tablet</td><td class="n">2 sets</td><td>Reception</td></tr>
+      <tr><td class="k">Key card encoder</td><td class="n">1–2</td><td>Reception</td></tr>
+      <tr><td class="k">Card machines and UPI QR stands</td><td class="n">3–4</td><td>Reception, restaurant, bar, banquets</td></tr>
+      <tr><td class="k">Edge box (mini PC) with UPS</td><td class="n">1</td><td>Server or IT room</td></tr>
+      <tr><td class="k">Outdoor Wi-Fi mesh across the site</td><td class="n">Per survey</td><td>Whole resort, including lawns and grounds</td></tr>
+      <tr><td class="k">Two internet lines plus 4G backup router</td><td class="n">1 set</td><td>IT room</td></tr>
+      <tr><td class="k">Bluetooth beacons</td><td class="n">40–60</td><td>One per building floor or zone</td></tr>
+      <tr><td class="k">Biometric attendance devices</td><td class="n">2</td><td>Staff entrance</td></tr>
+      <tr><td class="k">Barcode scanners and label printer</td><td class="n">2</td><td>Stores</td></tr>
+      <tr><td class="k">Large screen for the 3D Command view</td><td class="n">1–2</td><td>MD office, front office</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- 15 -->
+<section id="tech">
+  <h2><span class="num">15</span>Technology</h2>
+  <p class="intro">Chosen to keep the system fast, cheap to run, and maintainable by a small team for years.</p>
+  <div class="scroll wide"><table>
+    <thead><tr><th>Layer</th><th>Choice</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Overall design</td><td>One backend with clearly separated modules</td><td>Faster to build and cheaper to run than dozens of small services; modules can be split out later if ever needed</td></tr>
+      <tr><td class="k">Backend</td><td>TypeScript on Node.js</td><td>Same language and data types as the apps, so the 3D dashboard and HMS can never disagree</td></tr>
+      <tr><td class="k">Database</td><td>PostgreSQL, plus Redis for live updates and job queues</td><td>Reliable for money and tax data; built-in permissions and partitioned audit tables</td></tr>
+      <tr><td class="k">Live updates</td><td>WebSockets from one event stream</td><td>The 3D map, God Mode, kitchen screens and phones all update within a second</td></tr>
+      <tr><td class="k">Web portal</td><td>React and TypeScript, installable as an app; same fonts and colours as the 3D dashboard</td><td>One look across the whole product</td></tr>
+      <tr><td class="k">3D</td><td>The existing Three.js twin, extended with Twin Studio</td><td>Already built, light and fast</td></tr>
+      <tr><td class="k">Phone and tablet apps</td><td>The same code packaged with Capacitor for Android and iPhone</td><td>Background GPS, printing and offline use, without a separate code base</td></tr>
+      <tr><td class="k">Offline</td><td>Local storage on devices plus the on-site edge box</td><td>Orders, KOTs, bills and housekeeping continue without internet and sync later</td></tr>
+      <tr><td class="k">Hosting</td><td>Render now; AWS Mumbai when live data starts, if data must stay in India</td><td>Staging and production environments, automatic deploys from GitHub</td></tr>
+      <tr><td class="k">Backups</td><td>Continuous backup with point-in-time restore, monthly restore drill</td><td>At most 5 minutes of data at risk; back within 2 hours after a disaster</td></tr>
+      <tr><td class="k">Security</td><td>Two-factor sign-in, device registration, encryption in transit and at rest, server-side permission checks, secrets vault, external penetration test before go-live</td><td>Guest IDs and money need it</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Speed targets</h3>
+  <div class="scroll"><table>
+    <thead><tr><th>Action</th><th>Target</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Portal opens on 4G</td><td class="n">&lt; 2 s</td></tr>
+      <tr><td class="k">Tap on captain tablet responds</td><td class="n">&lt; 0.15 s</td></tr>
+      <tr><td class="k">KOT reaches the kitchen</td><td class="n">&lt; 2 s</td></tr>
+      <tr><td class="k">3D dashboard on a tablet</td><td class="n">60 fps</td></tr>
+      <tr><td class="k">Any report opens</td><td class="n">&lt; 3 s</td></tr>
+      <tr><td class="k">Night audit completes</td><td class="n">&lt; 5 min</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Core records</h3>
+  <p>Property, Space (every room, venue, outlet, store and asset, each linked to the 3D model), Guest, Reservation, Stay, Folio and Charge, Payment, Invoice (GST and VAT), Order and KOT, Menu item and Recipe, Stock item, Stock movement, Purchase order, Vendor, Ledger entry, Tax entry (GST, TDS, TCS, VAT), Event booking and BEO, Housekeeping task, Maintenance ticket, Asset, Employee, Shift, Attendance, Payroll run, Location ping, Licence, Audit event.</p>
+</section>
+
+<!-- 16 -->
+<section id="phases">
+  <h2><span class="num">16</span>Phases</h2>
+  <p class="intro">Phases overlap so that separate teams work in parallel. The first go-live replaces the current front office and restaurant billing at the end of Phase 3, around month 5. Every module joins God Mode from its first day.</p>
+  <div class="timeline"><div class="tl-grid">
+    <div class="tl-axis"><span></span><div class="tl-scale"><span style="left:0%">W1</span><span style="left:25%">W13</span><span style="left:50%">W26</span><span style="left:75%">W39</span><span style="left:98%">W52</span></div></div>
+    <div class="tl-row"><div class="tl-label"><small>P1</small>3D Command (done)</div><div class="tl-track"><div class="tl-bar done" style="left:0%;width:2%"></div></div></div>
+    <div class="tl-row"><div class="tl-label"><small>P0</small>Discovery &amp; compliance</div><div class="tl-track"><div class="tl-bar" style="left:0%;width:7.7%"></div></div></div>
+    <div class="tl-row"><div class="tl-label"><small>P2</small>Core, front office, billing</div><div class="tl-track"><div class="tl-bar" style="left:7.7%;width:19.2%"></div></div></div>
+    <div class="tl-row"><div class="tl-label"><small>P3</small>Restaurant, kitchen, bar</div><div class="tl-track"><div class="tl-bar go" style="left:23.1%;width:15.4%"></div></div></div>
+    <div class="tl-row"><div class="tl-label"><small>P4</small>Housekeeping, staff app, GPS</div><div class="tl-track"><div class="tl-bar" style="left:34.6%;width:15.4%"></div></div></div>
+    <div class="tl-row"><div class="tl-label"><small>P5</small>Stores &amp; purchase</div><div class="tl-track"><div class="tl-bar" style="left:46.2%;width:11.5%"></div></div></div>
+    <div class="tl-row"><div class="tl-label"><small>P6</small>Accounts &amp; full compliance</div><div class="tl-track"><div class="tl-bar" style="left:53.8%;width:19.2%"></div></div></div>
+    <div class="tl-row"><div class="tl-label"><small>P7</small>Banquets, sales, guest channels</div><div class="tl-track"><div class="tl-bar" style="left:65.4%;width:15.4%"></div></div></div>
+    <div class="tl-row"><div class="tl-label"><small>P8</small>HR &amp; payroll</div><div class="tl-track"><div class="tl-bar" style="left:78.8%;width:11.5%"></div></div></div>
+    <div class="tl-row"><div class="tl-label"><small>P9</small>God Mode complete, analytics</div><div class="tl-track"><div class="tl-bar" style="left:86.5%;width:11.5%"></div></div></div>
+    <div class="tl-row"><div class="tl-label"><small>P10</small>Hardening, then ongoing</div><div class="tl-track"><div class="tl-bar" style="left:96.2%;width:3.8%"></div></div></div>
+    <div class="legend"><span><i style="background:var(--ok)"></i>Done</span><span><i style="background:var(--accent)"></i>Build</span><span><i style="background:var(--marigold)"></i>Ends with first go-live</span></div>
+  </div></div>
+
+  <div class="phase">
+    <h3><span class="tag done">Done</span> Phase 1 · 3D Command dashboard</h3>
+    <p>Animated 3D model of the resort, room status by date, hover and tap cards, live KOT and check-in animations, God Mode preview, running on sample data and hosted on Render.</p>
+  </div>
+
+  <div class="phase">
+    <h3>Phase 0 · Discovery &amp; compliance foundation <span class="when">Weeks 1–4</span></h3>
+    <div class="phase-grid">
+      <ul class="list">
+        <li>Workshops with each department: how work is done today, every form and register in use</li>
+        <li>Export of data from the current HMS and POS: guests, future bookings, advances, menus</li>
+        <li>CA workshop: GST, TDS, TCS and VAT set-up decided and signed; tax test book written</li>
+        <li>Excise and licence inventory with copies and expiry dates</li>
+        <li>Site survey: drone photo, final room and venue list, Wi-Fi and network survey, hardware list</li>
+        <li>Clickable designs of every main screen, in the same style as the 3D dashboard</li>
+        <li>Tamil terms glossary for staff screens</li>
+        <li>Roles, approval limits and alert rules agreed with the MD</li>
+      </ul>
+      <div class="exit"><b>Done when</b>Scope, tax set-up and designs are signed off by the MD and the CA.</div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <h3>Phase 2 · Core platform, front office &amp; billing <span class="when">Weeks 5–14</span></h3>
+    <div class="phase-grid">
+      <ul class="list">
+        <li>Logins, roles, two-factor sign-in, device registration, approval engine</li>
+        <li>God Mode event log from day one (live stream, tamper-evident storage)</li>
+        <li>Property, rooms, venues and rate plans; reservations, check-in and check-out, folios, cashier shifts, night audit</li>
+        <li>GST engine and invoicing, e-invoice, advance receipts</li>
+        <li>Form C, ID scanning, guest profiles, city ledger</li>
+        <li>UPI and card payments, WhatsApp bills</li>
+        <li>3D dashboard switched from sample data to live data</li>
+        <li>Twin Studio version 1: add, edit and delete with versions and rollback</li>
+      </ul>
+      <div class="exit"><b>Done when</b>Reception runs full days alongside the old system for two weeks and the figures match.</div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <h3>Phase 3 · Restaurant, kitchen &amp; bar <span class="when">Weeks 13–20</span> <span class="tag god">First go-live</span></h3>
+    <div class="phase-grid">
+      <ul class="list">
+        <li>Outlets, menus, captain tablets, table plans, KOT and BOT routing</li>
+        <li>Kitchen screens, printers through the edge box, offline ordering</li>
+        <li>Room service with delivery tracking on the 3D map</li>
+        <li>Billing with GST and VAT split, voids and discount controls, UPI on bill</li>
+        <li>Bar bottle and peg tracking, dry-day and licensed-hours locks, VAT invoice series</li>
+        <li>Basic recipes for automatic stock deduction</li>
+      </ul>
+      <div class="exit"><b>Done when</b>Front office and all F&amp;B outlets go live on the new system, starting on the 1st of a month so the GST period is clean.</div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <h3>Phase 4 · Housekeeping, staff app, GPS, engineering &amp; security <span class="when">Weeks 19–26</span></h3>
+    <div class="phase-grid">
+      <ul class="list">
+        <li>Full housekeeping module with attendant and supervisor apps</li>
+        <li>Staff phone app (Android and iPhone): attendance, tasks, SOS, Tamil interface</li>
+        <li>GPS, beacon and QR location; live staff layer on the 3D map</li>
+        <li>Engineering: assets on 3D, preventive maintenance, tickets, meters, compliance calendar</li>
+        <li>Security: gate register, patrols, incidents, CCTV pins</li>
+      </ul>
+      <div class="exit"><b>Done when</b>Every room's status and every on-duty employee is live on the 3D map.</div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <h3>Phase 5 · Stores, purchase &amp; inventory <span class="when">Weeks 25–30</span></h3>
+    <div class="phase-grid">
+      <ul class="list">
+        <li>All stores, indents, POs, goods receipt, three-way matching</li>
+        <li>Vendor master with GSTIN, PAN, TDS category and MSME status</li>
+        <li>Full recipe costing, wastage, daily market list, stock counts</li>
+        <li>Liquor store and excise stock registers</li>
+      </ul>
+      <div class="exit"><b>Done when</b>A full month closes with stock variance under the agreed limit.</div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <h3>Phase 6 · Accounts &amp; full compliance <span class="when">Weeks 29–38</span></h3>
+    <div class="phase-grid">
+      <ul class="list">
+        <li>Ledgers, payables and receivables, bank, UPI, card and OTA reconciliation</li>
+        <li>GST return data, Invoice Management System actions, credit reversal, reverse charge</li>
+        <li>TDS engine, challans, quarterly statement data, certificates, Form 26AS matching</li>
+        <li>VAT return data; fixed assets and depreciation</li>
+        <li>Audit trail, period locks, Tally sync, department P&amp;L</li>
+      </ul>
+      <div class="exit"><b>Done when</b>The CA files one full quarter's GST and TDS from the system's data without manual correction.</div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <h3>Phase 7 · Banquets, sales &amp; guest channels <span class="when">Weeks 35–42</span></h3>
+    <div class="phase-grid">
+      <ul class="list">
+        <li>Venue calendar, quotes, contracts, advances, event orders (BEO) to every department</li>
+        <li>Sales CRM and corporate accounts</li>
+        <li>Channel manager, website booking engine, online check-in</li>
+        <li>WhatsApp guest journey, in-room QR, reviews, activities</li>
+      </ul>
+      <div class="exit"><b>Done when</b>A full wedding runs end to end in the system, from enquiry to final bill.</div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <h3>Phase 8 · HR &amp; payroll <span class="when">Weeks 41–46</span></h3>
+    <div class="phase-grid">
+      <ul class="list">
+        <li>Employee records, rosters, leave</li>
+        <li>Payroll with PF, ESI, professional tax, labour welfare fund and salary TDS</li>
+        <li>Payslips and Form 16 in the staff app; training records</li>
+      </ul>
+      <div class="exit"><b>Done when</b>Two payroll months run in parallel with the current method and match.</div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <h3>Phase 9 · God Mode complete &amp; analytics <span class="when">Weeks 45–50</span></h3>
+    <div class="phase-grid">
+      <ul class="list">
+        <li>Full 3D replay of any past day, person view, all alert rules</li>
+        <li>MD flash report, department dashboards, forecasts</li>
+        <li>Twin Studio extras: temporary set-ups, architect models</li>
+      </ul>
+      <div class="exit"><b>Done when</b>The MD can answer "what happened, where and who did it" for any minute of any day.</div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <h3>Phase 10 · Hardening, then ongoing improvement <span class="when">Week 51 onward</span></h3>
+    <div class="phase-grid">
+      <ul class="list">
+        <li>External security test, peak-load test (a 1,000-guest wedding night), disaster-recovery drill</li>
+        <li>Assistant built on Claude: ask questions in Tamil or English ("liquor variance last week?"), daily briefing, review replies</li>
+        <li>Demand forecasting and room-rate suggestions</li>
+        <li>Energy meters and smart sensors on the 3D map; digital room keys; guest app</li>
+        <li>Ready for a second property</li>
+      </ul>
+      <div class="exit"><b>Done when</b>All tests pass and the system has run a full month with no critical issues.</div>
+    </div>
+  </div>
+</section>
+
+<!-- 17 -->
+<section id="delivery">
+  <h2><span class="num">17</span>Team, testing &amp; go-live</h2>
+  <h3>Team</h3>
+  <div class="scroll"><table>
+    <thead><tr><th>Role</th><th>People</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Product owner from the resort</td><td class="n">1</td><td>Part time; usually the Operations Manager. Makes day-to-day decisions</td></tr>
+      <tr><td class="k">Hospitality business analyst</td><td class="n">1</td><td>Turns department workflows into detailed specs</td></tr>
+      <tr><td class="k">Tech lead</td><td class="n">1</td><td>Architecture, code quality, security</td></tr>
+      <tr><td class="k">Full-stack developers</td><td class="n">3–4</td><td>Modules in parallel</td></tr>
+      <tr><td class="k">Mobile developer</td><td class="n">1</td><td>Staff app, captain app, GPS, printers</td></tr>
+      <tr><td class="k">3D and front-end developer</td><td class="n">1</td><td>3D Command, Twin Studio, design system</td></tr>
+      <tr><td class="k">QA engineer</td><td class="n">1</td><td>Automated tests, tax test book, on-site testing</td></tr>
+      <tr><td class="k">UI designer</td><td class="n">1</td><td>Part time</td></tr>
+      <tr><td class="k">Chartered accountant</td><td class="n">1</td><td>Part time; tax design and sign-off</td></tr>
+      <tr><td class="k">Department champions</td><td class="n">1 per dept</td><td>Test each module and train their teams</td></tr>
+    </tbody>
+  </table></div>
+  <p>Claude can write and review a large share of the code, tests and documentation, which keeps the developer team at the smaller end of these ranges. People still make decisions, test on site and install hardware.</p>
+  <h3>Testing</h3>
+  <ul class="list cols">
+    <li>Automated tests run on every change before it reaches the resort</li>
+    <li>Tax test book (100+ CA-signed scenarios) must pass for every release</li>
+    <li>End-to-end tests of whole journeys: booking to checkout, order to bill, indent to payment</li>
+    <li>Offline tests: internet cut during dinner service</li>
+    <li>Load test: peak wedding night with 500+ KOTs an hour</li>
+    <li>User acceptance testing by each department's champion</li>
+    <li>Parallel run of two weeks for every module that replaces an existing process</li>
+  </ul>
+  <h3>Go-live</h3>
+  <ul class="list cols">
+    <li>Each go-live starts on the 1st of a month (GST period) and ideally a quarter (TDS period)</li>
+    <li>Data moved over: guest history, future bookings, advances held, opening stock, ledger opening balances</li>
+    <li>Role-based training in Tamil and English, short video lessons, laminated quick-reference cards</li>
+    <li>Four weeks of on-site support after each go-live</li>
+    <li>Written rollback plan for each go-live</li>
+  </ul>
+</section>
+
+<!-- 18 -->
+<section id="decisions">
+  <h2><span class="num">18</span>Decisions needed from you</h2>
+  <p class="intro">Answers to these start Phase 0.</p>
+  <ol class="qs">
+    <li>Which HMS and restaurant POS do you use today, and can we export their data?</li>
+    <li>What is the legal entity (company, firm or proprietorship), its GSTIN, and the turnover band? This decides e-invoicing, 194Q and the audit-trail rule.</li>
+    <li>The real room list: rooms per building and floor, villas, room types and rates. Did any room or villa sell above ₹7,500 a night last financial year? That decides whether the restaurant is taxed at 18% or 5%.</li>
+    <li>Bar licence type and VAT registration details, and the excise register formats you keep now.</li>
+    <li>Restaurant outlets, kitchen stations and existing printers.</li>
+    <li>Door lock, CCTV and biometric device brands already installed.</li>
+    <li>Banks, payment providers and card machines in use.</li>
+    <li>Channel manager and OTAs you sell on.</li>
+    <li>Staff numbers by department, and whether payroll is in-house or outsourced.</li>
+    <li>Hosting: stay on Render, or move to AWS Mumbai when live guest data starts?</li>
+    <li>Who at the resort will be the product owner?</li>
+    <li>Approval of the staff location-tracking policy (on-duty only).</li>
+  </ol>
+</section>
+
+<footer>Sathya HMS Blueprint · prepared for Sathya Park &amp; Resorts · October 2026. Tax and legal points reflect the law as understood at this date and must be confirmed by your chartered accountant and the excise department before go-live.</footer>
+</main>
+</div>
+
+<script type="module">import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs"; mermaid.initialize({ startOnLoad: true });</script>
+</body>
+</html>
