@@ -8,11 +8,12 @@ import { KitchenView } from './kitchen'
 import { MenuView } from './menu'
 import { SettingsView } from './settings'
 import { BarView } from './bar'
+import { KitchenStockView } from './kitchen-stock'
 
 // The restaurant workspace: a full-screen layer over the 3D map with Orders (captain tablet),
 // Kitchen (kitchen and bar screens), Menu and Licences & tax. Each tab shows only to roles that use it.
 
-type Tab = 'orders' | 'kitchen' | 'menu' | 'bar' | 'settings'
+type Tab = 'orders' | 'kitchen' | 'menu' | 'bar' | 'kstock' | 'settings'
 interface View { load(): Promise<void>; html(): string; click(t: HTMLElement): Promise<boolean> }
 
 export class FnbWorkspace implements Ws {
@@ -28,7 +29,7 @@ export class FnbWorkspace implements Ws {
 
   constructor(public api: Api, public me: Me, public inHouse: Ws['inHouse'], private onClose: () => void) {
     this.captain = new CaptainView(this)
-    this.views = { orders: this.captain, kitchen: new KitchenView(this), menu: new MenuView(this), bar: new BarView(this), settings: new SettingsView(this) }
+    this.views = { orders: this.captain, kitchen: new KitchenView(this), menu: new MenuView(this), bar: new BarView(this), kstock: new KitchenStockView(this), settings: new SettingsView(this) }
     this.tab = this.tabs()[0]?.[0] ?? 'settings'
     this.el = document.createElement('section')
     this.el.className = 'ws'
@@ -53,6 +54,7 @@ export class FnbWorkspace implements Ws {
     if (this.can('kitchen', 'fnb.order')) t.push(['kitchen', 'Kitchen & bar'])
     if (this.can('menu.edit', 'menu.price')) t.push(['menu', 'Menu'])
     if (this.can('bar.stock', 'bar.approve') || this.me.roles.includes('bartender')) t.push(['bar', 'Bar stock'])
+    if (this.can('kitchen.stock', 'kitchen', 'food_cost.view')) t.push(['kstock', 'Kitchen stock'])
     t.push(['settings', 'Licences & tax'])
     return t
   }

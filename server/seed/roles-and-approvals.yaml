@@ -29,6 +29,9 @@ sign_in:
 #   fnb.discount     approve a restaurant discount above the requester's limit (within the approver's own limit)
 #   bar.stock        bar brands, TASMAC purchases, breakage, physical counts, stock register
 #   bar.approve      approve bar counts (correcting the book stock) and breakage above a role's limit
+#   kitchen.stock    kitchen ingredients, recipes, receipts into the kitchen, counts
+#   kitchen.approve  approve kitchen wastage above a role's limit
+#   food_cost.view   food cost and menu engineering report
 #   menu.edit        add and edit menu items and tables (price changes go to menu.price for approval)
 #   menu.price       change menu prices and import the menu
 #   bar.settings     licensed bar hours and dry days
@@ -41,7 +44,7 @@ roles:
     permissions: ['*']
     limits: unlimited
   general_manager:
-    permissions: [inventory.edit, devices.approve, users.manage, front_desk, folio.reverse, discount.approve, night_audit, invoice.view, invoice.credit_note, site.edit, site.publish, fnb.order, fnb.void, fnb.bill, fnb.discount, menu.edit, menu.price, bar.settings, bar.stock, bar.approve, licences.edit]
+    permissions: [inventory.edit, devices.approve, users.manage, front_desk, folio.reverse, discount.approve, night_audit, invoice.view, invoice.credit_note, site.edit, site.publish, fnb.order, fnb.void, fnb.bill, fnb.discount, menu.edit, menu.price, bar.settings, bar.stock, bar.approve, kitchen.stock, kitchen.approve, food_cost.view, licences.edit]
     limits: { discount_percent: 25, breakage_per_entry: 10000, refund: 50000, comp_room_nights: 5, purchase_order: 500000, rate_override_below_floor: true }
   operations_manager:
     permissions: [front_desk, folio.reverse, discount.approve, site.edit, fnb.order, fnb.void, fnb.bill, fnb.discount]
@@ -65,13 +68,13 @@ roles:
   room_attendant:
     limits: {}
   fnb_manager:
-    permissions: [fnb.order, fnb.void, fnb.bill, fnb.discount, kitchen, menu.edit]
+    permissions: [fnb.order, fnb.void, fnb.bill, fnb.discount, kitchen, menu.edit, kitchen.stock, kitchen.approve, food_cost.view]
     limits: { discount_percent: 15, void_per_bill: 3000, staff_meal: true, menu_price_change_needs: general_manager }
   captain:
     permissions: [fnb.order, fnb.bill]
     limits: { void_after_kot_print: false }
   chef:
-    permissions: [kitchen]
+    permissions: [kitchen, kitchen.stock]
     limits: { wastage_per_entry: 1000 }
   bar_manager:
     permissions: [fnb.order, fnb.void, fnb.bill, fnb.discount, kitchen, bar.settings, bar.stock]

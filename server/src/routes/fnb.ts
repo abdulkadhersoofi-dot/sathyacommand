@@ -9,6 +9,7 @@ import { createApproval, registerApprovalKind } from './approvals'
 import { requireCaller } from './auth'
 import { vatRatesOn } from './settings'
 import { pourStock, unpourStock } from './bar'
+import { consumeRecipes } from './kitchen-stock'
 
 // Restaurant, room service and bar: menus, tables, orders and the KOT / BOT tickets that send each item
 // to its kitchen or bar station. Cancelling an item after its ticket went to the kitchen needs a manager,
@@ -599,6 +600,7 @@ export function fnbRoutes(app: FastifyInstance, ctx: Ctx) {
         const lines = pending.filter((p) => p.station_id === st.id)
         await t.query(`update order_item set status = 'sent', kot_id = $2 where id = any($1)`, [lines.map((l) => l.id), kid])
         await pourStock(t, who, lines.map((l) => l.id), o.business_date, now())
+        await consumeRecipes(t, who, lines.map((l) => l.id), o.business_date, now())
         const amount = lines.reduce((a, l) => a + l.price_paise * l.qty, 0)
         await appendAudit(t, { actor: who, action: kind === 'BOT' ? 'bot.create' : 'kot.create', entity: { type: 'kot', id: kid }, amount,
           after: { number, order: o.number, orderId: id, station: st.id, table: view.table_label ?? null, room: view.room_no ?? null, items: lines.map((l) => `${l.qty} × ${l.name}`) } }, now())
