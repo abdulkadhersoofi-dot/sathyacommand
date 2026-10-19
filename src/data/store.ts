@@ -104,6 +104,7 @@ export class Store {
   /** Fetch bookings again (live mode, after the server announces a change). */
   async reload() {
     this.reservations = await this.adapter.getReservations({ from: this.rangeFrom, to: this.rangeTo })
+    if (this.live) this.hk = await this.adapter.getHousekeeping()
     this.invalidate('reload')
   }
 
@@ -134,6 +135,16 @@ export class Store {
   private async onSnapshotChanged(e: Extract<DomainEvent, { type: 'snapshot.changed' }>) {
     if (/^(kot|bot|order|order_item)\./.test(e.action)) { await this.reloadOrders(); this.emit('fnb', e); return }
     if (/^(menu_item|menu|outlet|station|table|bar|dry_day|licence|vat_rate|vat_class)\./.test(e.action)) { this.emit('fnb', e); return }
+    if (/^(hk|minibar|laundry|linen|lost_found|public_area)\./.test(e.action)) {
+      this.hk = await this.adapter.getHousekeeping()
+      if (e.action === 'hk.room_ready') {
+        const appId = (this.adapter as { appIdOf?: Map<string, string> }).appIdOf?.get(e.entityId) ?? e.entityId
+        this.pushFeed({ id: `ready-${e.entityId}-${Date.now()}`, at: new Date(), kind: 'hk', spaceId: appId, text: `${this.spaceById.get(appId)?.name ?? 'Room'} is ready: passed inspection (${e.actor})` })
+      }
+      this.invalidate('hk')
+      this.emit('hkchange', e)
+      return
+    }
     if (e.action === 'site.published' || e.action === 'site.restored' || e.action.startsWith('room.')) {
       await this.reloadSpaces()
       if (e.action.startsWith('site.')) {

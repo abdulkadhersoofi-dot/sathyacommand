@@ -66,6 +66,14 @@ export function housekeepingRoutes(app: FastifyInstance, ctx: Ctx) {
     }
   })
 
+  // People who clean rooms (for assigning the day's work).
+  app.get('/api/hk/staff', async (req) => {
+    await need(req, 'hk.manage', 'hk.inspect')
+    return db.query(
+      `select distinct u.id, u.name, array_agg(distinct ur.role_id) as roles from app_user u join user_role ur on ur.user_id = u.id join role r on r.id = ur.role_id
+        where u.active and 'hk.attend' = any(r.permissions) group by u.id order by u.name`)
+  })
+
   // ---------- tasks ----------
   app.get('/api/hk/tasks', async (req) => {
     const who = await need(req, 'hk.attend', 'hk.manage', 'hk.inspect')

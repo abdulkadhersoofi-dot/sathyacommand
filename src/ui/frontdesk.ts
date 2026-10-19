@@ -53,6 +53,7 @@ export class FrontDesk {
       <div class="sec-title">Arrivals <span>${arrivals.length}</span></div>
       ${arrivals.length ? arrivals.map((r) => card(r, r.status === 'confirmed'
         ? `${statusPill('arriving')}<span class="mono">ETA ${r.eta ?? '—'}</span>${btn('checkin', r.id, 'Check in', true)}`
+        : r.status === 'checked-out' ? `${tonePill('Checked out', '--st-ooo')}<span class="mono">${fmtTime(r.checkOutAt)}</span>`
         : `${statusPill('occupied').replace('In-house', 'Checked in')}<span class="mono">${fmtTime(r.checkInAt)}</span>`)).join('') : '<div class="empty">No arrivals today.</div>'}
       <div class="sec-title">Due out <span>${departures.length}</span></div>
       ${departures.length ? departures.map((r) => card(r, `${statusPill('departing')}${btn('pay', r.id, 'Payment')}${btn('checkout', r.id, 'Check out', true)}`)).join('') : '<div class="empty">No departures due.</div>'}

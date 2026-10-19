@@ -11,6 +11,7 @@ import { ensureLiquorClasses } from './routes/settings'
 import { ensureBarStock } from './routes/bar'
 import { ensureRecipes } from './routes/kitchen-stock'
 import { ensureRoomHk } from './hk-core'
+import { ensureLinenLaundryAreas } from './routes/linen-laundry'
 
 // DATABASE_URL set → PostgreSQL (production). Otherwise a local PGlite database in ./data.
 // MD_MOBILE gives the Managing Director's login its mobile number on first start.
@@ -26,6 +27,7 @@ await ensureRestaurant(db)
 await ensureBarStock(db)
 await ensureRecipes(db)
 await ensureRoomHk(db)
+await ensureLinenLaundryAreas(db)
 const app = buildApp(db, { logger: true, printAgentKey: process.env.PRINT_AGENT_KEY || undefined, appDir: process.env.APP_DIR ?? fileURLToPath(new URL('../../dist/', import.meta.url)) })
 app.log.info({ engine: db.engine, migrationsApplied: applied, seeded }, 'database ready')
 await app.listen({ host: '0.0.0.0', port: Number(process.env.PORT ?? 8080) })

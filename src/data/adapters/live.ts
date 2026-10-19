@@ -9,6 +9,7 @@ import { todayKey } from '../dates'
 interface ServerSpace {
   id: string; twin_id: string | null; kind: string; name: string; room_no: string | null; room_type_id: string | null
   room_type: string | null; base_rate_paise: number | null; max_occupancy: number | null; floor: number | null; capacity: number | null
+  hk_status: string | null; dnd: boolean | null
 }
 interface ServerReservation {
   id: string; status: string; guest: string; mobile: string | null; nationality: string; vip: boolean; pax: number
@@ -87,7 +88,23 @@ export class LiveAdapter implements HmsAdapter {
       placedAt: o.opened_at, updatedAt: o.last_kot_at!,
     }))
   }
-  async getHousekeeping(): Promise<Record<string, HkStatus>> { return {} }
+  /** Housekeeping status for the 3D colours, plus the detail (occupied, do-not-disturb) for the room panel. */
+  readonly hkDetail = new Map<string, { status: string; dnd: boolean }>()
+  async getHousekeeping(): Promise<Record<string, HkStatus>> {
+    const snap = await this.snapshot(todayKey(), todayKey())
+    const MAP: Record<string, HkStatus> = {
+      vacant_clean: 'clean', occupied_clean: 'clean', inspected: 'inspected', vacant_dirty: 'dirty', occupied_dirty: 'dirty', out_of_order: 'out-of-order', out_of_service: 'out-of-order',
+    }
+    const out: Record<string, HkStatus> = {}
+    this.hkDetail.clear()
+    for (const s of snap.spaces) {
+      if (!s.hk_status) continue
+      const id = s.twin_id ?? s.id
+      out[id] = MAP[s.hk_status] ?? 'clean'
+      this.hkDetail.set(id, { status: s.hk_status, dnd: !!s.dnd })
+    }
+    return out
+  }
 
   subscribe(onEvent: (e: DomainEvent) => void) {
     let timer = 0

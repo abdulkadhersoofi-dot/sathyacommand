@@ -74,6 +74,7 @@ describe('the day\'s work', () => {
       if (x.statusCode !== 200) { const b = (await R.get(`/api/reservations/${ids.B}`, FD)).json(); await R.post('/api/cashier/open', FD, { openingFloat: 0 }); await R.post(`/api/folios/${b.folios[0].id}/payments`, FD, { method: 'cash', amount: b.balance / 100 }); await R.post(`/api/reservations/${ids.B}/check-out`, FD) }
     })
     expect((await R.post('/api/hk/assign', A1, { attendants: [A1id] })).statusCode).toBe(403)
+    expect((await R.get('/api/hk/staff', EH)).json().map((u: { name: string }) => u.name)).toEqual(['Kavitha', 'Muthu', 'Revathi', 'Selvi'])
     const r = (await R.post('/api/hk/assign', EH, { attendants: [A1id, A2id] })).json()
     expect(r.assigned).toBe(3)       // 101 check-out (Bala left), 102 and 201 stay-overs
     const credits = r.workload.map((w: { credits: number }) => w.credits).sort()

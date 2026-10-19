@@ -5,6 +5,8 @@ import { Api, serverAvailable } from './live/api'
 import { signIn, type Me } from './live/signin'
 import { FrontDesk } from './ui/frontdesk'
 import { FnbWorkspace } from './fnb/workspace'
+import { HkWorkspace } from './hk/workspace'
+import { Outbox } from './live/outbox'
 import { Store, type Layer } from './data/store'
 import type { DomainEvent, HkStatus } from './data/types'
 import { addDays, fmtDay, inr, setToday, todayKey } from './data/dates'
@@ -37,6 +39,7 @@ const store = new Store(adapter)
 store.live = liveMode
 let fd: FrontDesk | null = null
 let fnb: FnbWorkspace | null = null
+let hkWs: HkWorkspace | null = null
 
 let tab: Tab = 'live'
 let tipId: string | null = null
@@ -157,6 +160,7 @@ function renderAll() {
 store.on((why, payload) => {
   if (why === 'select') return
   if (why === 'site') { if (!studio.open) void refreshLayout(); return }
+  if (why === 'hkchange' && hkWs?.open && !hkWs.modal.isOpen) void hkWs.refresh()
   if (why === 'fnb') {
     // Another tablet changed an order or the menu: refresh the restaurant screen unless a form is open there.
     if (fnb?.open && !fnb.modal.isOpen) void fnb.refresh()
@@ -185,6 +189,8 @@ document.addEventListener('click', async (e) => {
   const t = e.target as HTMLElement
   const layer = t.closest<HTMLElement>('[data-layer]')
   if (layer) { store.toggleLayer(layer.dataset.layer as Layer); return }
+  const hkRoom = t.closest<HTMLElement>('[data-hk-room]')
+  if (hkRoom && hkWs && liveAdapter) { e.stopPropagation(); void hkWs.openRoom(liveAdapter.serverIdOf.get(hkRoom.dataset.hkRoom!) ?? hkRoom.dataset.hkRoom!); return }
   const fnbOrder = t.closest<HTMLElement>('[data-fnb-order]')
   if (fnbOrder && fnb) { e.stopPropagation(); void fnb.openOrder(fnbOrder.dataset.fnbOrder!); return }
   const fdBtn = t.closest<HTMLElement>('[data-fd]')
@@ -340,6 +346,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     if (document.querySelector('.fd-modal:not([hidden])')) { document.querySelectorAll<HTMLElement>('.fd-modal:not([hidden])').forEach((m) => m.querySelector<HTMLElement>('[data-x]')?.click()); return }
     if (fnb?.open) { fnb.hide(); return }
+    if (hkWs?.open) { hkWs.hide(); return }
     if (studio.open) return; if (!modal.hidden) modal.hidden = true; else if (fd && document.querySelector('.fd-modal:not([hidden])')) fd.close(); else if (drawerId) closeDrawer(); else hideTip() }
 })
 
@@ -366,10 +373,15 @@ if (api && me && liveAdapter) {
   out.addEventListener('click', async () => { try { await api!.post('/auth/sign-out') } finally { api!.setToken(null); location.reload() } })
   document.querySelector('.topbar-actions')!.appendChild(out)
   fd = new FrontDesk(api, store, me, () => renderSide())
-  fnb = new FnbWorkspace(api, me, () => store.reservations.filter((r) => r.status === 'in-house').map((r) => ({ id: r.id, guest: r.guest, roomNo: r.roomNo ?? null })), () => renderSide())
+  const outbox = new Outbox(api)
+  fnb = new FnbWorkspace(api, me, outbox, () => store.reservations.filter((r) => r.status === 'in-house').map((r) => ({ id: r.id, guest: r.guest, roomNo: r.roomNo ?? null })), () => renderSide())
+  hkWs = new HkWorkspace(api, me, outbox, () => renderSide())
+  const hkBtn = $('#btn-hk')
+  hkBtn.hidden = !HkWorkspace.allowed(me)
+  hkBtn.addEventListener('click', () => { if (hkWs!.open) hkWs!.hide(); else { if (fnb?.open) fnb.hide(); void hkWs!.show() } })
   const fnbBtn = $('#btn-fnb')
   fnbBtn.hidden = false
-  fnbBtn.addEventListener('click', () => { if (fnb!.open) fnb!.hide(); else void fnb!.show() })
+  fnbBtn.addEventListener('click', () => { if (fnb!.open) fnb!.hide(); else { if (hkWs?.open) hkWs.hide(); void fnb!.show() } })
   setTab('arrivals')
 }
 store.load().then(renderAll).catch((err) => toast(`Couldn't load HMS data: ${err.message}`))

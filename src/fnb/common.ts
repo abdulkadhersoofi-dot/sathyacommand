@@ -1,7 +1,4 @@
-import type { Api } from '../live/api'
-import type { Me } from '../live/signin'
-import type { FormModal } from '../ui/form-modal'
-import type { Outbox } from '../live/outbox'
+import type { WorkspaceHost } from '../ui/workspace'
 import { esc } from '../ui/dom'
 
 // Shared pieces for the restaurant screens (orders, kitchen, menu, licences & tax).
@@ -17,22 +14,12 @@ export interface MenuItem {
 export interface Table { id: string; outlet_id: string; label: string; seats: number; section: string | null; order_id: string | null; order_number: number | null; covers: number | null; order_status: string | null; opened_at: string | null; ready_tickets: number }
 export interface Ticket { id: string; number: number; kind: 'KOT' | 'BOT'; station_id: string; prints: number; copy: boolean; order: { number: number; outlet: string; table: string | null; room: string | null; covers: number }; lines: { qty: number; name: string; note: string | null; seat: number | null; course: number; alert?: string[]; void?: boolean }[] }
 
-/** What each screen gets from the workspace. */
-export interface Ws {
-  api: Api
-  me: Me
-  modal: FormModal
-  can(...permissions: string[]): boolean
+/** What each restaurant screen gets from the workspace. */
+export interface Ws extends WorkspaceHost {
   outlets: Outlet[]
   stations: Station[]
-  outbox: Outbox
-  /** True while the server cannot be reached (screens show the last copy they saw). */
-  offline: boolean
-  /** GET that falls back to the last good copy kept on this tablet when the server cannot be reached. */
-  cached<T>(path: string): Promise<T>
   /** Checked-in guests, for room-service orders. */
   inHouse(): { id: string; guest: string; roomNo: string | null }[]
-  render(): void
 }
 
 export const rs = (paise: number) => '₹' + (paise / 100).toLocaleString('en-IN', { minimumFractionDigits: paise % 100 ? 2 : 0, maximumFractionDigits: 2 })

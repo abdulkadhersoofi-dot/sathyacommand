@@ -15,8 +15,8 @@ export function dashboardRoutes(app: FastifyInstance, ctx: Ctx) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(q.from ?? '') || !/^\d{4}-\d{2}-\d{2}$/.test(q.to ?? '')) throw new HttpError(400, 'Send from and to (YYYY-MM-DD).')
     const spaces = await db.query(
       `select s.id, s.twin_id, s.kind, s.name, s.room_no, s.room_type_id, t.name as room_type, t.base_rate_paise, t.max_occupancy,
-              s.building, s.floor, s.capacity, s.sellable
-         from space s left join room_type t on t.id = s.room_type_id where s.active order by s.building, s.floor, s.room_no, s.name`)
+              s.building, s.floor, s.capacity, s.sellable, h.status as hk_status, h.dnd
+         from space s left join room_type t on t.id = s.room_type_id left join room_hk h on h.space_id = s.id where s.active order by s.building, s.floor, s.room_no, s.name`)
     const reservations = await db.query<{ mobile: string | null }>(
       `select r.id, r.status, g.name as guest, g.mobile, g.nationality, g.vip, r.adults + r.children as pax, r.arrival::text, r.departure::text,
               r.eta, r.checked_in_at, r.checked_out_at, r.source, r.requests, r.room_type_id, r.space_id, s.twin_id, s.room_no,

@@ -182,7 +182,10 @@ export function drawerHtml(store: Store, id: string) {
       body += `<div class="guest"><div class="dr-kicker">Vacant on ${fmtDay(store.date)}</div><div class="note">${n ? `Next: ${esc(n.guest)}, arriving ${fmtDay(n.arrival)}` : 'No upcoming bookings in the next 60 days.'}</div></div>`
     }
     if (store.isToday && store.live) {
-      body += `<div class="sec-title">Housekeeping</div><div class="empty">Live room cleaning status arrives with the housekeeping module (Phase 4).</div>`
+      const d = (store.adapter as { hkDetail?: Map<string, { status: string; dnd: boolean }> }).hkDetail?.get(id)
+      const label: Record<string, string> = { vacant_clean: 'Clean', inspected: 'Ready (inspected)', vacant_dirty: 'Dirty', occupied_clean: 'Occupied · serviced', occupied_dirty: 'Occupied · to service', out_of_order: 'Out of order', out_of_service: 'Out of service' }
+      body += `<div class="sec-title">Housekeeping <span>${d ? hkPill(store.hk[id] ?? 'clean').replace(/>[^<]*<\/span>$/, `>${label[d.status] ?? d.status}</span>`) : ''}${d?.dnd ? ' ' + tonePill('Do not disturb', '--god') : ''}</span></div>
+        <div class="actions"><button class="btn" data-hk-room="${esc(id)}">Housekeeping…</button></div>`
     } else if (store.isToday) {
       const hk = store.hk[id] ?? 'clean'
       body += `<div class="sec-title">Housekeeping <span>${hkPill(hk)}</span></div><div class="actions">`
