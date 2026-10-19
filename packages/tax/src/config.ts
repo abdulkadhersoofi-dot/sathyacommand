@@ -47,7 +47,10 @@ export interface TaxConfig {
     }
   }
   tn_vat: { rate_table: { class: string; rate: number | null }[] }
-  liquor_controls: { legal_age: number; licensed_hours: { open: string | null; close: string | null }; dry_days: string[] }
+  liquor_controls: {
+    legal_age: number; licensed_hours: { open: string | null; close: string | null }; dry_days: string[]
+    purchase_only_from?: string[]; peg_sizes_ml?: number[]; variance_alert_percent?: number
+  }
 }
 
 export const DEFAULT_CONFIG_PATH = fileURLToPath(new URL('../config/tax-config.yaml', import.meta.url))

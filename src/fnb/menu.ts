@@ -16,6 +16,7 @@ export class MenuView {
   private classes: { id: string; label: string; active: boolean }[] = []
   private allOutlets: Outlet[] = []
   private allStations: Station[] = []
+  private brands: { id: string; name: string; liquor_class: string; bottle_ml: number; active: boolean }[] = []
 
   constructor(private ws: Ws) {}
 
@@ -28,6 +29,7 @@ export class MenuView {
       this.tables = (await this.ws.api.get<(Table & { active?: boolean })[]>(`/api/fnb/tables?outletId=${this.outletId}`))
     }
     this.classes = await this.ws.api.get('/api/vat-rates')
+    this.brands = await this.ws.api.get('/api/bar/brands')
   }
 
   private get canEdit() { return this.ws.can('menu.edit') }
@@ -98,6 +100,8 @@ export class MenuView {
       ${priceOnly ? '' : `<label>Station<select name="station">${this.allStations.filter((s) => s.active).map((s) => opt(s.id, `${s.name}${s.kind === 'bar' ? ' (bar)' : ''}`, i?.station_id)).join('')}</select></label>
       <label>Diet<select name="diet">${Object.entries(DIET).map(([k, v]) => opt(k, v, i?.diet ?? 'veg')).join('')}</select></label>
       <label>Liquor (TN VAT)<select name="liquor">${opt('', 'Not liquor (GST)', i?.liquor_class)}${this.classes.filter((c) => c.active).map((c) => opt(c.id, c.label, i?.liquor_class)).join('')}</select></label>
+      <label data-pour ${i?.liquor_class ? '' : 'hidden'}>Brand poured<select name="brand"><option value="">Not tracked</option>${this.brands.filter((b) => b.active).map((b) => `<option value="${esc(b.id)}" data-cls="${esc(b.liquor_class)}" ${b.id === i?.brand_id ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></label>
+      <label data-pour ${i?.liquor_class ? '' : 'hidden'}>Pour (ml)<input name="pour" type="number" min="5" step="5" value="${i?.pour_ml ?? 30}"></label>
       <label class="span2">Allergens (comma separated)<input name="allergens" value="${esc(i?.allergens.join(', ') ?? '')}" placeholder="e.g. dairy, gluten, peanut"></label>
       <label class="check"><input type="checkbox" name="jain" ${i?.jain ? 'checked' : ''}> Jain</label>
       ${i ? `<label class="check"><input type="checkbox" name="active" ${i.active !== false ? 'checked' : ''}> On the menu</label>` : ''}`}
@@ -114,16 +118,25 @@ export class MenuView {
         name: val(f, 'name'), nameTa: val(f, 'nameTa') || null, categoryId, stationId: val(f, 'station'), diet: val(f, 'diet'),
         liquorClass: val(f, 'liquor') || null, allergens: val(f, 'allergens').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean), jain: checked(f, 'jain'),
       })
+      const pour = async (id: string) => {
+        if (priceOnly || !body.liquorClass) return
+        const brandId = val(f, 'brand') || null
+        if (brandId !== (i?.brand_id ?? null) || Number(val(f, 'pour')) !== (i?.pour_ml ?? null)) await api.post(`/api/fnb/items/${id}/pour`, { brandId, pourMl: Number(val(f, 'pour')) })
+      }
       if (!i) {
-        await api.post('/api/fnb/items', { ...body, outletId: this.outletId, code: val(f, 'code').toUpperCase() })
+        const r = await api.post<{ id: string }>('/api/fnb/items', { ...body, outletId: this.outletId, code: val(f, 'code').toUpperCase() })
+        await pour(r.id)
         await this.reload(); return 'Dish added'
       }
+      await pour(i.id)
       if (!priceOnly) body.active = checked(f, 'active')
       if (body.price === i.price_paise / 100) delete body.price
       const r = await api.req<{ pending?: boolean }>('PATCH', `/api/fnb/items/${i.id}`, body)
       await this.reload()
       return r.pending ? 'Saved. The new price waits for the GM\'s approval.' : 'Saved'
     })
+    const liq = this.ws.modal.el.querySelector<HTMLSelectElement>('select[name=liquor]')
+    liq?.addEventListener('change', () => this.ws.modal.el.querySelectorAll<HTMLElement>('[data-pour]').forEach((x) => { x.hidden = !liq.value }))
     const sel = this.ws.modal.el.querySelector<HTMLSelectElement>('select[name=category]')
     const stationSel = this.ws.modal.el.querySelector<HTMLSelectElement>('select[name=station]')
     // A new dish goes to the station most of its section already uses (else the first kitchen station).

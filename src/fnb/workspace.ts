@@ -7,11 +7,12 @@ import type { Outlet, Station, Ws } from './common'
 import { KitchenView } from './kitchen'
 import { MenuView } from './menu'
 import { SettingsView } from './settings'
+import { BarView } from './bar'
 
 // The restaurant workspace: a full-screen layer over the 3D map with Orders (captain tablet),
 // Kitchen (kitchen and bar screens), Menu and Licences & tax. Each tab shows only to roles that use it.
 
-type Tab = 'orders' | 'kitchen' | 'menu' | 'settings'
+type Tab = 'orders' | 'kitchen' | 'menu' | 'bar' | 'settings'
 interface View { load(): Promise<void>; html(): string; click(t: HTMLElement): Promise<boolean> }
 
 export class FnbWorkspace implements Ws {
@@ -21,13 +22,13 @@ export class FnbWorkspace implements Ws {
   open = false
   private el: HTMLElement
   private tab: Tab
-  private views: Record<Tab, View & Partial<{ onInput(t: HTMLElement): void; tick(): void; submit(f: HTMLFormElement): Promise<boolean> }>>
+  private views: Record<Tab, View & Partial<{ onInput(t: HTMLElement): void; tick(): void; submit(f: HTMLFormElement): Promise<boolean>; change(t: HTMLElement): Promise<boolean> }>>
   private captain: CaptainView
   private busy = false
 
   constructor(public api: Api, public me: Me, public inHouse: Ws['inHouse'], private onClose: () => void) {
     this.captain = new CaptainView(this)
-    this.views = { orders: this.captain, kitchen: new KitchenView(this), menu: new MenuView(this), settings: new SettingsView(this) }
+    this.views = { orders: this.captain, kitchen: new KitchenView(this), menu: new MenuView(this), bar: new BarView(this), settings: new SettingsView(this) }
     this.tab = this.tabs()[0]?.[0] ?? 'settings'
     this.el = document.createElement('section')
     this.el.className = 'ws'
@@ -36,6 +37,7 @@ export class FnbWorkspace implements Ws {
     document.getElementById('app')!.appendChild(this.el)
     this.el.addEventListener('click', (e) => void this.onClick(e))
     this.el.addEventListener('input', (e) => this.views[this.tab].onInput?.(e.target as HTMLElement))
+    this.el.addEventListener('change', (e) => void this.guard(async () => { if (await this.views[this.tab].change?.(e.target as HTMLElement)) this.render() }))
     this.el.addEventListener('submit', (e) => {
       e.preventDefault()
       void this.guard(async () => { if (await this.views[this.tab].submit?.(e.target as HTMLFormElement)) { this.render(); toast('Saved') } })
@@ -50,6 +52,7 @@ export class FnbWorkspace implements Ws {
     if (this.can('fnb.order')) t.push(['orders', 'Orders'])
     if (this.can('kitchen', 'fnb.order')) t.push(['kitchen', 'Kitchen & bar'])
     if (this.can('menu.edit', 'menu.price')) t.push(['menu', 'Menu'])
+    if (this.can('bar.stock', 'bar.approve') || this.me.roles.includes('bartender')) t.push(['bar', 'Bar stock'])
     t.push(['settings', 'Licences & tax'])
     return t
   }

@@ -11,6 +11,7 @@ export interface Category { id: string; name: string; sort: number }
 export interface MenuItem {
   id: string; category_id: string | null; code: string; name: string; name_ta: string | null; price_paise: number; liquor_class: string | null
   station_id: string; diet: 'veg' | 'egg' | 'non_veg'; jain: boolean; allergens: string[]; available: boolean; placeholder: boolean; active?: boolean
+  brand_id?: string | null; pour_ml?: number | null
 }
 export interface Table { id: string; outlet_id: string; label: string; seats: number; section: string | null; order_id: string | null; order_number: number | null; covers: number | null; order_status: string | null; opened_at: string | null; ready_tickets: number }
 export interface Ticket { id: string; number: number; kind: 'KOT' | 'BOT'; station_id: string; prints: number; copy: boolean; order: { number: number; outlet: string; table: string | null; room: string | null; covers: number }; lines: { qty: number; name: string; note: string | null; seat: number | null; course: number; alert?: string[]; void?: boolean }[] }

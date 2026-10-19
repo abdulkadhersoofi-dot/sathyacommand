@@ -8,6 +8,7 @@ import { businessDate } from '../fo-core'
 import { createApproval, registerApprovalKind } from './approvals'
 import { requireCaller } from './auth'
 import { vatRatesOn } from './settings'
+import { pourStock, unpourStock } from './bar'
 
 // Restaurant, room service and bar: menus, tables, orders and the KOT / BOT tickets that send each item
 // to its kitchen or bar station. Cancelling an item after its ticket went to the kitchen needs a manager,
@@ -98,6 +99,7 @@ async function voidSentItem(ctx: Ctx, t: Db, who: Caller, itemId: string, reason
   if (!i) throw new HttpError(404, 'No such item.')
   if (i.status === 'void') return
   await t.query('update order_item set status = $2, void_reason = $3, voided_by = $4, voided_at = $5 where id = $1', [itemId, 'void', reason, who.userId, ctx.now()])
+  await unpourStock(t, who, itemId, await businessDate(t), ctx.now())
   await appendAudit(t, { actor: who, action: 'order_item.void_after_kot', entity: { type: 'fnb_order', id: i.order_id }, amount: i.price_paise * i.qty,
     after: { item: i.name, qty: i.qty, kot: i.kot_id, requestedBy: requestedBy ?? who.userId }, note: reason }, ctx.now())
 }
@@ -274,7 +276,7 @@ export function fnbRoutes(app: FastifyInstance, ctx: Ctx) {
     if (!outletId) throw new HttpError(400, 'Send outletId.')
     const categories = await db.query('select id, name, sort from menu_category where outlet_id = $1 order by sort, name', [outletId])
     const items = await db.query(
-      `select id, category_id, code, name, name_ta, price_paise, liquor_class, station_id, diet, jain, allergens, available, placeholder, active
+      `select id, category_id, code, name, name_ta, price_paise, liquor_class, station_id, diet, jain, allergens, available, placeholder, active, brand_id, pour_ml
          from menu_item where outlet_id = $1 ${all === 'true' ? '' : 'and active'} order by active desc, code`, [outletId])
     return { categories, items }
   })
@@ -596,6 +598,7 @@ export function fnbRoutes(app: FastifyInstance, ctx: Ctx) {
           [kid, number, kind, id, st.id, o.business_date, who.userId, now()])
         const lines = pending.filter((p) => p.station_id === st.id)
         await t.query(`update order_item set status = 'sent', kot_id = $2 where id = any($1)`, [lines.map((l) => l.id), kid])
+        await pourStock(t, who, lines.map((l) => l.id), o.business_date, now())
         const amount = lines.reduce((a, l) => a + l.price_paise * l.qty, 0)
         await appendAudit(t, { actor: who, action: kind === 'BOT' ? 'bot.create' : 'kot.create', entity: { type: 'kot', id: kid }, amount,
           after: { number, order: o.number, orderId: id, station: st.id, table: view.table_label ?? null, room: view.room_no ?? null, items: lines.map((l) => `${l.qty} × ${l.name}`) } }, now())

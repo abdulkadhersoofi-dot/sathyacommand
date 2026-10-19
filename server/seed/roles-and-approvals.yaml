@@ -27,6 +27,8 @@ sign_in:
 #   fnb.void         cancel an item after its KOT went to the kitchen (others need this role's approval)
 #   fnb.bill         print and settle restaurant / bar bills, split and charge to room, restaurant cashier shift
 #   fnb.discount     approve a restaurant discount above the requester's limit (within the approver's own limit)
+#   bar.stock        bar brands, TASMAC purchases, breakage, physical counts, stock register
+#   bar.approve      approve bar counts (correcting the book stock) and breakage above a role's limit
 #   menu.edit        add and edit menu items and tables (price changes go to menu.price for approval)
 #   menu.price       change menu prices and import the menu
 #   bar.settings     licensed bar hours and dry days
@@ -39,8 +41,8 @@ roles:
     permissions: ['*']
     limits: unlimited
   general_manager:
-    permissions: [inventory.edit, devices.approve, users.manage, front_desk, folio.reverse, discount.approve, night_audit, invoice.view, invoice.credit_note, site.edit, site.publish, fnb.order, fnb.void, fnb.bill, fnb.discount, menu.edit, menu.price, bar.settings, licences.edit]
-    limits: { discount_percent: 25, refund: 50000, comp_room_nights: 5, purchase_order: 500000, rate_override_below_floor: true }
+    permissions: [inventory.edit, devices.approve, users.manage, front_desk, folio.reverse, discount.approve, night_audit, invoice.view, invoice.credit_note, site.edit, site.publish, fnb.order, fnb.void, fnb.bill, fnb.discount, menu.edit, menu.price, bar.settings, bar.stock, bar.approve, licences.edit]
+    limits: { discount_percent: 25, breakage_per_entry: 10000, refund: 50000, comp_room_nights: 5, purchase_order: 500000, rate_override_below_floor: true }
   operations_manager:
     permissions: [front_desk, folio.reverse, discount.approve, site.edit, fnb.order, fnb.void, fnb.bill, fnb.discount]
     limits: { discount_percent: 20, void_per_bill: 5000, room_move: true, mark_out_of_order: true, overtime_hours_per_week: 12 }
@@ -72,7 +74,7 @@ roles:
     permissions: [kitchen]
     limits: { wastage_per_entry: 1000 }
   bar_manager:
-    permissions: [fnb.order, fnb.void, fnb.bill, fnb.discount, kitchen, bar.settings]
+    permissions: [fnb.order, fnb.void, fnb.bill, fnb.discount, kitchen, bar.settings, bar.stock]
     limits: { discount_percent: 10, breakage_per_entry: 1500 }
   bartender:
     permissions: [fnb.order, fnb.bill, kitchen]
