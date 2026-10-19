@@ -17,4 +17,5 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npx tsc -p packages/tsconfig.json
+      - run: npx tsc -p server/tsconfig.json
       - run: npm run build

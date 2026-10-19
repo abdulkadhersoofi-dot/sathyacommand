@@ -1,0 +1,48 @@
+room_no,kind,room_type,building,floor,twin_id
+101,room,deluxe,Park Wing,1,MAIN-1-101
+102,room,deluxe,Park Wing,1,MAIN-1-102
+103,room,deluxe,Park Wing,1,MAIN-1-103
+104,room,deluxe,Park Wing,1,MAIN-1-104
+105,room,deluxe,Park Wing,1,MAIN-1-105
+106,room,deluxe,Park Wing,1,MAIN-1-106
+107,room,deluxe,Park Wing,1,MAIN-1-107
+108,room,deluxe,Park Wing,1,MAIN-1-108
+109,room,deluxe,Park Wing,1,MAIN-1-109
+110,room,deluxe,Park Wing,1,MAIN-1-110
+111,room,deluxe,Park Wing,1,MAIN-1-111
+112,room,deluxe,Park Wing,1,MAIN-1-112
+201,room,deluxe,Park Wing,2,MAIN-2-201
+202,room,deluxe,Park Wing,2,MAIN-2-202
+203,room,deluxe,Park Wing,2,MAIN-2-203
+204,room,deluxe,Park Wing,2,MAIN-2-204
+205,room,deluxe,Park Wing,2,MAIN-2-205
+206,room,deluxe,Park Wing,2,MAIN-2-206
+207,room,deluxe,Park Wing,2,MAIN-2-207
+208,room,deluxe,Park Wing,2,MAIN-2-208
+209,room,deluxe,Park Wing,2,MAIN-2-209
+210,room,deluxe,Park Wing,2,MAIN-2-210
+211,room,deluxe,Park Wing,2,MAIN-2-211
+212,room,deluxe,Park Wing,2,MAIN-2-212
+301,room,premium,Park Wing,3,MAIN-3-301
+302,room,premium,Park Wing,3,MAIN-3-302
+303,room,premium,Park Wing,3,MAIN-3-303
+304,room,premium,Park Wing,3,MAIN-3-304
+305,room,premium,Park Wing,3,MAIN-3-305
+306,room,premium,Park Wing,3,MAIN-3-306
+307,room,premium,Park Wing,3,MAIN-3-307
+308,room,premium,Park Wing,3,MAIN-3-308
+309,room,premium,Park Wing,3,MAIN-3-309
+310,room,premium,Park Wing,3,MAIN-3-310
+311,room,premium,Park Wing,3,MAIN-3-311
+312,room,premium,Park Wing,3,MAIN-3-312
+V1,villa,villa,Garden Villas,0,VILLA-1
+V2,villa,villa,Garden Villas,0,VILLA-2
+V3,villa,villa,Garden Villas,0,VILLA-3
+V4,villa,villa,Garden Villas,0,VILLA-4
+V5,villa,villa,Garden Villas,0,VILLA-5
+V6,villa,villa,Garden Villas,0,VILLA-6
+V7,villa,villa,Garden Villas,0,
+V8,villa,villa,Garden Villas,0,
+S1,suite,suite,Suites,0,
+S2,suite,suite,Suites,0,
+S3,suite,suite,Suites,0,

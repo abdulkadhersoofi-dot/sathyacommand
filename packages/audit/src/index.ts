@@ -37,15 +37,22 @@ export function hashEntry(e: Omit<AuditEntry, 'hash'>): string {
   return createHash('sha256').update(canonical(e)).digest('hex')
 }
 
+/** Builds the next entry after `prev` (null for the first). Shared by the in-memory log and the database store. */
+export function buildEntry(prev: { seq: number; hash: string } | null, input: AuditInput, at: Date): AuditEntry {
+  const base = { ...input, seq: (prev?.seq ?? 0) + 1, at: at.toISOString(), prevHash: prev?.hash ?? GENESIS }
+  return Object.freeze({ ...base, hash: hashEntry(base) })
+}
+
 export class AuditLog {
   private entries: AuditEntry[] = []
+  private clock: () => Date
 
-  constructor(private clock: () => Date = () => new Date()) {}
+  constructor(clock: () => Date = () => new Date()) {
+    this.clock = clock
+  }
 
   append(input: AuditInput): AuditEntry {
-    const last = this.entries[this.entries.length - 1]
-    const base = { ...input, seq: (last?.seq ?? 0) + 1, at: this.clock().toISOString(), prevHash: last?.hash ?? GENESIS }
-    const entry: AuditEntry = Object.freeze({ ...base, hash: hashEntry(base) })
+    const entry = buildEntry(this.entries[this.entries.length - 1] ?? null, input, this.clock())
     this.entries.push(entry)
     return entry
   }
