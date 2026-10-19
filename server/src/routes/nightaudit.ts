@@ -6,6 +6,7 @@ import { can, HttpError, type Ctx } from '../context'
 import type { Db } from '../db'
 import { businessDate, LODGING, PROPERTY } from '../fo-core'
 import { requireCaller } from './auth'
+import { onNightAudit } from '../hk-core'
 
 // Cashier shifts and the night audit that closes each business day.
 
@@ -149,6 +150,7 @@ export function nightAuditRoutes(app: FastifyInstance, ctx: Ctx) {
       await t.query('insert into night_audit (business_date, run_by, run_at, summary) values ($1, $2, $3, $4)', [day, who.userId, now(), JSON.stringify(summary)])
       const next = addDays(day, 1)
       await t.query('update property set business_date = $2 where id = $1', [PROPERTY, next])
+      await onNightAudit(t, next, now())
       await appendAudit(t, { actor: who, action: 'night_audit.run', entity: { type: 'business_date', id: day }, amount: roomRevenue, after: summary }, now())
       return { ...summary, nextBusinessDate: next }
     })

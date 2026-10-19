@@ -58,6 +58,7 @@ gst:
 
   other_services:
     laundry:   { rate: 18, sac: null, ca_status: pending }   # CA to give the SAC; e-invoices are blocked until then
+    minibar:   { rate: 18, sac: null, ca_status: pending }   # packaged items sold in rooms: rate per item in the app; CA to confirm
     transport: { rate: null, ca_status: pending }
     activities_and_sports: { rate: 18, ca_status: pending }
 

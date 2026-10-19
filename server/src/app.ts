@@ -20,6 +20,8 @@ import { fnbBillingRoutes } from './routes/fnb-billing'
 import { barRoutes } from './routes/bar'
 import { kitchenStockRoutes } from './routes/kitchen-stock'
 import { idempotency, printingRoutes } from './routes/printing'
+import { uploadRoutes } from './routes/uploads'
+import { housekeepingRoutes } from './routes/housekeeping'
 
 export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boolean; appDir?: string } = {}) {
   const ctx: Ctx = {
@@ -56,6 +58,8 @@ export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boo
   barRoutes(app, ctx)
   kitchenStockRoutes(app, ctx)
   printingRoutes(app, ctx)
+  uploadRoutes(app, ctx)
+  housekeepingRoutes(app, ctx)
 
   // Serve the built 3D app and front desk screens from the same address as the API.
   if (opts.appDir && existsSync(opts.appDir)) app.register(fastifyStatic, { root: opts.appDir, index: 'index.html' })

@@ -33,6 +33,10 @@ sign_in:
 #   kitchen.approve  approve kitchen wastage above a role's limit
 #   food_cost.view   food cost and menu engineering report
 #   printers.manage  network printers, which station / outlet prints where, test pages
+#   hk.view          the housekeeping room board and lost & found
+#   hk.attend        clean assigned rooms (start, checklist, photos, finish), do-not-disturb, minibar, report what is in the room
+#   hk.inspect       inspect cleaned rooms and score them
+#   hk.manage        assign rooms, out of order, room status, minibar list, lost & found disposal
 #   menu.edit        add and edit menu items and tables (price changes go to menu.price for approval)
 #   menu.price       change menu prices and import the menu
 #   bar.settings     licensed bar hours and dry days
@@ -45,16 +49,16 @@ roles:
     permissions: ['*']
     limits: unlimited
   general_manager:
-    permissions: [inventory.edit, devices.approve, users.manage, front_desk, folio.reverse, discount.approve, night_audit, invoice.view, invoice.credit_note, site.edit, site.publish, fnb.order, fnb.void, fnb.bill, fnb.discount, menu.edit, menu.price, bar.settings, bar.stock, bar.approve, kitchen.stock, kitchen.approve, food_cost.view, printers.manage, licences.edit]
+    permissions: [inventory.edit, devices.approve, users.manage, front_desk, folio.reverse, discount.approve, night_audit, invoice.view, invoice.credit_note, site.edit, site.publish, fnb.order, fnb.void, fnb.bill, fnb.discount, menu.edit, menu.price, bar.settings, bar.stock, bar.approve, kitchen.stock, kitchen.approve, food_cost.view, printers.manage, licences.edit, hk.view, hk.manage, hk.inspect]
     limits: { discount_percent: 25, breakage_per_entry: 10000, refund: 50000, comp_room_nights: 5, purchase_order: 500000, rate_override_below_floor: true }
   operations_manager:
-    permissions: [front_desk, folio.reverse, discount.approve, site.edit, fnb.order, fnb.void, fnb.bill, fnb.discount]
+    permissions: [front_desk, folio.reverse, discount.approve, site.edit, fnb.order, fnb.void, fnb.bill, fnb.discount, hk.view, hk.manage, hk.inspect]
     limits: { discount_percent: 20, void_per_bill: 5000, room_move: true, mark_out_of_order: true, overtime_hours_per_week: 12 }
   front_office_manager:
-    permissions: [front_desk, folio.reverse, night_audit, invoice.credit_note]
+    permissions: [front_desk, folio.reverse, night_audit, invoice.credit_note, hk.view]
     limits: { discount_percent: 15, refund: 10000, cashier_variance_writeoff: 500 }
   reception:
-    permissions: [front_desk, fnb.order, fnb.bill]
+    permissions: [front_desk, fnb.order, fnb.bill, hk.view]
     limits: { discount_percent: 10, refund: 0 }
   night_auditor:
     permissions: [front_desk, night_audit]
@@ -65,8 +69,13 @@ roles:
   stores:
     limits: { purchase_order: 25000, stock_adjustment: 0 }
   executive_housekeeper:
+    permissions: [hk.view, hk.attend, hk.inspect, hk.manage]
     limits: { linen_writeoff: 2000 }
+  hk_supervisor:
+    permissions: [hk.view, hk.attend, hk.inspect]
+    limits: {}
   room_attendant:
+    permissions: [hk.attend]
     limits: {}
   fnb_manager:
     permissions: [fnb.order, fnb.void, fnb.bill, fnb.discount, kitchen, menu.edit, kitchen.stock, kitchen.approve, food_cost.view, printers.manage]

@@ -8,6 +8,7 @@ import { ensureRestaurant } from './fnb-seed'
 import { ensureLiquorClasses } from './routes/settings'
 import { ensureBarStock } from './routes/bar'
 import { ensureRecipes } from './routes/kitchen-stock'
+import { ensureRoomHk } from './hk-core'
 import type { Db } from './db'
 
 // First-run data. Rooms come from seed/rooms.placeholder.csv until the resort's real
@@ -108,6 +109,7 @@ async function seedInto(db: Db, opts: { today?: string; mdMobile?: string }) {
   await ensureRestaurant(db)
   await ensureBarStock(db)
   await ensureRecipes(db)
+  await ensureRoomHk(db)
 
   await appendAudit(db, {
     actor: SYSTEM, action: 'system.seed', entity: { type: 'property', id: PROPERTY },

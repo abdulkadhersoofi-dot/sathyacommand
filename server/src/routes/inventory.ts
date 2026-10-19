@@ -5,6 +5,7 @@ import { appendAudit } from '../audit-store'
 import { can, HttpError, type Caller, type Ctx } from '../context'
 import type { Db } from '../db'
 import { requireCaller } from './auth'
+import { ensureRoomHk } from '../hk-core'
 
 // Rooms and room types are data, not code: add, rename, renumber, retype or archive them at any time.
 // Rooms are archived, never deleted, so past bookings and bills keep pointing at them.
@@ -127,6 +128,7 @@ export function inventoryRoutes(app: FastifyInstance, ctx: Ctx) {
       const [dup] = await t.query('select 1 from space where property_id = $1 and room_no = $2', [PROPERTY, r.roomNo])
       if (dup) throw new HttpError(409, `Room ${r.roomNo} already exists.`)
       const res = await upsertRoom(ctx, t, who, r)
+      await ensureRoomHk(t, ctx.now())
       await appendAudit(t, { actor: who, action: 'room.create', entity: { type: 'room', id: res.id }, after: r }, ctx.now())
       return reply.status(201).send({ id: res.id })
     })
@@ -190,6 +192,7 @@ export function inventoryRoutes(app: FastifyInstance, ctx: Ctx) {
           throw e instanceof HttpError ? new HttpError(400, `Room ${r.roomNo ?? '?'}: ${e.message}`) : e
         }
         const res = await upsertRoom(ctx, t, who, r)
+        await ensureRoomHk(t, ctx.now())
         res.created ? created++ : updated++
       }
       if (b.replacePlaceholders) {

@@ -11,6 +11,7 @@ import { createApproval } from './approvals'
 import { issueReceiptVoucher, issueRefundVoucher, issueStayInvoice } from '../invoicing'
 import { validateGstin } from '@sathya/tax'
 import { requireCaller } from './auth'
+import { onCheckIn, onCheckOut, onRoomMove } from '../hk-core'
 
 // Reservations, room assignment, check-in / check-out, guest bills (folios) and payments.
 
@@ -46,6 +47,8 @@ async function assignRoom(db: Db, reservationId: string, spaceId: string, roomTy
   if (!s || !LODGING.includes(s.kind)) throw new HttpError(404, `No room ${spaceId}.`)
   if (!s.active) throw new HttpError(409, `Room ${s.room_no} is archived.`)
   if (s.room_type_id !== roomTypeId && !allowUpgrade) throw new HttpError(409, `Room ${s.room_no} is a different room type. Send upgrade: true to move the guest anyway.`)
+  const [hk] = await db.query<{ status: string }>('select status from room_hk where space_id = $1', [spaceId])
+  if (hk?.status === 'out_of_order') throw new HttpError(409, `Room ${s.room_no} is out of order.`)
   try {
     await db.query('update room_night set space_id = $2 where reservation_id = $1 and not released', [reservationId, spaceId])
   } catch (e) {
@@ -179,6 +182,7 @@ export function frontOfficeRoutes(app: FastifyInstance, ctx: Ctx) {
       const r = await loadReservation(t, id, true)
       if (!['confirmed', 'in_house'].includes(r.status)) throw new HttpError(409, `Reservation is ${r.status}.`)
       const roomNo = await assignRoom(t, id, b.spaceId!, r.room_type_id, !!b.upgrade)
+      if (r.status === 'in_house' && r.space_id && r.space_id !== b.spaceId) await onRoomMove(t, r.space_id, b.spaceId!, await businessDate(t), who, now())
       await appendAudit(t, { actor: who, action: r.space_id ? 'reservation.room_move' : 'reservation.assign_room', entity: { type: 'reservation', id },
         before: { spaceId: r.space_id }, after: { spaceId: b.spaceId, roomNo, upgrade: !!b.upgrade } }, now())
       return { ok: true, roomNo }
@@ -255,6 +259,8 @@ export function frontOfficeRoutes(app: FastifyInstance, ctx: Ctx) {
       const last4 = b.idNumber!.replace(/\s/g, '').slice(-4)
       await t.query('update guest set id_type = $2, id_last4 = $3 where id = $1', [r.guest_id, b.idType, last4])
       await t.query(`update reservation set status = 'in_house', checked_in_at = $2 where id = $1`, [id, now()])
+      const [{ space_id: roomId }] = await t.query<{ space_id: string }>('select space_id from reservation where id = $1', [id])
+      const hk = await onCheckIn(t, roomId, who, now())
       const [g] = await t.query<{ nationality: string; name: string }>('select nationality, name from guest where id = $1', [r.guest_id])
       let formCDue: string | null = null
       if (g.nationality !== 'IN') {
@@ -263,7 +269,7 @@ export function frontOfficeRoutes(app: FastifyInstance, ctx: Ctx) {
       }
       await appendAudit(t, { actor: who, action: 'reservation.check_in', entity: { type: 'reservation', id },
         after: { guest: g.name, idType: b.idType, idLast4: last4, formCDue } }, now())
-      return { ok: true, formCDue }
+      return { ok: true, formCDue, housekeeping: hk.warning }
     })
   })
 
@@ -296,6 +302,7 @@ export function frontOfficeRoutes(app: FastifyInstance, ctx: Ctx) {
       const invoice = await issueStayInvoice(ctx, t, who, id)
       await t.query(`update reservation set status = 'checked_out', checked_out_at = $2 where id = $1`, [id, now()])
       await t.query(`update folio set status = 'closed' where reservation_id = $1`, [id])
+      if (r.space_id) await onCheckOut(t, r.space_id, today, who, now())
       await appendAudit(t, { actor: who, action: 'reservation.check_out', entity: { type: 'reservation', id },
         after: { early: released.length > 0, releasedNights: released.map((n) => n.night), invoice: invoice?.number ?? null } }, now())
       return { ok: true, releasedNights: released.map((n) => n.night), invoice }
