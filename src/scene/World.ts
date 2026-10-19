@@ -1,0 +1,273 @@
+import * as THREE from 'three'
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import type { Store } from '../data/store'
+import { Site } from './Site'
+import { Rooms } from './Rooms'
+import { Overlays } from './Overlays'
+import { ease } from './geo'
+
+export interface WorldCallbacks {
+  onHover(id: string | null, x: number, y: number, pointer: string): void
+  onTap(id: string | null, x: number, y: number, pointer: string): void
+  onFocus(id: string): void
+}
+
+const HOME_POS = new THREE.Vector3(62, 150, 200)
+const HOME_TARGET = new THREE.Vector3(10, 0, 14)
+
+export class World {
+  renderer: THREE.WebGLRenderer
+  scene = new THREE.Scene()
+  camera: THREE.PerspectiveCamera
+  controls: OrbitControls
+  site = new Site()
+  rooms = new Rooms()
+  overlays: Overlays
+  night = false
+  eco = false
+
+  private hemi = new THREE.HemisphereLight(0xeaf4ff, 0x7d6b4f, 1.3)
+  private sun = new THREE.DirectionalLight(0xfff1dc, 2.4)
+  private raycaster = new THREE.Raycaster()
+  private ndc = new THREE.Vector2()
+  private pendingPick: { x: number; y: number; pointer: string } | null = null
+  private hoverId: string | null = null
+  private dirty = true
+  private tweens: { start: number; dur: number; fn: (k: number) => void }[] = []
+  private introUntil = 0
+  private down = { x: 0, y: 0, t: 0 }
+  private lastTap = { id: '' as string | null, t: 0 }
+  private size = { w: 1, h: 1 }
+
+  constructor(private host: HTMLElement, labelLayer: HTMLElement, private store: Store, private cb: WorldCallbacks) {
+    const lowEnd = (navigator.hardwareConcurrency ?? 8) <= 4 || ((navigator as any).deviceMemory ?? 8) <= 4
+    this.eco = lowEnd
+    this.renderer = new THREE.WebGLRenderer({ antialias: !lowEnd, powerPreference: 'high-performance' })
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, lowEnd ? 1.25 : 2))
+    this.renderer.shadowMap.enabled = !lowEnd
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping
+    this.renderer.toneMappingExposure = 1.05
+    host.appendChild(this.renderer.domElement)
+
+    this.camera = new THREE.PerspectiveCamera(38, 1, 1, 2000)
+    this.controls = new OrbitControls(this.camera, this.renderer.domElement)
+    Object.assign(this.controls, {
+      enableDamping: true, dampingFactor: 0.08, minDistance: 30, maxDistance: 520,
+      maxPolarAngle: 1.38, screenSpacePanning: false, zoomToCursor: true,
+    })
+    this.controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN }
+    this.controls.addEventListener('change', () => (this.dirty = true))
+
+    this.sun.position.set(-140, 220, 120)
+    this.sun.castShadow = true
+    this.sun.shadow.mapSize.set(2048, 2048)
+    const sc = this.sun.shadow.camera
+    sc.left = sc.bottom = -190; sc.right = sc.top = 190; sc.near = 50; sc.far = 600
+    this.sun.shadow.bias = -0.0004
+    this.scene.add(this.hemi, this.sun, this.site.root, this.rooms.group)
+    this.overlays = new Overlays(this.site, this.rooms, labelLayer)
+    this.scene.add(this.overlays.group)
+
+    const h = new Date().getHours()
+    this.setNight(h < 6 || h >= 18)
+    this.bindPointer()
+    new ResizeObserver(() => this.resize()).observe(host)
+    this.resize()
+    this.intro()
+    this.renderer.setAnimationLoop(() => this.frame())
+  }
+
+  // ---------- state from the store ----------
+  refresh() {
+    this.rooms.update(this.store)
+    this.overlays.update(this.store)
+    this.dirty = true
+  }
+
+  setNight(on: boolean) {
+    this.night = on
+    const bg = new THREE.Color(on ? 0x0d1726 : 0xd3ded7)
+    this.scene.background = bg
+    this.scene.fog = new THREE.Fog(bg, 420, 900)
+    this.hemi.color.setHex(on ? 0x5272a8 : 0xeaf4ff)
+    this.hemi.groundColor.setHex(on ? 0x1b1c24 : 0x7d6b4f)
+    this.hemi.intensity = on ? 0.55 : 1.3
+    this.sun.color.setHex(on ? 0x9fb8ff : 0xfff1dc)
+    this.sun.intensity = on ? 0.45 : 2.4
+    this.site.lampMaterial.emissiveIntensity = on ? 2.4 : 0
+    this.site.waterUniforms.uNight.value = on ? 1 : 0
+    this.rooms.setGlow(on)
+    this.dirty = true
+  }
+
+  setEco(on: boolean) {
+    this.eco = on
+    this.renderer.shadowMap.enabled = !on
+    this.scene.traverse((o) => { if ((o as THREE.Mesh).material) ((o as THREE.Mesh).material as THREE.Material).needsUpdate = true })
+    this.dirty = true
+  }
+
+  setExplode(on: boolean) { this.rooms.setExplode(on); this.dirty = true }
+
+  highlight(id: string | null) {
+    this.rooms.highlight(id)
+    for (const [sid, mats] of this.site.materialsBySpace) {
+      for (const m of mats) m.emissive.setHex(sid === id ? (this.night ? 0x554433 : 0x2f2a22) : 0x000000)
+    }
+    this.dirty = true
+  }
+
+  // ---------- camera ----------
+  private intro() {
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches
+    const risers = [...this.site.risers, { obj: this.rooms.group, delay: 0.05 }]
+    if (reduce) {
+      this.camera.position.copy(HOME_POS)
+      this.controls.target.copy(HOME_TARGET)
+      return
+    }
+    risers.forEach((r) => r.obj.scale.set(1, 0.001, 1))
+    const p0 = new THREE.Vector3(8, 420, 30), t0 = new THREE.Vector3(8, 0, 10)
+    this.camera.position.copy(p0)
+    this.controls.target.copy(t0)
+    const now = performance.now() / 1000
+    this.introUntil = now + 3.2
+    this.tween(2.8, (k) => {
+      const e = ease.inOutCubic(k)
+      this.camera.position.lerpVectors(p0, HOME_POS, e)
+      this.controls.target.lerpVectors(t0, HOME_TARGET, e)
+    }, 0.25)
+    for (const r of risers) {
+      this.tween(1.1, (k) => r.obj.scale.set(1, Math.max(0.001, ease.outBack(k)), 1), 0.5 + r.delay * 1.4)
+    }
+  }
+
+  private tween(dur: number, fn: (k: number) => void, delay = 0) {
+    this.tweens.push({ start: performance.now() / 1000 + delay, dur, fn })
+  }
+
+  flyTo(target: THREE.Vector3, distance: number) {
+    const fromT = this.controls.target.clone(), fromP = this.camera.position.clone()
+    const dir = fromP.clone().sub(fromT).normalize()
+    if (dir.y < 0.45) { dir.y = 0.45; dir.normalize() }
+    const toP = target.clone().add(dir.multiplyScalar(distance))
+    this.tween(0.95, (k) => {
+      const e = ease.inOutCubic(k)
+      this.controls.target.lerpVectors(fromT, target, e)
+      this.camera.position.lerpVectors(fromP, toP, e)
+    })
+  }
+
+  focus(id: string) {
+    const roomPos = this.rooms.anchor(id)
+    const a = roomPos ?? this.site.anchors.get(id)?.pos
+    if (!a) return
+    if (this.rooms.isMainBlock(id)) this.setExplode(true)
+    const sp = this.store.spaceById.get(id)
+    const dist = sp?.type === 'room' ? 70 : sp?.type === 'villa' ? 55 : ['lawn', 'ground', 'hall'].includes(sp?.type ?? '') ? 120 : 80
+    this.flyTo(new THREE.Vector3(a.x, roomPos ? a.y * 0.5 : 0, a.z), dist)
+  }
+
+  home() {
+    this.setExplode(false)
+    const fromT = this.controls.target.clone(), fromP = this.camera.position.clone()
+    this.tween(1.1, (k) => {
+      const e = ease.inOutCubic(k)
+      this.controls.target.lerpVectors(fromT, HOME_TARGET, e)
+      this.camera.position.lerpVectors(fromP, HOME_POS, e)
+    })
+  }
+
+  zoom(f: number) {
+    const off = this.camera.position.clone().sub(this.controls.target)
+    const len = THREE.MathUtils.clamp(off.length() * f, this.controls.minDistance, this.controls.maxDistance)
+    const fromP = this.camera.position.clone()
+    const toP = this.controls.target.clone().add(off.setLength(len))
+    this.tween(0.35, (k) => this.camera.position.lerpVectors(fromP, toP, ease.outCubic(k)))
+  }
+
+  // ---------- pointer ----------
+  private bindPointer() {
+    const el = this.renderer.domElement
+    el.addEventListener('pointermove', (e) => {
+      if (e.pointerType === 'mouse' && e.buttons === 0) this.pendingPick = { x: e.clientX, y: e.clientY, pointer: 'hover' }
+    })
+    el.addEventListener('pointerleave', () => { this.setHover(null, 0, 0, 'mouse') })
+    el.addEventListener('pointerdown', (e) => { this.down = { x: e.clientX, y: e.clientY, t: performance.now() } })
+    el.addEventListener('pointerup', (e) => {
+      const moved = Math.hypot(e.clientX - this.down.x, e.clientY - this.down.y)
+      if (moved > 8 || performance.now() - this.down.t > 450) return
+      const id = this.pick(e.clientX, e.clientY)
+      const now = performance.now()
+      if (id && this.lastTap.id === id && now - this.lastTap.t < 320) {
+        this.cb.onFocus(id)
+        this.lastTap = { id: null, t: 0 }
+        return
+      }
+      this.lastTap = { id, t: now }
+      this.cb.onTap(id, e.clientX, e.clientY, e.pointerType)
+    })
+  }
+
+  private pick(x: number, y: number): string | null {
+    const r = this.renderer.domElement.getBoundingClientRect()
+    this.ndc.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1)
+    this.raycaster.setFromCamera(this.ndc, this.camera)
+    const hits = this.raycaster.intersectObjects([...this.rooms.pickables, ...this.site.pickables], false)
+    for (const h of hits) {
+      const id = this.rooms.idFromHit(h)
+      if (id && this.store.spaceById.has(id)) return id
+    }
+    return null
+  }
+
+  private setHover(id: string | null, x: number, y: number, pointer: string) {
+    if (id !== this.hoverId) {
+      this.hoverId = id
+      this.renderer.domElement.style.cursor = id ? 'pointer' : 'grab'
+    }
+    this.cb.onHover(id, x, y, pointer)
+  }
+
+  private resize() {
+    const w = this.host.clientWidth, h = this.host.clientHeight
+    this.size = { w, h }
+    this.renderer.setSize(w, h, false)
+    this.camera.aspect = w / Math.max(h, 1)
+    this.camera.fov = w < 640 ? 50 : 38
+    this.camera.updateProjectionMatrix()
+    this.dirty = true
+  }
+
+  // ---------- loop ----------
+  private frame() {
+    const now = performance.now() / 1000
+    let active = now < this.introUntil
+    this.tweens = this.tweens.filter((tw) => {
+      if (now < tw.start) { active = true; return true }
+      const k = Math.min(1, (now - tw.start) / tw.dur)
+      tw.fn(k)
+      active = true
+      return k < 1
+    })
+    const ambient = !this.eco
+    if (ambient) {
+      this.site.waterUniforms.uTime.value = now
+      this.site.treeUniforms.uTime.value = now
+    }
+    active = this.rooms.tick(now, ambient) || active
+    active = this.overlays.tick(now, ambient) || active
+    if (this.pendingPick) {
+      const p = this.pendingPick
+      this.pendingPick = null
+      this.setHover(this.pick(p.x, p.y), p.x, p.y, 'mouse')
+    }
+    const moved = this.controls.update()
+    if (moved || active || ambient || this.dirty) {
+      this.renderer.render(this.scene, this.camera)
+      this.overlays.projectLabels(this.camera, this.size.w, this.size.h)
+      this.dirty = false
+    }
+  }
+}

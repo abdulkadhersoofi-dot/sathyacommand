@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e1a18">
+<title>Sathya Command</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+<!--APP-->
+<div id="app">
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div>
+        <div class="brand-name">Sathya Command</div>
+        <div class="brand-sub" id="source-label">Sathya Park &amp; Resorts</div>
+      </div>
+    </div>
+    <div class="topbar-mid">
+      <button class="date-chip" id="date-chip" type="button" aria-label="Viewed date"></button>
+      <span class="clock" id="clock"></span>
+      <span class="sample-badge" title="Phase 1 runs on generated sample bookings. Phase 2 connects the live HMS.">Sample data</span>
+    </div>
+    <div class="topbar-actions">
+      <button class="icon-btn" id="btn-night" type="button" aria-pressed="false" title="Day / night"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg><span>Night</span></button>
+      <button class="icon-btn" id="btn-eco" type="button" aria-pressed="false" title="Eco mode: no shadows or ambient motion, saves battery"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19c8 0 14-6 14-14-8 0-14 4-14 12v2Zm0 0 7-7"/></svg><span>Eco</span></button>
+      <button class="god-btn" id="btn-god" type="button" aria-pressed="false"><span class="god-dot"></span><span class="god-text">God Mode</span></button>
+    </div>
+  </header>
+
+  <main class="stage" id="stage">
+    <div class="labels" id="labels"></div>
+
+    <nav class="layers" id="layers" aria-label="Map layers"></nav>
+
+    <div class="map-tools">
+      <button class="tool" id="btn-zoom-in" type="button" aria-label="Zoom in">+</button>
+      <button class="tool" id="btn-zoom-out" type="button" aria-label="Zoom out">−</button>
+      <button class="tool" id="btn-home" type="button" aria-label="Reset view" title="Reset view"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11 12 4l8 7v9h-5v-6H9v6H4z"/></svg></button>
+      <button class="tool" id="btn-explode" type="button" aria-pressed="false" title="Separate Park Wing floors"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+    </div>
+
+    <div class="legend" id="legend"></div>
+    <div class="hint" id="hint">Hover or tap a building · double-tap to fly in · drag to orbit</div>
+
+    <div class="tip" id="tip" hidden></div>
+  </main>
+
+  <aside class="side" id="side">
+    <button class="side-grip" id="side-grip" type="button" aria-label="Expand panel"></button>
+    <div class="tabs" role="tablist" id="tabs">
+      <button role="tab" data-tab="live" aria-selected="true">Live</button>
+      <button role="tab" data-tab="arrivals">Front desk</button>
+      <button role="tab" data-tab="kitchen">Kitchen <span class="tab-count" id="kot-count"></span></button>
+      <button role="tab" data-tab="events">Events</button>
+    </div>
+    <div class="side-body" id="side-body"></div>
+  </aside>
+
+  <section class="dock">
+    <div class="kpis" id="kpis"></div>
+    <div class="timeline">
+      <button class="tl-step" id="tl-prev" type="button" aria-label="Previous day">‹</button>
+      <div class="tl-track" id="tl-track" role="slider" tabindex="0" aria-label="Date"></div>
+      <button class="tl-step" id="tl-next" type="button" aria-label="Next day">›</button>
+      <button class="tl-today" id="tl-today" type="button">Today</button>
+    </div>
+  </section>
+
+  <aside class="drawer" id="drawer" aria-hidden="true">
+    <div class="drawer-inner" id="drawer-inner"></div>
+  </aside>
+
+  <div class="modal" id="pin-modal" hidden>
+    <form class="pin-card" id="pin-form">
+      <div class="pin-title">Owner access</div>
+      <p class="pin-copy">God Mode shows revenue, rates and full guest contacts, and unlocks owner actions. In production this is a biometric or two-factor sign-in.</p>
+      <label for="pin-input">Owner PIN <span class="muted">(demo: 1234)</span></label>
+      <input id="pin-input" inputmode="numeric" maxlength="4" autocomplete="off">
+      <div class="pin-error" id="pin-error" hidden>That PIN didn't match. Try 1234.</div>
+      <div class="pin-actions">
+        <button type="button" class="btn ghost" id="pin-cancel">Cancel</button>
+        <button type="submit" class="btn primary">Unlock</button>
+      </div>
+    </form>
+  </div>
+  <div class="toast" id="toast" hidden></div>
+</div>
+<!--/APP-->
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>
