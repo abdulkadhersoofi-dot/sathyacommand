@@ -9,11 +9,18 @@ sign_in:
   shift_bound: [reception, captain, chef, bartender, room_attendant, security, engineering]
   session_timeout_minutes: { god_mode: 15, back_office: 30, operations: 240 }
 
+# permissions: what a role may change besides its day-to-day work.
+#   inventory.edit   add, edit, renumber or archive rooms and room types
+#   devices.approve  approve a new device for a back-office login
+#   users.manage     create staff logins and assign roles (not God Mode roles)
+#   '*'              everything, including deciding approvals
 roles:
   managing_director:
     god_mode: true
+    permissions: ['*']
     limits: unlimited
   general_manager:
+    permissions: [inventory.edit, devices.approve, users.manage]
     limits: { discount_percent: 25, refund: 50000, comp_room_nights: 5, purchase_order: 500000, rate_override_below_floor: true }
   operations_manager:
     limits: { discount_percent: 20, void_per_bill: 5000, room_move: true, mark_out_of_order: true, overtime_hours_per_week: 12 }
@@ -48,6 +55,7 @@ roles:
   security:
     limits: {}
   hr_payroll:
+    permissions: [users.manage]
     limits: { salary_advance: 10000, payroll_release_needs: [general_manager, managing_director] }
   employee_self_service:
     limits: {}

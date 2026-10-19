@@ -39,7 +39,10 @@ export function hashEntry(e: Omit<AuditEntry, 'hash'>): string {
 
 /** Builds the next entry after `prev` (null for the first). Shared by the in-memory log and the database store. */
 export function buildEntry(prev: { seq: number; hash: string } | null, input: AuditInput, at: Date): AuditEntry {
-  const base = { ...input, seq: (prev?.seq ?? 0) + 1, at: at.toISOString(), prevHash: prev?.hash ?? GENESIS }
+  // Plain JSON only (dates become ISO strings, undefined is dropped), so the entry hashes
+  // the same before it is stored and after it is read back from the database.
+  const plain = JSON.parse(JSON.stringify(input)) as AuditInput
+  const base = { ...plain, seq: (prev?.seq ?? 0) + 1, at: at.toISOString(), prevHash: prev?.hash ?? GENESIS }
   return Object.freeze({ ...base, hash: hashEntry(base) })
 }
 

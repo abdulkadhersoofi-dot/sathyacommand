@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { parse } from 'yaml'
 import { loadTaxConfig, priceGuard, rupees } from '@sathya/tax'
 import { appendAudit } from './audit-store'
+import { loadRolesConfig, syncRoles } from './context'
 import type { Db } from './db'
 
 // First-run data. Rooms come from seed/rooms.placeholder.csv until the resort's real
@@ -44,13 +44,13 @@ const RATE_PLANS = [
   { code: 'AP', name: 'All meals', meal: 'AP', add: 1800 },
 ]
 
-export async function seed(db: Db, opts: { today?: string } = {}) {
+export async function seed(db: Db, opts: { today?: string; mdMobile?: string } = {}) {
   const [{ n }] = await db.query<{ n: number }>('select count(*)::int as n from property')
   if (n > 0) return { seeded: false }
   return db.tx((t) => seedInto(t, opts))     // all or nothing
 }
 
-async function seedInto(db: Db, opts: { today?: string }) {
+async function seedInto(db: Db, opts: { today?: string; mdMobile?: string }) {
   const tax = loadTaxConfig()
   const today = opts.today ?? new Date().toISOString().slice(0, 10)
   const skipped: string[] = []
@@ -93,17 +93,14 @@ async function seedInto(db: Db, opts: { today?: string }) {
     }
   }
 
-  const roles = parse(readFileSync(seedFile('roles-and-approvals.yaml'), 'utf8')).roles as Record<string, { god_mode?: boolean; limits?: unknown }>
-  for (const [id, r] of Object.entries(roles)) {
-    await db.query('insert into role (id, name, god_mode, limits) values ($1, $2, $3, $4)',
-      [id, id.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()), !!r.god_mode, JSON.stringify(r.limits ?? {})])
-  }
-  await db.query(`insert into app_user (id, name) values ('u-md', 'Managing Director')`)
+  const roles = loadRolesConfig()
+  await syncRoles(db, roles)
+  await db.query(`insert into app_user (id, name, mobile) values ('u-md', 'Managing Director', $1)`, [opts.mdMobile ?? null])
   await db.query(`insert into user_role (user_id, role_id) values ('u-md', 'managing_director')`)
 
   await appendAudit(db, {
     actor: SYSTEM, action: 'system.seed', entity: { type: 'property', id: PROPERTY },
-    after: { rooms: csv.length, places: PLACES.length, roles: Object.keys(roles).length, ratesSkippedByGuard: skipped },
+    after: { rooms: csv.length, places: PLACES.length, roles: Object.keys(roles.roles).length, ratesSkippedByGuard: skipped },
     note: 'Initial data. Room list is a placeholder until the resort provides the real one.',
   })
   return { seeded: true, rooms: csv.length, ratesSkippedByGuard: skipped }

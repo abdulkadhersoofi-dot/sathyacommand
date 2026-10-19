@@ -17,7 +17,7 @@ export interface TdsRule {
 }
 
 export interface TaxConfig {
-  meta: { entity_type: string; rooms_total: number; state_code: string }
+  meta: { entity_type: string; state_code: string }
   gst: {
     aato_band: 'under_5_crore' | '5_to_10_crore' | 'above_10_crore'
     accommodation: { sac: string; extra_charges_count_toward_value: boolean; slabs: Slab[] }

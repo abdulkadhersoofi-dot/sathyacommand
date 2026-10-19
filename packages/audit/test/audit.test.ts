@@ -17,6 +17,13 @@ const tamper = (entries: readonly AuditEntry[], i: number, patch: Partial<AuditE
   entries.map((e, k) => (k === i ? { ...e, ...patch } : e))
 
 describe('God Mode audit log', () => {
+  it('hashes dates the same way before and after storage', () => {
+    const log = new AuditLog()
+    const e = log.append({ actor: md, action: 'room.update', entity: { type: 'room', id: 'RM-1' }, before: { updated_at: new Date('2026-11-01T00:00:00Z') } })
+    const roundTripped = JSON.parse(JSON.stringify(e))
+    expect(verifyChain([roundTripped])).toEqual({ ok: true })
+  })
+
   it('chains entries and verifies a clean log', () => {
     const log = sampleLog()
     const all = log.all()

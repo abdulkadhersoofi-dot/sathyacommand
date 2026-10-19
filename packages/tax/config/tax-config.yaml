@@ -9,7 +9,7 @@ meta:
   version: 0.2-draft
   entity_type: private_limited_company      # MD, 2026-10-19
   companies_act_audit_trail: required       # edit log on accounts cannot be disabled
-  rooms_total: 47                           # MD, 2026-10-19; none priced above ₹7,500
+  # room count is not fixed: rooms and room types are managed in the HMS (MD, 2026-10-19)
   prepared: 2026-10-19
   state: Tamil Nadu
   state_code: "33"

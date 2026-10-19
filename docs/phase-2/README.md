@@ -7,7 +7,9 @@ Weeks 5–14 of the [blueprint](../HMS_BLUEPRINT.md). Built in steps, each one t
 | 2.1 | **Tax engine** (`packages/tax`): GST per room-night with the ₹7,500 guard, restaurant 5%/18% by premises status, GST + TN VAT bill split, advances, credit notes, e-invoice deadlines, reverse charge, OTA settlement, ITC reversal, TDS with thresholds and no-PAN rate, TCS, cash and MSME controls, liquor hours and dry days, Form C | Done · 44 test-book scenarios pass |
 | 2.2 | **God Mode log** (`packages/audit`): append-only, hash-chained, tamper detection, nightly anchor | Done · 6 tests pass |
 | 2.3 | **Database and API server** (`server/`): PostgreSQL schema with an append-only audit table enforced by the database; property, 47 rooms (placeholder list), venues, room types, EP/CP/MAP/AP rate plans, roles from the approvals file; API for spaces, room types, rates, night-by-night GST quotes, rate changes guarded at ₹7,500, audit log and chain check | Done · 12 API tests pass |
-| 2.4 | Sign-in (mobile OTP), two-factor for owner roles, approval engine, device registration | Next |
+| 2.3b | **Editable rooms and room types**: add, rename, renumber, retype or archive rooms and room types at any time (no fixed total); bulk import of the real room list that archives leftover placeholders; MD/GM only; every change logged with before and after | Done |
+| 2.4 | **Sign-in and approvals**: SMS code sign-in, authenticator app (second factor) for MD, GM, accounts and HR with first-time set-up, new-device approval for back-office logins, sliding session timeouts by role (15 / 30 / 240 min), staff logins and roles (only the MD grants God Mode), instant lock-out that ends all sessions, approval inbox (rates above ₹7,500, new devices) | Done · 25 API tests pass |
+| 2.4b | SMS provider (DLT-registered), 4-digit PIN quick-switch on shared tablets, shift-bound sign-in (needs rosters) | Later |
 | 2.5 | Reservations, check-in / check-out, folios, cashier shifts, night audit | |
 | 2.6 | GST invoices, e-invoice (IRN) via GSP, receipt and refund vouchers | |
 | 2.7 | Front desk screens; 3D dashboard switched to live data | |
@@ -22,14 +24,14 @@ Weeks 5–14 of the [blueprint](../HMS_BLUEPRINT.md). Built in steps, each one t
 
 ```bash
 npm install
-npm test                      # 64 tests: tax book, audit log, API
+npm test                      # 78 tests: tax book, audit log, API
 npm run start -w server       # API on http://localhost:8080 with a local database in server/data
 ```
 
-Set `DATABASE_URL` to use a real PostgreSQL database instead of the local one.
-Until sign-in arrives in step 2.4, send `x-user-id: u-md` to act as the MD.
+Set `DATABASE_URL` to use a real PostgreSQL database instead of the local one, and `MD_MOBILE` to give the MD's login a mobile number on first start.
+Until an SMS provider is connected, sign-in codes are printed in the server log (never in production).
 
 ## Notes
 
 - **Meal-plan packages and the ₹7,500 limit.** A package is taxed on its full nightly value, so a ₹7,000 villa with breakfast (₹7,600) would cross ₹7,500 and move the restaurant to 18% next year. The seed therefore leaves out every plan/room-type combination above ₹7,500 (CP/MAP/AP for villas and suites, AP for premium rooms). The MD and CA decide how to price those (for example, billing meals separately).
-- **Room list is a placeholder**: 36 Park Wing rooms, 8 villas, 3 suites, with assumed rates. Every row is flagged `placeholder` until the real list replaces `server/seed/rooms.placeholder.csv`.
+- **Room list is a placeholder**: 36 Park Wing rooms, 8 villas, 3 suites, with assumed rates. The real list can be loaded at any time through `POST /api/rooms/import` with `replacePlaceholders: true`; rooms can be added later without limit.
