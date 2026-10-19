@@ -10,7 +10,7 @@ Weeks 5–14 of the [blueprint](../HMS_BLUEPRINT.md). Built in steps, each one t
 | 2.3b | **Editable rooms and room types**: add, rename, renumber, retype or archive rooms and room types at any time (no fixed total); bulk import of the real room list that archives leftover placeholders; MD/GM only; every change logged with before and after | Done |
 | 2.4 | **Sign-in and approvals**: SMS code sign-in, authenticator app (second factor) for MD, GM, accounts and HR with first-time set-up, new-device approval for back-office logins, sliding session timeouts by role (15 / 30 / 240 min), staff logins and roles (only the MD grants God Mode), instant lock-out that ends all sessions, approval inbox (rates above ₹7,500, new devices) | Done · 25 API tests pass |
 | 2.4b | SMS provider (DLT-registered), 4-digit PIN quick-switch on shared tablets, shift-bound sign-in (needs rosters) | Later |
-| 2.5 | Reservations, check-in / check-out, folios, cashier shifts, night audit | |
+| 2.5 | **Front office**: availability by room type and night; reservations with the price fixed per night at booking; overbooking refused (and double-booking a room refused by the database itself); room assignment, moves and upgrades; discounts within role limits, larger ones to the approval inbox; extra beds (counted toward the ₹7,500 slab); cancellation; check-in with ID (only the last 4 characters stored) and a 24-hour Form C task for foreign guests; guest bills with laundry and other charges, manager-only reversals (never deletion), payments by cash, card, UPI, bank, company or OTA, refunds; ₹2 lakh cash block (attempts logged); check-out with balance check and early-departure night release; cashier shifts with denomination count and variance flag; night audit that marks no-shows, posts each night's room charge with GST from that night's value, records the day's figures and moves the business date | Done · 18 tests run two full business days |
 | 2.6 | GST invoices, e-invoice (IRN) via GSP, receipt and refund vouchers | |
 | 2.7 | Front desk screens; 3D dashboard switched to live data | |
 | 2.8 | Twin Studio v1 (edit the 3D resort) | |
@@ -24,7 +24,7 @@ Weeks 5–14 of the [blueprint](../HMS_BLUEPRINT.md). Built in steps, each one t
 
 ```bash
 npm install
-npm test                      # 78 tests: tax book, audit log, API
+npm test                      # 96 tests: tax book, audit log, API, front office
 npm run start -w server       # API on http://localhost:8080 with a local database in server/data
 ```
 

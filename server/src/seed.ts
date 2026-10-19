@@ -56,8 +56,8 @@ async function seedInto(db: Db, opts: { today?: string; mdMobile?: string }) {
   const skipped: string[] = []
 
   await db.query(
-    `insert into property (id, name, legal_name, entity_type, state_code) values ($1, $2, $3, $4, $5)`,
-    [PROPERTY, 'Sathya Park & Resorts', null, 'private_limited_company', '33'],
+    `insert into property (id, name, legal_name, entity_type, state_code, business_date) values ($1, $2, $3, $4, $5, $6)`,
+    [PROPERTY, 'Sathya Park & Resorts', null, 'private_limited_company', '33', today],
   )
   for (const t of ROOM_TYPES) {
     await db.query('insert into room_type (id, property_id, name, base_rate_paise, max_occupancy) values ($1, $2, $3, $4, $5)',

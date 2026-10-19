@@ -16,6 +16,7 @@ export interface RolesConfig {
     session_timeout_minutes: { god_mode: number; back_office: number; operations: number }
   }
   roles: Record<string, { god_mode?: boolean; permissions?: string[]; limits?: unknown }>
+  god_mode_alerts?: { id: string; value?: number }[]
 }
 
 export interface Ctx {

@@ -13,6 +13,10 @@ sign_in:
 #   inventory.edit   add, edit, renumber or archive rooms and room types
 #   devices.approve  approve a new device for a back-office login
 #   users.manage     create staff logins and assign roles (not God Mode roles)
+#   front_desk       reservations, room assignment, check-in / check-out, payments, cashier shift
+#   folio.reverse    reverse a charge on a guest bill
+#   discount.approve approve a discount above the requester's limit
+#   night_audit      run the night audit (closes the business day)
 #   '*'              everything, including deciding approvals
 roles:
   managing_director:
@@ -20,15 +24,19 @@ roles:
     permissions: ['*']
     limits: unlimited
   general_manager:
-    permissions: [inventory.edit, devices.approve, users.manage]
+    permissions: [inventory.edit, devices.approve, users.manage, front_desk, folio.reverse, discount.approve, night_audit]
     limits: { discount_percent: 25, refund: 50000, comp_room_nights: 5, purchase_order: 500000, rate_override_below_floor: true }
   operations_manager:
+    permissions: [front_desk, folio.reverse, discount.approve]
     limits: { discount_percent: 20, void_per_bill: 5000, room_move: true, mark_out_of_order: true, overtime_hours_per_week: 12 }
   front_office_manager:
+    permissions: [front_desk, folio.reverse, night_audit]
     limits: { discount_percent: 15, refund: 10000, cashier_variance_writeoff: 500 }
   reception:
+    permissions: [front_desk]
     limits: { discount_percent: 10, refund: 0 }
   night_auditor:
+    permissions: [front_desk, night_audit]
     limits: {}
   accounts:
     limits: { vendor_payment_needs_approval_above: 25000, delete_vouchers: false }

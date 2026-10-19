@@ -7,6 +7,8 @@ import { approvalRoutes, createApproval } from './routes/approvals'
 import { authRoutes, requireCaller } from './routes/auth'
 import { inventoryRoutes } from './routes/inventory'
 import { userRoutes } from './routes/users'
+import { frontOfficeRoutes } from './routes/frontoffice'
+import { nightAuditRoutes } from './routes/nightaudit'
 
 export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boolean } = {}) {
   const ctx: Ctx = {
@@ -29,6 +31,8 @@ export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boo
   approvalRoutes(app, ctx)
   inventoryRoutes(app, ctx)
   userRoutes(app, ctx)
+  frontOfficeRoutes(app, ctx)
+  nightAuditRoutes(app, ctx)
 
   app.get('/health', async () => ({ ok: true, db: db.engine }))
 

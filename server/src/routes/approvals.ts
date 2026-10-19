@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify'
 import { appendAudit } from '../audit-store'
 import { can, HttpError, type Caller, type Ctx } from '../context'
 import type { Db } from '../db'
+import { applyDiscount } from '../fo-core'
 import { requireCaller } from './auth'
 
 // The approval inbox. Each kind says who may decide it and what happens when it is approved.
@@ -21,6 +22,12 @@ const KINDS: Record<string, Kind> = {
          on conflict (rate_plan_id, room_type_id, valid_from) do update set valid_to = excluded.valid_to,
            amount_paise = excluded.amount_paise, approved_by = excluded.approved_by`,
         [p.planId, p.roomTypeId, p.validFrom, p.validTo, p.amount, decider.userId])
+    },
+  },
+  'reservation.discount': {
+    permission: 'discount.approve',
+    async apply(t, p) {
+      await applyDiscount(t, String(p.reservationId), Number(p.percent))
     },
   },
   'device.register': {
