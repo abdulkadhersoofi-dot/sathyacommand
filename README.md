@@ -37,3 +37,4 @@ restaurant and kitchen location, use of the south-west white-roof building, hall
 
 - [HMS Blueprint](docs/HMS_BLUEPRINT.md): full phased plan for the hotel management system ([formatted HTML](docs/hms-blueprint.html))
 - [Phase 0 workspace](docs/phase-0/README.md): owner intake, department workshops, tax pack for the CA, roles and limits, licence register, site survey, Tamil glossary
+- [Phase 2 progress](docs/phase-2/README.md): tax engine (`packages/tax`) and God Mode log (`packages/audit`) built and tested; run `npm test`

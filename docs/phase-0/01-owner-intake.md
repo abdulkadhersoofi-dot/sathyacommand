@@ -5,7 +5,7 @@ Answers from the MD. Write the answer under each question, or reply to Claude in
 ## A. Legal & tax identity
 
 1. Legal entity type (private limited company, LLP, partnership firm, proprietorship) and its name.
-   - Answer:
+   - Answer: Private limited company (MD, 19 Oct 2026). Company name still needed. Companies Act audit-trail rule applies to the accounts module.
 2. GSTIN(s). Is the bar under the same entity?
    - Answer:
 3. Aggregate turnover last financial year (band is enough: under ₹5 cr / ₹5–10 cr / above ₹10 cr). Decides e-invoicing, 30-day IRN reporting and 194Q.
@@ -24,11 +24,11 @@ Answers from the MD. Write the answer under each question, or reply to Claude in
 ## B. Rooms & rates
 
 9. Real room list: building, floor, room number, room type for every room. (Phase 1 assumed Park Wing 3 floors × 12 and 6 villas.)
-   - Answer: 33 keys: 20 rooms, 10 villas, 3 suites (MD, 19 Oct 2026). Still needed: which building and floor each is in, room numbers, and room types.
+   - Answer: 47 rooms in total (MD, 19 Oct 2026; replaces the earlier figure of 33). Still needed: split by type (rooms, villas, suites), building, floor and room numbers.
 10. Room types with standard rates (weekday, weekend, peak) and meal plans offered (EP, CP, MAP, AP).
     - Answer:
 11. Did any room or villa sell above ₹7,500 for a night in FY 2025-26? Will any in FY 2026-27? (Decides restaurant GST 18% vs 5%.)
-    - Answer: No unit sold above ₹7,500 in FY 2025-26, so the restaurant is not "specified premises" and is charged 5% GST without ITC (MD, 19 Oct 2026). To keep 5% next year, no unit may sell above ₹7,500 in FY 2026-27 either. CA to confirm.
+    - Answer: No room sold above ₹7,500 in FY 2025-26 and none is priced above ₹7,500 (MD, 19 Oct 2026). Restaurant stays at 5% GST without ITC. Any rate above ₹7,500 needs MD approval. CA to confirm.
 12. Extra bed / extra person charges and child policy.
     - Answer:
 13. Check-in and check-out times; early check-in and late checkout charges.

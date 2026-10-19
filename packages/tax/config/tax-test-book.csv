@@ -1,5 +1,5 @@
 id,area,scenario,inputs,expected_result_draft,basis,ca_verdict,ca_notes
-T01,GST rooms,Standard room B2C,"Room ₹4,500/night x 2 nights, no discount",5% GST: CGST ₹225 + SGST ₹225 per night; ₹900 total,"Accommodation ≤ ₹7,500",,
+T01,GST rooms,Standard room B2C,"Room ₹4,500/night x 2 nights, no discount",5% GST: CGST ₹112.50 + SGST ₹112.50 per night; ₹450 for the stay,"Accommodation ≤ ₹7,500",,
 T02,GST rooms,Villa,"Villa ₹9,500/night x 1",18%: CGST ₹855 + SGST ₹855,"Accommodation > ₹7,500",,
 T03,GST rooms,Exactly at limit,"Room ₹7,500/night",5% (limit is inclusive),"≤ ₹7,500",,
 T04,GST rooms,One rupee over,"Room ₹7,501/night",18%,"> ₹7,500",,
@@ -20,7 +20,7 @@ T18,TDS on resort,Corporate rate contract,"Corporate on rate contract, monthly b
 T19,TDS on resort,Banquet client deducts,"Company banquet bill ₹3,00,000","Client may deduct 2% (contract) = ₹6,000",Old 194C,,
 T20,GST TDS,Government event,"District office event ₹5,00,000","2% GST TDS ₹10,000 credit",Section 51,,
 T21,TDS,Decorator single bill,"Individual decorator, single bill ₹40,000",1% = ₹400,"Old 194C single > ₹30,000",,
-T22,TDS,Aggregate threshold crossed,"Company vendor: ₹25,000 x 3, then 4th bill ₹25,000","No TDS on first 3; on 4th deduct 2% on ₹1,00,000 = ₹2,000",Old 194C annual,,
+T22,TDS,Aggregate threshold crossed,"Company vendor: ₹25,000 x 3, then a 4th bill of ₹30,000","No TDS on the first 3 (aggregate ₹75,000); 4th bill takes the year to ₹1,05,000, above ₹1,00,000, so deduct 2% on ₹1,05,000 = ₹2,100",Old 194C annual,,
 T23,TDS,CA fees,"Professional fees ₹60,000 in year","10% once ₹50,000 crossed = ₹6,000",Old 194J,,
 T24,TDS,Staff quarters rent below threshold,"Rent ₹45,000/month",No TDS,"Old 194-I ₹50,000/month",,
 T25,TDS,Staff quarters rent above threshold,"Rent ₹60,000/month","10% = ₹6,000/month",Old 194-I,,
@@ -42,3 +42,4 @@ T40,Service charge,Guest declines service charge,Bill with optional service char
 T41,GST rooms,"Rate above ₹7,500 attempted","Reception sets a suite at ₹8,200 for one night",Blocked until MD approves; warning that the restaurant would move to 18% GST next FY,Specified premises guard,,
 T42,GST e-invoice,B2B invoice reporting window,B2B invoice dated 1 Nov; resort AATO above ₹10 crore,IRN must be generated within 30 days; system alerts accounts before the deadline,E-invoice 30-day rule,,
 T43,TDS,194Q on large supplier,Provisions supplier: purchases cross ₹50 lakh in the year,0.1% TDS on the amount above ₹50 lakh,Old 194Q (buyer turnover above ₹10 crore),,
+T44,TDS,Director sitting fee,"Non-executive director paid ₹20,000 sitting fee","10% = ₹2,000 (no threshold for director fees)",Old 194J(1)(ba),,

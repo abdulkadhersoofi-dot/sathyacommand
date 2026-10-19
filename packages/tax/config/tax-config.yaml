@@ -6,7 +6,10 @@
 # Law as understood in October 2026. Nothing here is final until the CA confirms.
 
 meta:
-  version: 0.1-draft
+  version: 0.2-draft
+  entity_type: private_limited_company      # MD, 2026-10-19
+  companies_act_audit_trail: required       # edit log on accounts cannot be disabled
+  rooms_total: 47                           # MD, 2026-10-19; none priced above ₹7,500
   prepared: 2026-10-19
   state: Tamil Nadu
   state_code: "33"
@@ -22,6 +25,7 @@ gst:
     slabs:
       - { max_value: 7500, rate: 5,  itc: false, effective_from: 2025-09-22, ca_status: pending }
       - { min_value: 7500.01, rate: 18, itc: true, effective_from: 2025-09-22, ca_status: pending }
+    extra_charges_count_toward_value: true   # extra bed / extra person; CA to confirm (T06)
     open_questions:
       - Does an extra-bed / extra-person charge add to the per-unit-per-day value?
       - Treatment of complimentary upgrades (value of supply = amount actually charged?)
@@ -50,7 +54,7 @@ gst:
   banquets:
     hall_and_lawn_rental: { sac: null, rate: 18, itc: true, ca_status: pending }   # CA to give SAC
     event_catering:       { sac: "996334", rate_follows: restaurant_premises_status, ca_status: pending }
-    composite_packages:   { treatment: principal_supply, ca_status: pending }
+    composite_packages:   { treatment: principal_supply, principal: accommodation, ca_status: pending }
 
   other_services:
     laundry:   { rate: 18, ca_status: pending }
@@ -67,11 +71,11 @@ gst:
     applies_to: [b2b_invoice, b2b_credit_note, b2b_debit_note]
 
   reverse_charge:
-    - { service: legal_services_by_advocate, ca_status: pending }
-    - { service: goods_transport_agency, ca_status: pending }
-    - { service: security_services_from_non_body_corporate, ca_status: pending }
-    - { service: renting_commercial_property_from_unregistered_person, effective_from: 2024-10-10, ca_status: pending }
-    - { service: sponsorship, ca_status: pending }
+    - { service: legal_services_by_advocate, rate: 18, applies_when: always, ca_status: pending }
+    - { service: goods_transport_agency, rate: 5, applies_when: always, ca_status: pending }
+    - { service: security_services, rate: 18, applies_when: supplier_not_body_corporate, ca_status: pending }
+    - { service: renting_commercial_property, rate: 18, applies_when: supplier_unregistered, effective_from: 2024-10-10, ca_status: pending }
+    - { service: sponsorship, rate: 18, applies_when: always, ca_status: pending }
 
   credits_to_track:
     gst_tds_by_government:   { rate: 2, contract_value_above: 250000, ca_status: pending }
@@ -132,6 +136,12 @@ income_tax:
       rate: 10
       threshold: { annual: 20000 }
       applies_if_entity: partnership_firm
+      applies_to_resort: false             # private limited company
+      ca_status: pending
+    - code: director_fees
+      old_section: 194J(1)(ba)
+      rate: 10
+      threshold: { annual: 0 }
       ca_status: pending
     - code: salary
       old_section: "192"

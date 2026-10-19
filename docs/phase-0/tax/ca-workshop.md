@@ -3,8 +3,8 @@
 Send this folder to the resort's chartered accountant before the workshop (week 3, about 2 hours).
 
 ## What the CA receives
-1. [tax-config.draft.yaml](tax-config.draft.yaml): every GST, TDS, TCS and VAT rule the software will apply. Mark each `ca_status` as `confirmed` or `changed`.
-2. [tax-test-book.csv](tax-test-book.csv): 40 real scenarios with the expected result. Fill `ca_verdict` (agree / disagree) and `ca_notes`. These become automatic tests that run on every software change.
+1. [tax-config.yaml](../../../packages/tax/config/tax-config.yaml): every GST, TDS, TCS and VAT rule the software will apply. Mark each `ca_status` as `confirmed` or `changed`.
+2. [tax-test-book.csv](../../../packages/tax/config/tax-test-book.csv): 44 real scenarios with the expected result. Fill `ca_verdict` (agree / disagree) and `ca_notes`. Every row is already an automatic test (`npm test` in `packages/tax`); a change the CA makes here changes what the tests expect.
 
 ## Questions that need a decision
 1. **Specified premises.** Did any unit sell above ₹7,500 a night in FY 2025-26? Should the resort opt in by declaration? This decides restaurant GST at 18% with ITC or 5% without.
