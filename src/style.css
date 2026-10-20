@@ -792,3 +792,8 @@ button.link { background: none; border: 0; padding: 0; color: var(--accent); fon
 .modules-menu button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; text-align: left; background: none; border: 0; border-radius: 8px; padding: 8px 10px; color: var(--fg); font: inherit; cursor: pointer; }
 .modules-menu button:hover, .modules-menu button:focus-visible { background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
 .modules-menu small { color: var(--muted); font-size: 12px; }
+.btn.file-btn { cursor: pointer; }
+.row-card.bank-line { grid-template-columns: 1fr auto; cursor: default; }
+.row-card.bank-line .rc-title { white-space: normal; }
+.row-card.bank-line .rc-right span { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+@media (max-width: 600px) { .row-card.bank-line { grid-template-columns: 1fr; } .row-card.bank-line .rc-right { grid-row: auto; grid-column: 1; align-items: flex-start; } }

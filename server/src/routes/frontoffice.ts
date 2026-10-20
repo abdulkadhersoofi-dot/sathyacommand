@@ -10,6 +10,7 @@ import {
 import { createApproval } from './approvals'
 import { issueReceiptVoucher, issueRefundVoucher, issueStayInvoice } from '../invoicing'
 import { validateGstin } from '@sathya/tax'
+import { checkCredit, debtorFor } from '../receivables'
 import { requireCaller } from './auth'
 import { onCheckIn, onCheckOut, onRoomMove } from '../hk-core'
 
@@ -403,8 +404,16 @@ export function frontOfficeRoutes(app: FastifyInstance, ctx: Ctx) {
         if (amount > 0 && res.status === 'confirmed') voucher = await issueReceiptVoucher(ctx, t, who, f.reservation_id, amount)
         if (amount < 0) voucher = await issueRefundVoucher(ctx, t, who, f.reservation_id, -amount)
       }
-      await t.query('insert into payment (id, folio_id, line_id, method, amount_paise, reference, shift_id, received_by, at, voucher_id) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
-        [newId('P'), id, lineId, b.method, amount, b.reference ?? null, shiftId, who.userId, now(), voucher?.id ?? null])
+      // On the company's account: within its credit limit, and into its city-ledger account.
+      let debtorId: string | null = null
+      if (b.method === 'company') {
+        const [c] = await t.query<{ company: string | null; gstin: string | null; bill_to: string; folio_gstin: string | null }>(
+          'select r.bill_to_company as company, r.bill_to_gstin as gstin, f.bill_to, f.gstin as folio_gstin from folio f join reservation r on r.id = f.reservation_id where f.id = $1', [id])
+        debtorId = await debtorFor(t, c.company ?? c.bill_to, c.gstin ?? c.folio_gstin, now())
+        await checkCredit(t, debtorId, amount)
+      }
+      await t.query('insert into payment (id, folio_id, line_id, method, amount_paise, reference, shift_id, received_by, at, voucher_id, debtor_id) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
+        [newId('P'), id, lineId, b.method, amount, b.reference ?? null, shiftId, who.userId, now(), voucher?.id ?? null, debtorId])
       await appendAudit(t, { actor: who, action: amount > 0 ? 'payment.receive' : 'payment.refund', entity: { type: 'folio', id }, amount,
         after: { method: b.method, reference: b.reference ?? null } }, now())
       return { lineId, balance: await folioBalance(t, id), voucher: voucher?.number ?? null }

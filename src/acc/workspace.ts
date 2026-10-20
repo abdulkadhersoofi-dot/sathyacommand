@@ -3,10 +3,11 @@ import type { Me } from '../live/signin'
 import type { Outbox } from '../live/outbox'
 import { Workspace, type View } from '../ui/workspace'
 import { BalanceSheetView, ChartView, DayBookView, JournalView, LedgerView, PeriodsView, PnlView, TrialBalanceView } from './books'
+import { BanksView, CashView, ReceivablesView } from './money'
 
 // Accounts: the books the resort's own records post into.
 
-type Tab = 'daybook' | 'tb' | 'ledger' | 'pnl' | 'bs' | 'journal' | 'chart' | 'periods'
+type Tab = 'daybook' | 'tb' | 'ledger' | 'pnl' | 'bs' | 'journal' | 'chart' | 'periods' | 'receivables' | 'banks' | 'cash'
 const fyStart = (day: string) => `${Number(day.slice(5, 7)) >= 4 ? day.slice(0, 4) : Number(day.slice(0, 4)) - 1}-04-01`
 
 export class AccountsWorkspace extends Workspace<Tab> {
@@ -18,8 +19,9 @@ export class AccountsWorkspace extends Workspace<Tab> {
   constructor(api: Api, me: Me, outbox: Outbox, onClose: () => void) {
     super(api, me, outbox, 'Accounts', onClose)
     this.ledger = new LedgerView(this)
-    this.views = { daybook: new DayBookView(this), tb: new TrialBalanceView(this), ledger: this.ledger, pnl: new PnlView(this), bs: new BalanceSheetView(this), journal: new JournalView(this), chart: new ChartView(this), periods: new PeriodsView(this) }
-    this.tab = 'tb'
+    this.views = { daybook: new DayBookView(this), tb: new TrialBalanceView(this), ledger: this.ledger, pnl: new PnlView(this), bs: new BalanceSheetView(this), journal: new JournalView(this), chart: new ChartView(this), periods: new PeriodsView(this),
+      receivables: new ReceivablesView(this), banks: new BanksView(this), cash: new CashView(this) }
+    this.tab = this.tabs()[0][0]
   }
 
   /** The financial year to the business date, until the user picks other dates. */
@@ -29,10 +31,17 @@ export class AccountsWorkspace extends Workspace<Tab> {
     this.from = fyStart(this.to)
   }
 
-  static allowed(me: Me) { return ['*', 'accounts.view', 'accounts.post', 'accounts.lock'].some((p) => me.permissions.includes(p)) }
+  static allowed(me: Me) { return ['*', 'accounts.view', 'accounts.post', 'accounts.lock', 'receivables.view', 'receivables.manage', 'bank.reconcile', 'cash.manage'].some((p) => me.permissions.includes(p)) }
 
   tabs(): [Tab, string][] {
-    return [['daybook', 'Day book'], ['tb', 'Trial balance'], ['ledger', 'Ledgers'], ['pnl', 'Profit & loss'], ['bs', 'Balance sheet'], ['journal', 'Journal'], ['chart', 'Chart of accounts'], ['periods', 'Locked months']]
+    const t: [Tab, string][] = []
+    const books = this.can('accounts.view', 'accounts.post', 'accounts.lock')
+    if (books) t.push(['tb', 'Trial balance'], ['daybook', 'Day book'], ['ledger', 'Ledgers'], ['pnl', 'Profit & loss'], ['bs', 'Balance sheet'])
+    if (this.can('receivables.view', 'receivables.manage')) t.push(['receivables', 'Receivables'])
+    if (this.can('bank.reconcile', 'accounts.view')) t.push(['banks', 'Banks'])
+    if (this.can('cash.manage', 'accounts.view')) t.push(['cash', 'Cash'])
+    if (books) t.push(['journal', 'Journal'], ['chart', 'Chart of accounts'], ['periods', 'Locked months'])
+    return t
   }
 
   openLedger(code: string, party = '') {

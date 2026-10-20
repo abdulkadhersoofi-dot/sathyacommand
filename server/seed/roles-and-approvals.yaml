@@ -75,6 +75,11 @@ sign_in:
 #   accounts.view    the books: day book, ledgers, trial balance, profit and loss, balance sheet (read)
 #   accounts.post    journal entries (put right only by reversal), the chart of accounts
 #   accounts.lock    lock a month's books once closed (only the MD reopens one)
+#   receivables.view company and agent accounts on credit, statements and ageing (read)
+#   receivables.manage  open company accounts, terms, money received from them (with their TDS)
+#   credit.limit     set a company's credit limit (credit beyond it is refused at the desk and the restaurant)
+#   bank.reconcile   bank accounts, statement import and matching, settlements and charges from the statement
+#   cash.manage      bank the cash, petty cash float and its expenses
 #   '*'              everything, including deciding approvals
 roles:
   managing_director:
@@ -82,13 +87,13 @@ roles:
     permissions: ['*']
     limits: unlimited
   general_manager:
-    permissions: [inventory.edit, devices.approve, users.manage, front_desk, folio.reverse, discount.approve, night_audit, invoice.view, invoice.credit_note, site.edit, site.publish, fnb.order, fnb.void, fnb.bill, fnb.discount, menu.edit, menu.price, bar.settings, bar.stock, bar.approve, kitchen.stock, kitchen.approve, food_cost.view, printers.manage, licences.edit, hk.view, hk.manage, hk.inspect, staff.track, attendance.view, roster.manage, broadcast.send, staff.settings, eng.manage, eng.approve, compliance.view, security.view, security.manage, emergency.start, stores.view, stores.manage, vendors.manage, vendors.bank, purchase.indent, indent.approve, purchase.order, purchase.approve, payables.view, stock.approve, stores.issue, stores.count, stores.breakage, accounts.view, accounts.lock]
+    permissions: [inventory.edit, devices.approve, users.manage, front_desk, folio.reverse, discount.approve, night_audit, invoice.view, invoice.credit_note, site.edit, site.publish, fnb.order, fnb.void, fnb.bill, fnb.discount, menu.edit, menu.price, bar.settings, bar.stock, bar.approve, kitchen.stock, kitchen.approve, food_cost.view, printers.manage, licences.edit, hk.view, hk.manage, hk.inspect, staff.track, attendance.view, roster.manage, broadcast.send, staff.settings, eng.manage, eng.approve, compliance.view, security.view, security.manage, emergency.start, stores.view, stores.manage, vendors.manage, vendors.bank, purchase.indent, indent.approve, purchase.order, purchase.approve, payables.view, stock.approve, stores.issue, stores.count, stores.breakage, accounts.view, accounts.lock, receivables.view, credit.limit]
     limits: { discount_percent: 25, breakage_per_entry: 10000, refund: 50000, comp_room_nights: 5, purchase_order: 500000, rate_override_below_floor: true }
   operations_manager:
     permissions: [front_desk, folio.reverse, discount.approve, site.edit, fnb.order, fnb.void, fnb.bill, fnb.discount, hk.view, hk.manage, hk.inspect, staff.track, attendance.view, roster.manage, broadcast.send, eng.manage, eng.approve, compliance.view, security.view, security.manage, emergency.start, purchase.indent, indent.approve]
     limits: { discount_percent: 20, void_per_bill: 5000, room_move: true, mark_out_of_order: true, overtime_hours_per_week: 12 }
   front_office_manager:
-    permissions: [front_desk, folio.reverse, night_audit, invoice.credit_note, hk.view, attendance.view, roster.manage, broadcast.send, security.view, emergency.start, purchase.indent]
+    permissions: [front_desk, folio.reverse, night_audit, invoice.credit_note, receivables.view, hk.view, attendance.view, roster.manage, broadcast.send, security.view, emergency.start, purchase.indent]
     limits: { discount_percent: 15, refund: 10000, cashier_variance_writeoff: 500 }
   reception:
     permissions: [front_desk, fnb.order, fnb.bill, hk.view]
@@ -97,7 +102,7 @@ roles:
     permissions: [front_desk, night_audit]
     limits: {}
   accounts:
-    permissions: [invoice.view, invoice.credit_note, einvoice.generate, licences.edit, tax.vat, compliance.view, stores.view, vendors.manage, vendors.bank, purchase.bill, purchase.pay, payables.view, accounts.view, accounts.post]
+    permissions: [invoice.view, invoice.credit_note, einvoice.generate, licences.edit, tax.vat, compliance.view, stores.view, vendors.manage, vendors.bank, purchase.bill, purchase.pay, payables.view, accounts.view, accounts.post, receivables.view, receivables.manage, bank.reconcile, cash.manage]
     limits: { vendor_payment_needs_approval_above: 25000, delete_vouchers: false }
   stores:
     permissions: [stores.view, stores.manage, vendors.manage, purchase.indent, purchase.order, stores.receive, stores.issue, stores.count, stores.breakage]
@@ -147,7 +152,7 @@ roles:
     limits: {}
   external_auditor:
     read_only: true
-    permissions: [accounts.view, invoice.view, payables.view]
+    permissions: [accounts.view, invoice.view, payables.view, receivables.view]
     access_expires_days: 30
 
 god_mode_alerts:

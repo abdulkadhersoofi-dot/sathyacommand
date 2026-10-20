@@ -104,6 +104,14 @@ export async function ensureChart(db: Db, now = new Date()) {
     await db.query('insert into account (code, name, type, grp, dept, system, created_at) values ($1,$2,$3,$4,$5,true,$6) on conflict (code) do nothing', [code, name, type, grp, dept, now])
   }
   await assignStoreAccounts(db)
+  const [bank] = await db.query('select 1 from bank_account limit 1')
+  if (!bank) await db.query(`insert into bank_account (id, name, account_code, is_default, created_at) values ('BANK-1', 'Current account', '1200', true, $1)`, [now])
+}
+
+/** The ledger account of the bank that payments go out of unless another is chosen. */
+export async function defaultBankCode(t: Db) {
+  const [b] = await t.query<{ account_code: string }>('select account_code from bank_account where is_default and active limit 1')
+  return b?.account_code ?? '1200'
 }
 
 /** A store added later gets the inventory and change accounts of its kind. */
@@ -118,13 +126,13 @@ export async function assignStoreAccounts(db: Db) {
 export interface Party { type: 'vendor' | 'company' | 'guest' | 'staff' | 'ota'; id: string; name?: string | null }
 export interface PostLine { code: string; amount: number; dept?: string | null; party?: Party | null; ref?: string | null }   // amount: debit +, credit −
 export interface VoucherInput {
-  kind: 'sales' | 'receipt' | 'purchase' | 'payment' | 'stock' | 'journal' | 'reversal'
+  kind: 'sales' | 'receipt' | 'purchase' | 'payment' | 'contra' | 'stock' | 'journal' | 'reversal'
   date: string; narration: string; lines: PostLine[]
   source?: { type: string; id: string } | null; reverses?: string | null; userId?: string | null; now: Date
   /** Hand-entered vouchers must balance and may not go into a locked month; the system's move to the next open day. */
   manual?: boolean
 }
-const PREFIX: Record<VoucherInput['kind'], string> = { sales: 'SL', receipt: 'RC', purchase: 'PU', payment: 'PY', stock: 'SK', journal: 'JV', reversal: 'RJ' }
+const PREFIX: Record<VoucherInput['kind'], string> = { sales: 'SL', receipt: 'RC', purchase: 'PU', payment: 'PY', contra: 'CO', stock: 'SK', journal: 'JV', reversal: 'RJ' }
 
 export class LedgerError extends Error { constructor(msg: string, public statusCode = 400) { super(msg) } }
 
@@ -230,13 +238,19 @@ export async function postPending(db: Db, now: Date) {
     const payDays = await t.query<{ d: string }>(
       `select distinct l.business_date::text as d from payment p join folio_line l on l.id = p.line_id where l.business_date < $1
           and not exists (select 1 from posted_source v where v.source_type = 'fo_pay_day' and v.source_id = l.business_date::text) order by 1`, [today])
+    const bank = await defaultBankCode(t)
     for (const { d } of payDays) {
-      const rows = await t.query<{ method: string; amount_paise: string; reservation_id: string; bill_to: string }>(
-        `select p.method, p.amount_paise, f.reservation_id, f.bill_to from payment p join folio_line l on l.id = p.line_id join folio f on f.id = p.folio_id where l.business_date = $1`, [d])
+      const rows = await t.query<{ method: string; amount_paise: string; reservation_id: string; bill_to: string; debtor_id: string | null; debtor: string | null; invoice: string | null }>(
+        `select p.method, p.amount_paise, f.reservation_id, f.bill_to, p.debtor_id, dr.name as debtor,
+                (select x.number from tax_document x where x.reservation_id = f.reservation_id and x.doc_type = 'invoice' order by x.issued_at desc limit 1) as invoice
+           from payment p join folio_line l on l.id = p.line_id join folio f on f.id = p.folio_id
+           left join debtor dr on dr.id = p.debtor_id where l.business_date = $1`, [d])
       const lines: PostLine[] = []
       for (const r of rows) {
         const amt = n(r.amount_paise)
-        lines.push({ code: METHOD[r.method] ?? '1100', amount: amt, party: r.method === 'company' ? { type: 'company', id: r.bill_to, name: r.bill_to } : null })
+        // Each stay a company is billed for is its own line on the company's account, with the invoice number.
+        lines.push({ code: r.method === 'bank' ? bank : METHOD[r.method] ?? '1100', amount: amt, party: r.method === 'company' ? { type: 'company', id: r.debtor_id ?? r.bill_to, name: r.debtor ?? r.bill_to } : null,
+          ref: r.method === 'company' ? r.invoice ?? `Booking ${r.reservation_id}` : null })
         lines.push({ code: '1300', amount: -amt, party: { type: 'guest', id: r.reservation_id, name: r.bill_to } })
       }
       await post({ kind: 'receipt', date: d, narration: `Front office receipts for ${d}`, source: { type: 'fo_pay_day', id: d }, lines })
@@ -254,10 +268,12 @@ export async function postPending(db: Db, now: Date) {
       for (const v of await t.query<{ taxable_paise: string; vat_paise: string; total_paise: string }>('select taxable_paise, vat_paise, total_paise from vat_invoice where issue_date = $1', [d])) {
         lines.push({ code: '1330', amount: n(v.total_paise) }, { code: '4200', amount: -n(v.taxable_paise) }, { code: '2210', amount: -n(v.vat_paise) })
       }
-      for (const p of await t.query<{ method: string; amount_paise: string; bill_to: { company?: string } | null }>(
-        `select p.method, p.amount_paise, b.bill_to from fnb_payment p join fnb_bill b on b.id = p.bill_id where p.business_date = $1 and p.method <> 'room'`, [d])) {
-        const company = p.bill_to?.company ?? 'Restaurant credit'
-        lines.push({ code: METHOD[p.method] ?? '1100', amount: n(p.amount_paise), party: p.method === 'company' ? { type: 'company', id: company, name: company } : null }, { code: '1330', amount: -n(p.amount_paise) })
+      for (const p of await t.query<{ method: string; amount_paise: string; bill_to: { company?: string } | null; debtor_id: string | null; debtor: string | null; doc: string | null }>(
+        `select p.method, p.amount_paise, b.bill_to, p.debtor_id, dr.name as debtor, coalesce(g.number, vi.number) as doc from fnb_payment p join fnb_bill b on b.id = p.bill_id
+           left join debtor dr on dr.id = p.debtor_id left join tax_document g on g.id = b.gst_document_id left join vat_invoice vi on vi.id = b.vat_invoice_id
+          where p.business_date = $1 and p.method <> 'room'`, [d])) {
+        const company = p.debtor ?? p.bill_to?.company ?? 'Restaurant credit'
+        lines.push({ code: METHOD[p.method] ?? '1100', amount: n(p.amount_paise), party: p.method === 'company' ? { type: 'company', id: p.debtor_id ?? company, name: company } : null, ref: p.method === 'company' ? p.doc : null }, { code: '1330', amount: -n(p.amount_paise) })
       }
       // Rounding to the rupee on bills paid for (not those charged to a room).
       const [ro] = await t.query<{ ro: string | null }>(
@@ -344,7 +360,7 @@ export async function postPending(db: Db, now: Date) {
     for (const p of pays) {
       await post({ kind: 'payment', date: p.pay_date, narration: `${p.number} to ${p.vendor}${p.reference ? ` (${p.reference})` : ''}`, source: { type: 'vendor_payment', id: p.id }, lines: [
         { code: '2100', amount: n(p.gross_paise), party: { type: 'vendor', id: p.vendor_id, name: p.vendor }, ref: p.number },
-        { code: p.mode === 'cash' ? '1100' : '1200', amount: -n(p.net_paise), ref: p.reference },
+        { code: p.mode === 'cash' ? '1100' : await defaultBankCode(t), amount: -n(p.net_paise), ref: p.reference },
         { code: '2300', amount: -n(p.tds_paise), ref: p.tds_section, party: { type: 'vendor', id: p.vendor_id, name: p.vendor } }] })
     }
     const tasmac = await t.query<{ id: string; invoice_no: string; business_date: string; value_paise: string; vat_paise: string; tcs_paise: string | null; total_paise: string }>(

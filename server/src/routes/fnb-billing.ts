@@ -9,6 +9,7 @@ import type { Party } from '../einvoice'
 import { businessDate, folioBalance } from '../fo-core'
 import { issue, nextSeriesNumber, stateName, supplier, type DocLine } from '../invoicing'
 import { createApproval, registerApprovalKind } from './approvals'
+import { checkCredit, debtorFor } from '../receivables'
 import { requireCaller } from './auth'
 import { licencesFor, vatRatesOn } from './settings'
 import { billDoc, queueDoc } from './printing'
@@ -345,9 +346,13 @@ export function fnbBillingRoutes(app: FastifyInstance, ctx: Ctx) {
       }
 
       const payments = reservation ? [{ method: 'room', amount: (a.total) / 100, reference: `Room ${reservation.room_no ?? ''}`.trim() }] : b.payments!
+      // Credit to a company: within its limit, on its city-ledger account.
+      const credit = payments.filter((p) => p.method === 'company').reduce((a, p) => a + rupees(p.amount), 0)
+      const debtorId = credit && bill.bill_to ? await debtorFor(t, bill.bill_to.company, bill.bill_to.gstin, now()) : null
+      if (debtorId) await checkCredit(t, debtorId, credit)
       for (const p of payments) {
-        await t.query('insert into fnb_payment (id, bill_id, method, amount_paise, reference, shift_id, received_by, business_date, at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
-          [newId('FP'), id, p.method, rupees(p.amount), p.reference?.trim() || null, p.method === 'cash' ? shiftId : null, who.userId, day, now()])
+        await t.query('insert into fnb_payment (id, bill_id, method, amount_paise, reference, shift_id, received_by, business_date, at, debtor_id) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
+          [newId('FP'), id, p.method, rupees(p.amount), p.reference?.trim() || null, p.method === 'cash' ? shiftId : null, who.userId, day, now(), p.method === 'company' ? debtorId : null])
       }
       await t.query(`update fnb_bill set status = 'settled', gst_document_id = $2, vat_invoice_id = $3, reservation_id = $4, settled_by = $5, settled_at = $6 where id = $1`,
         [id, gst?.id ?? null, vat?.id ?? null, reservation?.id ?? null, who.userId, now()])
