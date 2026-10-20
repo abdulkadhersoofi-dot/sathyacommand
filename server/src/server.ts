@@ -19,6 +19,8 @@ import { ensureEngineering, sweepEngineering } from './eng-core'
 import { sweepSecurity } from './routes/security'
 import { sweepPayables } from './routes/payables'
 import { ensureBanquets } from './banquets'
+import { sweepBlocks } from './sales'
+import { businessDate } from './fo-core'
 
 // DATABASE_URL set → PostgreSQL (production). Otherwise a local PGlite database in ./data.
 // MD_EMAIL and MD_PASSWORD give the Managing Director's login its email and first password (changed at the first
@@ -49,5 +51,6 @@ setInterval(() => {
   sweepSecurity(db, new Date()).catch((e) => app.log.error(e))
   sweepPayables(db, new Date()).catch((e) => app.log.error(e))
   postPending(db, new Date()).catch((e) => app.log.error(e))
+  db.tx(async (t) => sweepBlocks(t, await businessDate(t), null, new Date())).catch((e) => app.log.error(e))
 }, 60_000)
 await app.listen({ host: '0.0.0.0', port: Number(process.env.PORT ?? 8080) })

@@ -2,6 +2,7 @@ import { esc, toast, tonePill } from '../ui/dom'
 import { checked, val } from '../ui/form-modal'
 import { money } from '../acc/books'
 import { STATUS_LABEL, STATUS_TONE, STYLE_LABEL, type Venue } from './calendar'
+import { ACT_KINDS } from './sales'
 import type { BqHost } from './workspace'
 
 // Events: the pipeline from enquiry to feedback, and one event in full: functions, extras, quotes, the
@@ -27,6 +28,9 @@ interface Detail {
   checks: { item: string; label: string; status: string; ref: string | null; by: string | null }[]
   beo: { revisions: { revision: number; issuedAt: string; by: string; acks: { dept: string; by: string; acked_at: string }[] }[]; changed: boolean; depts: Record<string, { name: string }> }
   limits: { discountPercent: number | null; holdDays: number | null }; today: string
+  account: { id: string; name: string } | null; vendorCostPaise: number
+  vendors: { id: string; vendor: string; service: string; agreedPaise: number; billedPaise: number; paidPaise: number; notes: string | null }[]
+  blocks: { id: string; number: string; name: string; status: string; arrival: string; departure: string }[]
 }
 interface Pkg { id: string; name: string; kind: string; price_paise: number; per: string; veg: boolean | null; min_pax: number; active: boolean }
 
@@ -47,11 +51,13 @@ export class EventsView {
   private d: Detail | null = null
   private venues: Venue[] = []
   private pkgs: Pkg[] = []
+  private accounts: { id: string; name: string; active: boolean }[] = []
   constructor(private h: BqHost) {}
 
   async load() {
     this.venues = await this.h.cached('/api/banquets/venues')
     this.pkgs = await this.h.cached('/api/banquets/packages')
+    if (this.h.can('sales.manage', 'rates.contract') && !this.accounts.length) this.accounts = (await this.h.api.get<{ accounts: { id: string; name: string; active: boolean }[] }>('/api/sales/accounts').catch(() => ({ accounts: [] }))).accounts.filter((a) => a.active)
     if (this.selected) this.d = await this.h.cached(`/api/banquets/events/${this.selected}`)
     else this.rows = await this.h.cached('/api/banquets/events')
   }
@@ -91,6 +97,8 @@ export class EventsView {
       manage && live && accepted ? btn('contract', 'Contract signed', true) : '',
       manage && d.status === 'definite' ? btn('beo', d.beo.revisions.length ? 'Send revised event order' : 'Send event order (BEO)', !d.beo.revisions.length || d.beo.changed) : '',
       manage && editable ? btn('instructions', 'Department instructions') : '',
+      manage && editable ? btn('vendor', 'Add supplier') : '', manage && editable && this.h.can('sales.manage') ? btn('block', 'Hold rooms for guests') : '',
+      manage && !['closed', 'lost', 'cancelled'].includes(d.status) ? btn('follow', 'Follow-up') : '',
       pay && ['enquiry', 'quoted', 'hold', 'definite', 'billed'].includes(d.status) ? btn('pay', 'Payment') : '',
       bill && d.status === 'definite' ? btn('served', 'Guests served') : '', bill && d.status === 'definite' ? btn('bill', 'Final bill', true) : '',
       (manage || bill) && d.status === 'billed' ? btn('feedback', 'Feedback & close') : '',
@@ -106,6 +114,7 @@ export class EventsView {
     return `<div class="ws-toolbar"><button type="button" class="btn ghost" data-evact="back">← All events</button></div>
       <div class="bq-head"><div><div class="muted mono small">${esc(d.number)} · ${esc(KINDS.find((k) => k[0] === d.kind)?.[1] ?? d.kind)}</div><h2>${esc(d.title)}</h2>
         <div class="small">${esc(d.client.name)}${d.client.company ? `, ${esc(d.client.company)}` : ''}${d.client.mobile ? ` · <a href="tel:${esc(d.client.mobile)}">${esc(d.client.mobile)}</a>` : ''}${d.client.email ? ` · ${esc(d.client.email)}` : ''}${d.client.gstin ? ` · GSTIN <span class="mono">${esc(d.client.gstin)}</span>` : ''}</div>
+        ${d.account ? `<div class="small">Account: <b>${esc(d.account.name)}</b></div>` : ''}
         <div class="muted small">${esc(SOURCES.find((s) => s[0] === d.source)?.[1] ?? d.source)}${d.owner ? ` · handled by ${esc(d.owner)}` : ''}${d.siteVisitOn ? ` · site visit ${esc(d.siteVisitOn)}` : ''}${d.contractSignedOn ? ` · contract signed ${esc(d.contractSignedOn)}` : ''}</div></div>
         <div class="rc-right">${pill(d.status)}${d.status === 'hold' && d.holdUntil ? `<small>held until ${esc(d.holdUntil)}</small>` : ''}</div></div>
       ${d.lostReason ? `<p class="fd-warn">Lost: ${esc(d.lostReason)}${d.lostTo ? ` (to ${esc(d.lostTo)})` : ''}</p>` : ''}${d.cancelReason ? `<p class="fd-warn">Cancelled: ${esc(d.cancelReason)}</p>` : ''}
@@ -133,6 +142,13 @@ export class EventsView {
         </tbody></table></div>` : ''}
       ${d.invoice ? `<div class="row-card mc-card"><div class="mc-figs"><span><small>Bill ${esc(d.invoice.number)}</small><b class="mono">${money(d.invoice.totalPaise)}</b></span><span><small>Received</small><b class="mono">${money(d.paidPaise)}</b></span>
         <span><small>${d.invoice.balancePaise >= 0 ? 'Balance due' : 'Paid over'}</small><b class="mono ${d.invoice.balancePaise > 0 ? 'fd-warn' : ''}">${money(Math.abs(d.invoice.balancePaise))}</b></span></div></div>` : ''}
+
+      ${d.vendors.length ? `<div class="sec-title">Suppliers <span class="mono">cost ${money(d.vendorCostPaise)}</span></div>
+        <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Supplier</th><th>For</th><th class="n">Agreed</th><th class="n">Billed</th><th class="n">Paid</th><th></th></tr></thead><tbody>
+          ${d.vendors.map((v) => `<tr><td>${esc(v.vendor)}</td><td>${esc(v.service)}${v.notes ? ` <small class="muted">${esc(v.notes)}</small>` : ''}</td><td class="n">${money(v.agreedPaise)}</td><td class="n">${v.billedPaise ? money(v.billedPaise) : '<span class="muted">not yet</span>'}</td><td class="n">${money(v.paidPaise)}</td>
+            <td>${manage && !v.billedPaise ? `<button type="button" class="btn small ghost" data-vdel="${esc(v.id)}">Remove</button>` : ''}</td></tr>`).join('')}
+        </tbody></table></div><p class="muted small">Their bills are entered in Stores → Bills with this event chosen, and paid there with TDS.${d.invoice ? ` Margin after suppliers: <b>${money(d.invoice.totalPaise - d.vendorCostPaise)}</b> before GST on the bill.` : ''}</p>` : ''}
+      ${d.blocks.length ? `<div class="sec-title">Rooms held for guests</div><div class="m-table">${d.blocks.map((b) => `<div class="m-row bq-ins"><span class="mono">${esc(b.number)}</span><span><button type="button" class="linkish" data-blk="${esc(b.id)}">${esc(b.name)}</button> · ${esc(b.arrival)} to ${esc(b.departure)} · ${esc(b.status)}</span></div>`).join('')}</div>` : ''}
 
       <div class="sec-title">Permissions</div>
       <div class="m-table">${d.checks.map((c) => `<div class="m-row bq-check"><span>${esc(c.label)}</span><span>${tonePill(CHECK_LABEL[c.status] ?? c.status, c.status === 'received' ? '--st-vacant' : c.status === 'not_needed' ? '--muted' : '--marigold')}${c.ref ? ` <span class="mono small">${esc(c.ref)}</span>` : ''}</span>
@@ -164,6 +180,7 @@ export class EventsView {
   }
   private clientFields(c?: Detail) {
     return `<label class="span2">Event<input name="title" maxlength="120" placeholder="Ravi and Priya wedding" value="${esc(c?.title ?? '')}"></label>
+      ${this.accounts.length ? `<label class="span2">Company account (fills in the company for the bill)<select name="acct"><option value="">—</option>${this.accounts.map((a) => `<option value="${esc(a.id)}" ${c?.account?.id === a.id ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>` : ''}
       <label>Kind<select name="kind">${opt(KINDS, c?.kind)}</select></label><label>How they came<select name="source">${opt(SOURCES, c?.source)}</select></label>
       <label>Client's name<input name="client" maxlength="120" value="${esc(c?.client.name ?? '')}"></label><label>Mobile<input name="mobile" inputmode="tel" value="${esc(c?.client.mobile ?? '')}"></label>
       <label>Email<input name="email" type="email" value="${esc(c?.client.email ?? '')}"></label><label>Company (for the bill)<input name="company" value="${esc(c?.client.company ?? '')}"></label>
@@ -173,12 +190,14 @@ export class EventsView {
   }
   private clientBody(f: HTMLFormElement) {
     return { title: val(f, 'title'), kind: val(f, 'kind'), source: val(f, 'source'), clientName: val(f, 'client'), clientMobile: val(f, 'mobile'), clientEmail: val(f, 'email'), company: val(f, 'company'),
-      gstin: val(f, 'gstin'), expectedPax: num(f, 'pax') ?? null, billingAddress: val(f, 'addr'), siteVisitOn: val(f, 'visit') || null, notes: val(f, 'notes') }
+      gstin: val(f, 'gstin'), expectedPax: num(f, 'pax') ?? null, billingAddress: val(f, 'addr'), siteVisitOn: val(f, 'visit') || null, notes: val(f, 'notes'),
+      ...(this.accounts.length ? { debtorId: val(f, 'acct') || null } : {}) }
   }
 
   /** A new enquiry, with its first function if a venue and day are given. */
   async enquiry(venueId?: string, date?: string) {
     if (!this.venues.length || !this.pkgs.length) { this.venues = await this.h.cached('/api/banquets/venues'); this.pkgs = await this.h.cached('/api/banquets/packages') }
+    if (this.h.can('sales.manage', 'rates.contract') && !this.accounts.length) this.accounts = (await this.h.api.get<{ accounts: { id: string; name: string; active: boolean }[] }>('/api/sales/accounts').catch(() => ({ accounts: [] }))).accounts.filter((a) => a.active)
     this.h.modal.open('New enquiry', `<div class="form-grid">${this.clientFields()}</div><div class="sec-title">First function (optional)</div><div class="form-grid">${this.fnFields(undefined, { venueId, date })}</div>`, 'Save enquiry', async (f) => {
       const r = await this.h.api.post<{ id: string; number: string }>('/api/banquets/events', this.clientBody(f))
       this.selected = r.id
@@ -220,6 +239,10 @@ export class EventsView {
     if (fnDel) { await api.req('DELETE', `/api/banquets/functions/${fnDel}`); await this.load(); return true }
     const itDel = el.closest<HTMLElement>('[data-itdel]')?.dataset.itdel
     if (itDel) { await api.req('DELETE', `/api/banquets/items/${itDel}`); await this.load(); return true }
+    const vdel = el.closest<HTMLElement>('[data-vdel]')?.dataset.vdel
+    if (vdel) { await api.req('DELETE', `/api/banquets/vendors/${vdel}`); await this.load(); return true }
+    const blk = el.closest<HTMLElement>('[data-blk]')?.dataset.blk
+    if (blk) { this.h.openBlock(blk); return false }
     const chk = el.closest<HTMLElement>('[data-check]')?.dataset.check
     if (chk && d) {
       const c = d.checks.find((x) => x.item === chk)!
@@ -296,9 +319,28 @@ export class EventsView {
           return done('Saved')
         })
         break
+      case 'vendor': {
+        const vendors = await api.get<{ id: string; name: string }[]>('/api/banquets/vendor-list')
+        this.h.modal.open('Add a supplier', `<p class="small muted">Decorators, DJs, photographers, tent and lighting: from the vendor master (Stores → Vendors), where their PAN and TDS category are kept.</p>
+          <div class="form-grid"><label class="span2">Supplier<select name="v">${vendors.map((v) => `<option value="${esc(v.id)}">${esc(v.name)}</option>`).join('')}</select></label>
+          <label>For<input name="svc" maxlength="120" placeholder="Stage decor, DJ…"></label><label>Agreed (₹, before GST)<input name="amt" type="number" min="0" value="0"></label>
+          <label class="span2">Notes<input name="notes" maxlength="500"></label></div>`, 'Add', async (f) => {
+          await api.post(`${base}/vendors`, { vendorId: val(f, 'v'), service: val(f, 'svc'), agreed: Number(val(f, 'amt') || 0), notes: val(f, 'notes') })
+          return done('Supplier added')
+        })
+        break
+      }
+      case 'block': this.h.newBlock(d.id, d.title); return false
+      case 'follow':
+        this.h.modal.open('Follow-up', `<div class="form-grid"><label>Kind<select name="kind">${opt(ACT_KINDS)}</select></label><label>On<input name="due" type="date" value="${esc(d.today)}"></label>
+          <label class="span2">About<input name="subject" maxlength="200" placeholder="Call back about the menu tasting"></label></div>`, 'Save', async (f) => {
+          await api.post('/api/sales/activities', { eventId: d.id, kind: val(f, 'kind'), subject: val(f, 'subject'), dueOn: val(f, 'due') })
+          return done('Follow-up saved')
+        })
+        break
       case 'pay':
         this.h.modal.open('Payment', `<p class="small">${d.invoice ? `Balance due on the bill: ${money(d.invoice.balancePaise)}.` : 'Advances get a GST receipt voucher.'} Cash for one event stays under ₹2 lakh in all.</p>
-          <div class="form-grid"><label>How<select name="m">${opt([['upi', 'UPI'], ['bank', 'Bank transfer'], ['card', 'Card'], ['cheque', 'Cheque'], ['cash', 'Cash']])}</select></label><label>Amount (₹)<input name="amt" type="number" min="1" step="0.01" value="${d.invoice && d.invoice.balancePaise > 0 ? d.invoice.balancePaise / 100 : ''}"></label>
+          <div class="form-grid"><label>How<select name="m">${opt([['upi', 'UPI'], ['bank', 'Bank transfer'], ['card', 'Card'], ['cheque', 'Cheque'], ['cash', 'Cash'], ...(d.invoice && d.account ? [['company', `To ${d.account.name}'s account`] as [string, string]] : [])])}</select></label><label>Amount (₹)<input name="amt" type="number" min="1" step="0.01" value="${d.invoice && d.invoice.balancePaise > 0 ? d.invoice.balancePaise / 100 : ''}"></label>
           <label class="span2">Reference (UTR, cheque or approval no.)<input name="ref" maxlength="80"></label><label class="span2 check"><input type="checkbox" name="refund"> This is a refund to the client</label></div>`, 'Record', async (f) => {
           const r = await api.post<{ voucher: { number: string } | null }>(`${base}/payments`, { method: val(f, 'm'), amount: Number(val(f, 'amt')), reference: val(f, 'ref'), refund: checked(f, 'refund') })
           return done(r.voucher ? `Recorded on ${r.voucher.number}` : 'Recorded')

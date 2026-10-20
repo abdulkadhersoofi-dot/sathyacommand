@@ -6,6 +6,7 @@ import type { Db } from '../db'
 import { addDays, newId } from '../eng-core'
 import { businessDate } from '../fo-core'
 import { nextSeriesNumber } from '../invoicing'
+import { checkCredit, CreditError } from '../receivables'
 import {
   advancesHeld, BEO_DEPTS, beoDeptsOf, buildBeo, cancellationInvoice, canonical, CHECKS, clashes, eventInvoice, eventReceiptVoucher, eventRefundVoucher,
   FIRM, firmClashes, functionTimes, istDate, istTime, priceLines, STYLES, sumLines, sweepHolds, taxLines, VENUE_KINDS, type Beo, type GstKind,
@@ -21,6 +22,8 @@ const TIME = /^([01]\d|2[0-3]):[0-5]\d$/
 const KINDS = ['wedding', 'reception', 'engagement', 'birthday', 'corporate', 'conference', 'social', 'other']
 const SOURCES = ['walk_in', 'phone', 'website', 'referral', 'planner', 'repeat', 'corporate']
 const METHODS = ['cash', 'card', 'upi', 'bank', 'cheque']
+/** After the bill, the balance can also go to a company's credit account. */
+const SETTLE = [...METHODS, 'company']
 const GST_KINDS: GstKind[] = ['hall', 'catering', 'other']
 const n = (v: unknown) => Number(v ?? 0)
 const str = (v: unknown, max = 200) => { const s = String(v ?? '').trim(); return s ? s.slice(0, max) : null }
@@ -222,14 +225,23 @@ export function banquetRoutes(app: FastifyInstance, ctx: Ctx) {
     if (b.expectedPax !== undefined) { if (b.expectedPax != null && !(Number.isInteger(n(b.expectedPax)) && n(b.expectedPax) > 0)) throw new HttpError(400, 'Guests: a whole number.'); out.expected_pax = b.expectedPax == null ? null : n(b.expectedPax) }
     if (b.siteVisitOn !== undefined) { if (b.siteVisitOn && !DATE.test(String(b.siteVisitOn))) throw new HttpError(400, 'Site visit: a date.'); out.site_visit_on = b.siteVisitOn || null }
     if (b.ownerId !== undefined) out.owner_id = b.ownerId || null
+    if (b.debtorId !== undefined) out.debtor_id = b.debtorId || null
     return out
+  }
+  /** An event for a company account takes the account's name, GSTIN and address for the bill unless given. */
+  async function withAccount(t: Db, f: Record<string, unknown>) {
+    if (!f.debtor_id) return f
+    const [d] = await t.query<{ name: string; gstin: string | null; address: string | null; city: string | null }>('select name, gstin, address, city from debtor where id = $1', [f.debtor_id])
+    if (!d) throw new HttpError(404, 'No such company account.')
+    return { company: d.name, gstin: d.gstin, billing_address: [d.address, d.city].filter(Boolean).join(', ') || null, ...Object.fromEntries(Object.entries(f).filter(([, v]) => v != null)) }
   }
 
   app.post('/api/banquets/events', async (req, reply) => {
     const who = await need(req, 'events.manage')
     const b = (req.body ?? {}) as Record<string, unknown>
-    const f = clientFields(b, false)
+    let f = clientFields(b, false)
     return db.tx(async (t) => {
+      f = await withAccount(t, f)
       const id = newId('EV')
       const number = await nextSeriesNumber(t, 'event', financialYear(await businessDate(t)), 'EV')
       const cols = ['id', 'number', 'owner_id', 'created_by', 'created_at', 'updated_at', ...Object.keys(f).filter((k) => k !== 'owner_id')]
@@ -244,7 +256,7 @@ export function banquetRoutes(app: FastifyInstance, ctx: Ctx) {
   app.patch('/api/banquets/events/:id', async (req) => {
     const who = await need(req, 'events.manage')
     const b = (req.body ?? {}) as Record<string, unknown>
-    const f = clientFields(b, true)
+    let f = clientFields(b, true)
     if (b.instructions !== undefined) {
       const ins = (b.instructions ?? {}) as Record<string, unknown>
       for (const k of Object.keys(ins)) if (!BEO_DEPTS[k]) throw new HttpError(400, `Instructions for: ${Object.keys(BEO_DEPTS).join(', ')}.`)
@@ -253,6 +265,7 @@ export function banquetRoutes(app: FastifyInstance, ctx: Ctx) {
     return db.tx(async (t) => {
       const e = await loadEvent(t, idOf(req), true)
       if (['closed', 'lost', 'cancelled'].includes(e.status)) throw new HttpError(409, `This event is ${e.status}.`)
+      if (f.debtor_id && f.debtor_id !== (e as EventRow & { debtor_id: string | null }).debtor_id) f = await withAccount(t, f)
       if (f.instructions) f.instructions = { ...e.instructions, ...(f.instructions as object) }
       const keys = Object.keys(f)
       if (keys.length) await t.query(`update event set ${keys.map((k, i) => `${k} = $${i + 2}`).join(', ')}, updated_at = $${keys.length + 2} where id = $1`, [e.id, ...keys.map((k) => k === 'instructions' ? JSON.stringify(f[k]) : f[k]), now()])
@@ -306,7 +319,19 @@ export function banquetRoutes(app: FastifyInstance, ctx: Ctx) {
     const docs = await db.query<{ id: string; doc_type: string; number: string; issue_date: string; total_paise: string }>(
       `select id, doc_type, number, issue_date::text, total_paise from tax_document where event_id = $1 order by issued_at`, [e.id])
     const invoice = docs.filter((d) => d.doc_type === 'invoice').at(-1)
+    const vendors = (await db.query<{ id: string; vendor_id: string; vendor: string; service: string; agreed_paise: string; notes: string | null; billed: string | null; paid: string | null }>(
+      `select ev.id, ev.vendor_id, v.name as vendor, ev.service, ev.agreed_paise, ev.notes,
+              (select sum(b.total_paise) from purchase_bill b where b.event_id = ev.event_id and b.vendor_id = ev.vendor_id and b.status <> 'cancelled') as billed,
+              (select sum(b.paid_paise) from purchase_bill b where b.event_id = ev.event_id and b.vendor_id = ev.vendor_id and b.status <> 'cancelled') as paid
+         from event_vendor ev join vendor v on v.id = ev.vendor_id where ev.event_id = $1 order by ev.created_at`, [e.id]))
+      .map((v) => ({ id: v.id, vendorId: v.vendor_id, vendor: v.vendor, service: v.service, agreedPaise: n(v.agreed_paise), notes: v.notes, billedPaise: n(v.billed), paidPaise: n(v.paid) }))
+    const [cost] = await db.query<{ c: string | null }>(`select sum(taxable_paise) as c from purchase_bill where event_id = $1 and status <> 'cancelled'`, [e.id])
+    const ev2 = e as EventRow & { debtor_id: string | null }
+    const [account] = ev2.debtor_id ? await db.query<{ id: string; name: string }>('select id, name from debtor where id = $1', [ev2.debtor_id]) : []
+    const blocks = await db.query<{ id: string; number: string; name: string; status: string; arrival: string; departure: string }>(
+      'select id, number, name, status, arrival::text, departure::text from room_block where event_id = $1 order by arrival', [e.id])
     return {
+      account: account ?? null, vendors, vendorCostPaise: n(cost?.c), blocks,
       id: e.id, number: e.number, kind: e.kind, title: e.title, status: e.status, holdUntil: e.hold_until, source: e.source, owner: owner?.name ?? null, ownerId: e.owner_id,
       client: { name: e.client_name, mobile: e.client_mobile, email: e.client_email, company: e.company, gstin: e.gstin, address: e.billing_address },
       expectedPax: e.expected_pax, siteVisitOn: e.site_visit_on, notes: e.notes, instructions: current.instructions, contractSignedOn: e.contract_signed_on,
@@ -626,9 +651,9 @@ ${beo.functions.filter((f) => f.menu).map((f) => `<p><b>${esc(f.menu!.name)}</b>
   // ---------- money ----------
   app.post('/api/banquets/events/:id/payments', async (req, reply) => {
     const who = await need(req, 'events.payment')
-    const b = (req.body ?? {}) as { method?: string; amount?: number; reference?: string; refund?: boolean }
-    if (!METHODS.includes(b.method ?? '') || !(n(b.amount) > 0)) throw new HttpError(400, `Send method (${METHODS.join(', ')}) and amount (₹).`)
-    if (b.method !== 'cash' && !str(b.reference)) throw new HttpError(400, 'Card, UPI, bank and cheque payments need a reference (UTR, cheque or approval number).')
+    const b = (req.body ?? {}) as { method?: string; amount?: number; reference?: string; refund?: boolean; debtorId?: string }
+    if (!SETTLE.includes(b.method ?? '') || !(n(b.amount) > 0)) throw new HttpError(400, `Send method (${SETTLE.join(', ')}) and amount (₹).`)
+    if (!['cash', 'company'].includes(b.method!) && !str(b.reference)) throw new HttpError(400, 'Card, UPI, bank and cheque payments need a reference (UTR, cheque or approval number).')
     const amount = rupees(n(b.amount))
     return db.tx(async (t) => {
       const e = await loadEvent(t, idOf(req), true)
@@ -636,6 +661,17 @@ ${beo.functions.filter((f) => f.menu).map((f) => `<p><b>${esc(f.menu!.name)}</b>
       const [inv] = await t.query('select 1 from tax_document where event_id = $1 and doc_type = $2', [e.id, 'invoice'])
       const [{ paid }] = await t.query<{ paid: string | null }>('select sum(amount_paise) as paid from event_payment where event_id = $1', [e.id])
       let kind: 'advance' | 'settlement' | 'refund', voucher: { id: string; number: string } | null = null
+      let debtorId: string | null = null
+      if (b.method === 'company') {
+        // The bill's balance moves to the company's credit account, within its limit; the company pays it there.
+        if (b.refund) throw new HttpError(400, 'A refund goes back by bank, UPI, card, cheque or cash.')
+        if (!inv) throw new HttpError(409, 'An event goes to a company\'s account once it is billed; advances are paid.')
+        debtorId = b.debtorId ?? (e as EventRow & { debtor_id: string | null }).debtor_id
+        if (!debtorId) throw new HttpError(400, 'Which company account? Link the event to one first.')
+        const [{ total }] = await t.query<{ total: string }>(`select sum(total_paise) as total from tax_document where event_id = $1 and doc_type = 'invoice'`, [e.id])
+        if (amount > n(total) - n(paid)) throw new HttpError(400, `Only ${inr(n(total) - n(paid))} is due on the bill.`)
+        try { await checkCredit(t, debtorId, amount) } catch (x) { if (x instanceof CreditError) throw new HttpError(409, x.message); throw x }
+      }
       if (b.refund) {
         if (amount > n(paid)) throw new HttpError(400, `Only ${inr(n(paid))} has been received.`)
         kind = 'refund'
@@ -657,11 +693,50 @@ ${beo.functions.filter((f) => f.menu).map((f) => `<p><b>${esc(f.menu!.name)}</b>
         if (kind === 'advance') voucher = await eventReceiptVoucher(ctx, t, who, e.id, amount)
       }
       const id = newId('EP')
-      await t.query(`insert into event_payment (id, event_id, kind, method, amount_paise, reference, voucher_id, business_date, received_by, received_at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-        [id, e.id, kind, b.method, b.refund ? -amount : amount, str(b.reference, 80), voucher?.id ?? null, await businessDate(t), who.userId, now()])
+      await t.query(`insert into event_payment (id, event_id, kind, method, amount_paise, reference, voucher_id, business_date, received_by, received_at, debtor_id) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        [id, e.id, kind, b.method, b.refund ? -amount : amount, str(b.reference, 80), voucher?.id ?? null, await businessDate(t), who.userId, now(), debtorId])
       await touch(t, e.id)
       await audit(t, who, `event.${kind}`, e, { amount: b.refund ? -amount : amount, after: { method: b.method, voucher: voucher?.number ?? null } })
       return reply.status(201).send({ id, kind, voucher })
+    })
+  })
+
+  // ---------- outside suppliers ----------
+  /** The vendor master's names, for sales to pick an event's suppliers from. */
+  app.get('/api/banquets/vendor-list', async (req) => {
+    await need(req, 'events.manage')
+    return db.query('select id, name from vendor where active order by name')
+  })
+
+  app.post('/api/banquets/events/:id/vendors', async (req, reply) => {
+    const who = await need(req, 'events.manage')
+    const b = (req.body ?? {}) as { vendorId?: string; service?: string; agreed?: number; notes?: string }
+    const service = str(b.service, 120)
+    if (!service) throw new HttpError(400, 'What do they supply? (decor, DJ, photography…)')
+    if (!(n(b.agreed ?? 0) >= 0)) throw new HttpError(400, 'The agreed amount: ₹0 or more.')
+    return db.tx(async (t) => {
+      const e = await loadEvent(t, idOf(req), true)
+      open(e)
+      const [v] = await t.query<{ name: string }>('select name from vendor where id = $1', [b.vendorId])
+      if (!v) throw new HttpError(400, 'Pick the vendor (add them under Stores → Vendors first, with PAN and TDS category).')
+      const id = newId('EVV')
+      await t.query('insert into event_vendor (id, event_id, vendor_id, service, agreed_paise, notes, created_at) values ($1,$2,$3,$4,$5,$6,$7)', [id, e.id, b.vendorId, service, rupees(n(b.agreed ?? 0)), str(b.notes, 500), now()])
+      await audit(t, who, 'event.vendor_add', e, { amount: rupees(n(b.agreed ?? 0)), after: { vendor: v.name, service } })
+      return reply.status(201).send({ id })
+    })
+  })
+
+  app.delete('/api/banquets/vendors/:id', async (req) => {
+    const who = await need(req, 'events.manage')
+    return db.tx(async (t) => {
+      const [v] = await t.query<{ event_id: string; vendor_id: string; service: string }>('select event_id, vendor_id, service from event_vendor where id = $1', [idOf(req)])
+      if (!v) throw new HttpError(404, 'No such vendor on the event.')
+      const [billed] = await t.query(`select 1 from purchase_bill where event_id = $1 and vendor_id = $2 and status <> 'cancelled'`, [v.event_id, v.vendor_id])
+      if (billed) throw new HttpError(409, 'Their bill for this event is already entered.')
+      const e = await loadEvent(t, v.event_id, true)
+      await t.query('delete from event_vendor where id = $1', [idOf(req)])
+      await audit(t, who, 'event.vendor_remove', e, { note: `${e.number}: ${v.service}` })
+      return { ok: true }
     })
   })
 

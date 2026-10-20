@@ -99,6 +99,9 @@ export function receivablesRoutes(app: FastifyInstance, ctx: Ctx) {
     for (const [k, col] of [['address', 'address'], ['city', 'city'], ['contactName', 'contact_name'], ['phone', 'phone'], ['email', 'email']] as const) if (b[k] !== undefined) out[col] = String(b[k] ?? '').trim() || null
     if (b.termsDays !== undefined) { const d = Number(b.termsDays); if (!(Number.isInteger(d) && d >= 0 && d <= 365)) throw new HttpError(400, 'Terms: 0 to 365 days.'); out.terms_days = d }
     if (b.active !== undefined) out.active = !!b.active
+    // Sales: the account manager and notes (Phase 7).
+    if (b.ownerId !== undefined) out.owner_id = b.ownerId || null
+    if (b.notes !== undefined) out.notes = String(b.notes ?? '').trim().slice(0, 2000) || null
     return out
   }
 
@@ -119,7 +122,7 @@ export function receivablesRoutes(app: FastifyInstance, ctx: Ctx) {
   })
 
   app.post('/api/debtors', async (req, reply) => {
-    const who = await need(req, 'receivables.manage')
+    const who = await need(req, 'receivables.manage', 'sales.manage')
     const b = (req.body ?? {}) as Record<string, unknown>
     const f = fields(b)
     if (!f.name) throw new HttpError(400, 'The company\'s name.')
@@ -132,8 +135,8 @@ export function receivablesRoutes(app: FastifyInstance, ctx: Ctx) {
       const [dup] = await t.query<{ name: string }>('select name from debtor where lower(name) = lower($1) or (gstin is not null and gstin = $2)', [f.name, f.gstin ?? null])
       if (dup) throw new HttpError(409, `${dup.name} already has an account.`)
       const id = newId('DR')
-      await t.query(`insert into debtor (id, name, kind, gstin, pan, tan, address, city, contact_name, phone, email, credit_limit_paise, terms_days, created_at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
-        [id, f.name, f.kind ?? 'company', f.gstin ?? null, f.pan ?? null, f.tan ?? null, f.address ?? null, f.city ?? null, f.contact_name ?? null, f.phone ?? null, f.email ?? null, limit, f.terms_days ?? 30, now()])
+      await t.query(`insert into debtor (id, name, kind, gstin, pan, tan, address, city, contact_name, phone, email, credit_limit_paise, terms_days, created_at, owner_id, notes) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+        [id, f.name, f.kind ?? 'company', f.gstin ?? null, f.pan ?? null, f.tan ?? null, f.address ?? null, f.city ?? null, f.contact_name ?? null, f.phone ?? null, f.email ?? null, limit, f.terms_days ?? 30, now(), f.owner_id ?? null, f.notes ?? null])
       await appendAudit(t, { actor: who, action: 'debtor.add', entity: { type: 'debtor', id }, after: { ...f, creditLimit: limit } }, now())
       return reply.status(201).send({ id })
     })
@@ -142,7 +145,7 @@ export function receivablesRoutes(app: FastifyInstance, ctx: Ctx) {
   app.patch('/api/debtors/:id', async (req) => {
     const b = (req.body ?? {}) as Record<string, unknown>
     const limitChange = b.creditLimit !== undefined
-    const who = await need(req, ...(limitChange && Object.keys(b).length === 1 ? ['credit.limit'] : ['receivables.manage']))
+    const who = await need(req, ...(limitChange && Object.keys(b).length === 1 ? ['credit.limit'] : ['receivables.manage', 'sales.manage']))
     if (limitChange && !can(who, 'credit.limit')) throw new HttpError(403, 'Only the GM sets credit limits.')
     const { id } = req.params as { id: string }
     const f = fields(b)

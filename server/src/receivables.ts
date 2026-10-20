@@ -25,13 +25,15 @@ export async function debtorFor(t: Db, name: string, gstin: string | null | unde
 
 /** What the company owes now: the city ledger, and today's credit not yet in it. */
 export async function debtorOutstanding(t: Db, debtorId: string) {
-  const [r] = await t.query<{ posted: string | null; fo: string | null; fnb: string | null }>(
+  const [r] = await t.query<{ posted: string | null; fo: string | null; fnb: string | null; ev: string | null }>(
     `select (select sum(l.debit_paise - l.credit_paise) from voucher_line l where l.account_code = '1310' and l.party_type = 'company' and l.party_id = $1) as posted,
             (select sum(p.amount_paise) from payment p join folio_line fl on fl.id = p.line_id where p.debtor_id = $1 and p.method = 'company'
                 and not exists (select 1 from posted_source s where s.source_type = 'fo_pay_day' and s.source_id = fl.business_date::text)) as fo,
             (select sum(p.amount_paise) from fnb_payment p where p.debtor_id = $1 and p.method = 'company'
-                and not exists (select 1 from posted_source s where s.source_type = 'fnb_day' and s.source_id = p.business_date::text)) as fnb`, [debtorId])
-  return Number(r.posted ?? 0) + Number(r.fo ?? 0) + Number(r.fnb ?? 0)
+                and not exists (select 1 from posted_source s where s.source_type = 'fnb_day' and s.source_id = p.business_date::text)) as fnb,
+            (select sum(p.amount_paise) from event_payment p where p.debtor_id = $1 and p.method = 'company'
+                and not exists (select 1 from posted_source s where s.source_type = 'event_pay' and s.source_id = p.id)) as ev`, [debtorId])
+  return Number(r.posted ?? 0) + Number(r.fo ?? 0) + Number(r.fnb ?? 0) + Number(r.ev ?? 0)
 }
 
 export class CreditError extends Error { statusCode = 409 }

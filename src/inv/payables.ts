@@ -158,7 +158,11 @@ export class BillsView {
       const lines: { itemId: string; qty: number; rate: number }[] = []
       for (const g of grns) for (const l of g.lines) if (n(l.qty_accepted) > n(l.billed_qty)) lines.push({ itemId: l.item_id, qty: n(l.qty_accepted) - n(l.billed_qty), rate: n(l.rate_paise) / 100 })
       const rows = Math.max(4, lines.length + 2)
-      this.h.modal.open('Enter a bill', `<div class="form-grid"><label>Bill number<input name="no" maxlength="30"></label><label>Bill date<input name="date" type="date"></label></div>
+      // A supplier's bill for a banquet event (decor, DJ…) can be tied to the event, for its cost.
+      const events = this.h.can('events.view', 'events.manage') ? (await this.h.api.get<{ id: string; number: string; title: string; status: string; date: string | null }[]>('/api/banquets/events').catch(() => []))
+        .filter((e) => e.status !== 'lost') : []
+      this.h.modal.open('Enter a bill', `<div class="form-grid"><label>Bill number<input name="no" maxlength="30"></label><label>Bill date<input name="date" type="date"></label>
+        ${events.length ? `<label class="span2">For a banquet event (optional)<select name="event"><option value="">—</option>${events.map((e) => `<option value="${esc(e.id)}">${esc(e.number)} ${esc(e.title)}${e.date ? ` · ${esc(e.date)}` : ''}</option>`).join('')}</select></label>` : ''}</div>
         ${grns.length ? `<fieldset class="grn-pick"><legend>Goods receipts it covers</legend>${grns.map((g) => `<label class="check"><input type="checkbox" name="g_${esc(g.id)}" checked> ${esc(g.number)}${g.po_number ? ` (${esc(g.po_number)})` : ''} · ${esc(g.business_date)}</label>`).join('')}</fieldset>` : '<p class="muted small">No goods received from this vendor waiting for a bill: enter service lines (AMC, repairs, contract work).</p>'}
         <p class="muted small">Enter the lines as they are on the bill: quantity in the purchase unit and the rate before GST. Differences from the PO and the goods received are flagged.</p>
         <div class="line-editor bill-lines">${Array.from({ length: rows }, (_, k) => `<div class="le-row bill-row"><select name="i_${k}" aria-label="Item">${opts.replace(`value="${esc(lines[k]?.itemId ?? '-')}"`, `value="${esc(lines[k]?.itemId ?? '-')}" selected`)}</select>
@@ -177,6 +181,7 @@ export class BillsView {
         if (!out.length) throw new Error('Enter the lines of the bill.')
         const r = await this.h.api.post<{ match: string; differences: string[]; totalPaise: number }>('/api/bills', {
           vendorId, billNo: val(f2, 'no'), billDate: val(f2, 'date'), grnIds: grns.filter((g) => checked(f2, `g_${g.id}`)).map((g) => g.id), lines: out, roundOff: Number(val(f2, 'round') || 0),
+          eventId: val(f2, 'event') || undefined,
         })
         await this.load(); this.h.render()
         return r.match === 'matched' ? `Bill entered (${rupees(r.totalPaise)}): matches. Another person in accounts passes it.` : r.match === 'no_po' ? 'Bill entered: no PO behind it, the GM passes it.' : `Bill entered with differences: ${r.differences.join('; ')}`

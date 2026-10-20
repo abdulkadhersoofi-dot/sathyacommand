@@ -59,7 +59,7 @@ export function payablesRoutes(app: FastifyInstance, ctx: Ctx) {
 
   app.post('/api/bills', async (req, reply) => {
     const who = await need(req, 'purchase.bill')
-    const b = (req.body ?? {}) as { vendorId?: string; billNo?: string; billDate?: string; poId?: string; grnIds?: string[]; lines?: BillLineIn[]; roundOff?: number; photoId?: string }
+    const b = (req.body ?? {}) as { vendorId?: string; billNo?: string; billDate?: string; poId?: string; grnIds?: string[]; lines?: BillLineIn[]; roundOff?: number; photoId?: string; eventId?: string }
     if (!b.billNo?.trim()) throw new HttpError(400, 'Enter the vendor\'s bill number.')
     if (!DATE.test(b.billDate ?? '') || b.billDate! > istDay(now())) throw new HttpError(400, 'Bill date (not in the future).')
     if (!Array.isArray(b.lines) || !b.lines.length) throw new HttpError(400, 'Enter the lines of the bill.')
@@ -67,6 +67,8 @@ export function payablesRoutes(app: FastifyInstance, ctx: Ctx) {
     return db.tx(async (t) => {
       const [v] = await t.query<{ name: string; state_code: string; msme: string; written_agreement: boolean; payment_terms_days: number }>('select * from vendor where id = $1', [b.vendorId])
       if (!v) throw new HttpError(404, 'No such vendor.')
+      // A supplier's bill for a banquet event (decor, DJ…) is tied to the event, for its cost (Phase 7).
+      if (b.eventId) { const [ev] = await t.query('select 1 from event where id = $1', [b.eventId]); if (!ev) throw new HttpError(404, 'No such event.') }
       const [dup] = await t.query('select 1 from purchase_bill where vendor_id = $1 and upper(bill_no) = upper($2)', [b.vendorId, b.billNo!.trim()])
       if (dup) throw new HttpError(409, `Bill ${b.billNo} from ${v.name} is already entered.`)
       let grnIds = b.grnIds ?? []
@@ -80,6 +82,7 @@ export function payablesRoutes(app: FastifyInstance, ctx: Ctx) {
       // The bill first, so its lines can refer to it; totals and the match are filled in below.
       await t.query(`insert into purchase_bill (id, vendor_id, bill_no, bill_date, po_id, grn_ids, taxable_paise, total_paise, due_date, match, entered_by, entered_at)
                      values ($1,$2,$3,$4,$5,$6,0,0,$4,'matched',$7,$8)`, [id, b.vendorId, b.billNo!.trim(), b.billDate, poId, grnIds, who.userId, now()])
+      if (b.eventId) await t.query('update purchase_bill set event_id = $2 where id = $1', [id, b.eventId])
       let n = 0, taxable = 0, gst = 0, itc = 0, rcm = 0
       const differences: string[] = []
       const lines: { line: number; item_id: string | null; description: string | null; qty: number; rate: number; amount: number; tax: number }[] = []

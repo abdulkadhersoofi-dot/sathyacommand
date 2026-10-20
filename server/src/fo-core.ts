@@ -26,16 +26,23 @@ export async function rateFor(db: Db, plan: string, roomTypeId: string, date: st
   return r?.amount_paise ?? null
 }
 
-/** Rooms of a type still free on each night (active rooms, less any out of order that night, minus live booked nights). */
-export async function freeByNight(db: Db, roomTypeId: string, nights: string[], excludeReservation?: string) {
+/**
+ * Rooms of a type still free on each night: active rooms, less any out of order that night, minus live booked
+ * nights, minus rooms still held (not yet picked up) in open room blocks other than `excludeBlock`.
+ */
+export async function freeByNight(db: Db, roomTypeId: string, nights: string[], excludeReservation?: string, excludeBlock?: string) {
   const rows = await db.query<{ night: string; free: number }>(
     `select n::date::text as night,
             (select count(*) from space s where s.room_type_id = $1 and s.active and s.sellable and s.kind = any($3)
                 and not exists (select 1 from room_hk h where h.space_id = s.id and h.status = 'out_of_order'
                                   and (h.ooo_from is null or h.ooo_from <= n::date) and (h.ooo_to is null or h.ooo_to >= n::date)))
           - (select count(*) from room_night rn where rn.room_type_id = $1 and rn.night = n::date and not rn.released
-               and rn.reservation_id is distinct from $4) as free
-       from unnest($2::date[]) n`, [roomTypeId, nights, LODGING, excludeReservation ?? null])
+               and rn.reservation_id is distinct from $4)
+          - (select coalesce(sum(greatest(0, l.rooms - (select count(*) from room_night rn join reservation r on r.id = rn.reservation_id
+                                                          where r.block_id = k.id and rn.room_type_id = $1 and rn.night = n::date and not rn.released))), 0)
+               from room_block k join room_block_line l on l.block_id = k.id
+              where l.room_type_id = $1 and k.status = 'open' and n::date >= k.arrival and n::date < k.departure and k.id is distinct from $5) as free
+       from unnest($2::date[]) n`, [roomTypeId, nights, LODGING, excludeReservation ?? null, excludeBlock ?? null])
   return rows.map((r) => ({ night: r.night, free: Number(r.free) }))
 }
 

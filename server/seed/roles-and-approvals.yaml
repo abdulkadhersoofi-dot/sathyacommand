@@ -94,6 +94,8 @@ sign_in:
 #   events.bill      guests served on the day, the final event bill
 #   venues.manage    venue rentals, setups and capacities, banquet menus and packages
 #   beo.view         event orders for one's department, and acknowledging them
+#   sales.manage     company accounts (not credit limits), contacts, follow-ups, room blocks and rooming lists
+#   rates.contract   a company's contracted room rates
 #   '*'              everything, including deciding approvals
 roles:
   managing_director:
@@ -101,13 +103,13 @@ roles:
     permissions: ['*']
     limits: unlimited
   general_manager:
-    permissions: [inventory.edit, devices.approve, users.manage, front_desk, folio.reverse, discount.approve, night_audit, invoice.view, invoice.credit_note, site.edit, site.publish, fnb.order, fnb.void, fnb.bill, fnb.discount, menu.edit, menu.price, bar.settings, bar.stock, bar.approve, kitchen.stock, kitchen.approve, food_cost.view, printers.manage, licences.edit, hk.view, hk.manage, hk.inspect, staff.track, attendance.view, roster.manage, broadcast.send, staff.settings, eng.manage, eng.approve, compliance.view, security.view, security.manage, emergency.start, stores.view, stores.manage, vendors.manage, vendors.bank, purchase.indent, indent.approve, purchase.order, purchase.approve, payables.view, stock.approve, stores.issue, stores.count, stores.breakage, accounts.view, accounts.lock, receivables.view, credit.limit, gst.view, budget.manage, events.view, events.manage, events.payment, events.bill, venues.manage, beo.view]
+    permissions: [inventory.edit, devices.approve, users.manage, front_desk, folio.reverse, discount.approve, night_audit, invoice.view, invoice.credit_note, site.edit, site.publish, fnb.order, fnb.void, fnb.bill, fnb.discount, menu.edit, menu.price, bar.settings, bar.stock, bar.approve, kitchen.stock, kitchen.approve, food_cost.view, printers.manage, licences.edit, hk.view, hk.manage, hk.inspect, staff.track, attendance.view, roster.manage, broadcast.send, staff.settings, eng.manage, eng.approve, compliance.view, security.view, security.manage, emergency.start, stores.view, stores.manage, vendors.manage, vendors.bank, purchase.indent, indent.approve, purchase.order, purchase.approve, payables.view, stock.approve, stores.issue, stores.count, stores.breakage, accounts.view, accounts.lock, receivables.view, credit.limit, gst.view, budget.manage, events.view, events.manage, events.payment, events.bill, venues.manage, beo.view, sales.manage, rates.contract]
     limits: { package_discount_percent: 25, hold_dates_days: 21, discount_percent: 25, breakage_per_entry: 10000, refund: 50000, comp_room_nights: 5, purchase_order: 500000, rate_override_below_floor: true }
   operations_manager:
     permissions: [front_desk, folio.reverse, discount.approve, site.edit, fnb.order, fnb.void, fnb.bill, fnb.discount, hk.view, hk.manage, hk.inspect, staff.track, attendance.view, roster.manage, broadcast.send, eng.manage, eng.approve, compliance.view, security.view, security.manage, emergency.start, purchase.indent, indent.approve, events.view, beo.view]
     limits: { discount_percent: 20, void_per_bill: 5000, room_move: true, mark_out_of_order: true, overtime_hours_per_week: 12 }
   front_office_manager:
-    permissions: [front_desk, folio.reverse, night_audit, invoice.credit_note, receivables.view, hk.view, attendance.view, roster.manage, broadcast.send, security.view, emergency.start, purchase.indent, events.view, events.payment, beo.view]
+    permissions: [front_desk, folio.reverse, night_audit, invoice.credit_note, receivables.view, hk.view, attendance.view, roster.manage, broadcast.send, security.view, emergency.start, purchase.indent, events.view, events.payment, beo.view, sales.manage]
     limits: { discount_percent: 15, refund: 10000, cashier_variance_writeoff: 500 }
   reception:
     permissions: [front_desk, fnb.order, fnb.bill, hk.view, beo.view]
@@ -146,7 +148,7 @@ roles:
     permissions: [fnb.order, fnb.bill, kitchen]
     limits: {}
   sales_banquets:
-    permissions: [events.view, events.manage, events.payment, events.bill, beo.view]
+    permissions: [events.view, events.manage, events.payment, events.bill, beo.view, sales.manage]
     limits: { package_discount_percent: 10, hold_dates_days: 7 }
   chief_engineer:
     permissions: [eng.work, eng.manage, compliance.view, attendance.view, roster.manage, broadcast.send, purchase.indent, beo.view]

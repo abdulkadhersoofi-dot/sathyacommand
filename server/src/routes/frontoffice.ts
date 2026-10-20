@@ -13,6 +13,7 @@ import { validateGstin } from '@sathya/tax'
 import { checkCredit, debtorFor, OTAS, otaDebtorFor, SOURCES } from '../receivables'
 import { requireCaller } from './auth'
 import { onCheckIn, onCheckOut, onRoomMove } from '../hk-core'
+import { blockPickup, contractRate, sweepBlocks } from '../sales'
 
 // Reservations, room assignment, check-in / check-out, guest bills (folios) and payments.
 
@@ -60,6 +61,107 @@ async function assignRoom(db: Db, reservationId: string, spaceId: string, roomTy
   return s.room_no
 }
 
+export interface BookingInput {
+  guest?: { name?: string; mobile?: string; email?: string; nationality?: string; company?: string; gstin?: string }
+  roomTypeId?: string; plan?: string; arrival?: string; departure?: string; adults?: number; children?: number
+  source?: string; otaRef?: string; eta?: string; billToCompany?: string; billToGstin?: string; requests?: string
+  billToAddress?: string; billToCity?: string; billToPin?: string
+  /** A company account: its contracted rate applies, and the bill goes to it (Phase 7). */
+  debtorId?: string
+  /** A room block (a wedding or a group): one of its rooms, at the block's rate (Phase 7). */
+  blockId?: string
+}
+
+/**
+ * Books a stay: checks the dates, the room type and the rooms free each night (rooms held in other blocks
+ * count as taken), prices every night (the block's rate, else the company's contracted rate, else the rate
+ * table), and opens the guest's bill.
+ */
+export async function bookStay(ctx: Ctx, t: Db, who: Caller, b: BookingInput) {
+  const now = () => ctx.now()
+  if (!b?.guest?.name?.trim()) throw new HttpError(400, 'Give the guest\'s name.')
+  if (!b.roomTypeId || !b.plan || !DATE.test(b.arrival ?? '') || !DATE.test(b.departure ?? '') || b.departure! <= b.arrival!) {
+    throw new HttpError(400, 'Send roomTypeId, plan, arrival and departure (YYYY-MM-DD), departure after arrival.')
+  }
+  const nights = nightsOf(b.arrival!, b.departure!)
+  if (nights.length > 60) throw new HttpError(400, 'A single reservation can be at most 60 nights.')
+  const today = await businessDate(t)
+  if (b.arrival! < today) throw new HttpError(400, `Arrival can't be before today's business date (${today}).`)
+  if (b.source && !SOURCES[b.source]) throw new HttpError(400, `Booked through: ${Object.keys(SOURCES).join(', ')}.`)
+  if (b.source && OTAS[b.source] && !b.otaRef?.trim()) throw new HttpError(400, `The ${OTAS[b.source]} booking ID, to match the OTA's payout.`)
+  if (b.debtorId) {
+    const [d] = await t.query<{ name: string; gstin: string | null; address: string | null; city: string | null; active: boolean }>('select name, gstin, address, city, active from debtor where id = $1', [b.debtorId])
+    if (!d) throw new HttpError(404, 'No such company account.')
+    if (!d.active) throw new HttpError(409, `${d.name}'s account is closed.`)
+    b.billToCompany ||= d.name; b.billToGstin ||= d.gstin ?? undefined; b.billToAddress ||= d.address ?? undefined; b.billToCity ||= d.city ?? undefined
+  }
+  if (b.billToGstin) {
+    const v = validateGstin(b.billToGstin)
+    if (!v.ok) throw new HttpError(400, `Company GSTIN: ${v.reason}`)
+    b.billToGstin = v.gstin
+    if (!b.billToCompany?.trim()) throw new HttpError(400, 'Give the company\'s legal name for a GST bill.')
+  }
+
+  await t.query('select pg_advisory_xact_lock($1)', [RESERVATION_LOCK])     // one booking decision at a time
+  await sweepBlocks(t, today, who, now())
+  const [rt] = await t.query<{ max_occupancy: number; active: boolean }>('select max_occupancy, active from room_type where id = $1', [b.roomTypeId])
+  if (!rt?.active) throw new HttpError(400, `No active room type "${b.roomTypeId}".`)
+  const adults = b.adults ?? 1, children = b.children ?? 0
+  if (adults + children > rt.max_occupancy + 1) throw new HttpError(400, `At most ${rt.max_occupancy + 1} guests (with an extra bed) for this room type.`)
+  let blockRate: number | null = null
+  if (b.blockId) {
+    const [bl] = await t.query<{ name: string; status: string; arrival: string; departure: string; rooms: number | null; rate_paise: string | null; plan_code: string }>(
+      `select k.name, k.status, k.arrival::text, k.departure::text, l.rooms, l.rate_paise, k.plan_code from room_block k left join room_block_line l on l.block_id = k.id and l.room_type_id = $2 where k.id = $1`, [b.blockId, b.roomTypeId])
+    if (!bl) throw new HttpError(404, 'No such room block.')
+    if (bl.status !== 'open') throw new HttpError(409, `The ${bl.name} block is ${bl.status}.`)
+    if (bl.rooms == null) throw new HttpError(400, `The ${bl.name} block holds no ${b.roomTypeId} rooms.`)
+    if (b.arrival! < bl.arrival || b.departure! > bl.departure) throw new HttpError(400, `The ${bl.name} block runs from ${bl.arrival} to ${bl.departure}.`)
+    const full = (await blockPickup(t, b.blockId, b.roomTypeId!, nights)).filter((x) => x.picked >= bl.rooms!)
+    if (full.length) throw new HttpError(409, `All ${bl.rooms} ${b.roomTypeId} rooms in the ${bl.name} block are taken on ${full.map((x) => x.night).join(', ')}.`)
+    // Held rooms can still be lost to a room going out of order.
+    const none = (await freeByNight(t, b.roomTypeId!, nights, undefined, b.blockId)).filter((n) => n.free <= 0)
+    if (none.length) throw new HttpError(409, `No ${b.roomTypeId} room is free on ${none.map((n) => n.night).join(', ')}.`)
+    blockRate = Number(bl.rate_paise)
+    b.plan = bl.plan_code
+  } else {
+    const full = (await freeByNight(t, b.roomTypeId!, nights)).filter((n) => n.free <= 0)
+    if (full.length) throw new HttpError(409, `No ${b.roomTypeId} rooms left on ${full.map((n) => n.night).join(', ')}.`, { fullNights: full.map((n) => n.night) })
+  }
+  const amounts: number[] = []
+  for (const n of nights) {
+    const a = blockRate ?? (b.debtorId ? await contractRate(t, b.debtorId, b.plan!, b.roomTypeId!, n) : null) ?? await rateFor(t, b.plan!, b.roomTypeId!, n)
+    if (a == null) throw new HttpError(422, `No ${b.plan} rate for ${b.roomTypeId} on ${n}.`)
+    amounts.push(a)
+  }
+
+  const g = b.guest!
+  const mobile = g.mobile ? '+91' + g.mobile.replace(/\D/g, '').slice(-10) : null
+  let [guest] = mobile ? await t.query<{ id: string }>('select id from guest where mobile = $1', [mobile]) : []
+  if (!guest) {
+    guest = { id: newId('G') }
+    await t.query('insert into guest (id, name, mobile, email, nationality, company, gstin) values ($1, $2, $3, $4, $5, $6, $7)',
+      [guest.id, g.name!.trim(), mobile, g.email ?? null, (g.nationality ?? 'IN').toUpperCase(), g.company ?? null, g.gstin ?? null])
+  }
+  const id = newId('R')
+  await t.query(
+    `insert into reservation (id, property_id, guest_id, status, room_type_id, rate_plan_code, arrival, departure, adults, children,
+       source, eta, bill_to_company, bill_to_gstin, requests, created_by, created_at, bill_to_address, bill_to_city, bill_to_pin, ota_ref, debtor_id, block_id)
+     values ($1, $2, $3, 'confirmed', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)`,
+    [id, PROPERTY, guest.id, b.roomTypeId, b.plan, b.arrival, b.departure, adults, children, b.source ?? 'direct', b.eta ?? null,
+      b.billToCompany ?? null, b.billToGstin ?? null, b.requests ?? null, who.userId, now(),
+      b.billToAddress ?? null, b.billToCity ?? null, b.billToPin ?? null, b.otaRef?.trim() || null, b.debtorId ?? null, b.blockId ?? null])
+  for (let i = 0; i < nights.length; i++) {
+    await t.query('insert into room_night (reservation_id, night, room_type_id, amount_paise) values ($1, $2, $3, $4)',
+      [id, nights[i], b.roomTypeId, amounts[i]])
+  }
+  await t.query('insert into folio (id, reservation_id, bill_to, gstin) values ($1, $2, $3, $4)',
+    [newId('F'), id, b.billToCompany ?? g.name!.trim(), b.billToGstin ?? null])
+  const total = amounts.reduce((a, x) => a + x, 0)
+  await appendAudit(t, { actor: who, action: 'reservation.create', entity: { type: 'reservation', id }, amount: total,
+    after: { guest: g.name, roomTypeId: b.roomTypeId, plan: b.plan, arrival: b.arrival, departure: b.departure, nights: nights.length, block: b.blockId ?? null, company: b.debtorId ?? null } }, now())
+  return { id, guestId: guest.id, nights: nights.length, roomTotal: total }
+}
+
 export function frontOfficeRoutes(app: FastifyInstance, ctx: Ctx) {
   const db = ctx.db
   const now = () => ctx.now()
@@ -82,71 +184,7 @@ export function frontOfficeRoutes(app: FastifyInstance, ctx: Ctx) {
   // ---------- reservations ----------
   app.post('/api/reservations', async (req, reply) => {
     const who = await frontDesk(ctx, req)
-    const b = req.body as {
-      guest?: { name?: string; mobile?: string; email?: string; nationality?: string; company?: string; gstin?: string }
-      roomTypeId?: string; plan?: string; arrival?: string; departure?: string; adults?: number; children?: number
-      source?: string; otaRef?: string; eta?: string; billToCompany?: string; billToGstin?: string; requests?: string
-      billToAddress?: string; billToCity?: string; billToPin?: string
-    }
-    if (!b?.guest?.name?.trim()) throw new HttpError(400, 'Give the guest\'s name.')
-    if (!b.roomTypeId || !b.plan || !DATE.test(b.arrival ?? '') || !DATE.test(b.departure ?? '') || b.departure! <= b.arrival!) {
-      throw new HttpError(400, 'Send roomTypeId, plan, arrival and departure (YYYY-MM-DD), departure after arrival.')
-    }
-    const nights = nightsOf(b.arrival!, b.departure!)
-    if (nights.length > 60) throw new HttpError(400, 'A single reservation can be at most 60 nights.')
-    const today = await businessDate(db)
-    if (b.arrival! < today) throw new HttpError(400, `Arrival can't be before today's business date (${today}).`)
-    if (b.source && !SOURCES[b.source]) throw new HttpError(400, `Booked through: ${Object.keys(SOURCES).join(', ')}.`)
-    if (b.source && OTAS[b.source] && !b.otaRef?.trim()) throw new HttpError(400, `The ${OTAS[b.source]} booking ID, to match the OTA's payout.`)
-    if (b.billToGstin) {
-      const v = validateGstin(b.billToGstin)
-      if (!v.ok) throw new HttpError(400, `Company GSTIN: ${v.reason}`)
-      b.billToGstin = v.gstin
-      if (!b.billToCompany?.trim()) throw new HttpError(400, 'Give the company\'s legal name for a GST bill.')
-    }
-
-    const result = await db.tx(async (t) => {
-      await t.query('select pg_advisory_xact_lock($1)', [RESERVATION_LOCK])     // one booking decision at a time
-      const [rt] = await t.query<{ max_occupancy: number; active: boolean }>('select max_occupancy, active from room_type where id = $1', [b.roomTypeId])
-      if (!rt?.active) throw new HttpError(400, `No active room type "${b.roomTypeId}".`)
-      const adults = b.adults ?? 1, children = b.children ?? 0
-      if (adults + children > rt.max_occupancy + 1) throw new HttpError(400, `At most ${rt.max_occupancy + 1} guests (with an extra bed) for this room type.`)
-      const full = (await freeByNight(t, b.roomTypeId!, nights)).filter((n) => n.free <= 0)
-      if (full.length) throw new HttpError(409, `No ${b.roomTypeId} rooms left on ${full.map((n) => n.night).join(', ')}.`, { fullNights: full.map((n) => n.night) })
-      const amounts: number[] = []
-      for (const n of nights) {
-        const a = await rateFor(t, b.plan!, b.roomTypeId!, n)
-        if (a == null) throw new HttpError(422, `No ${b.plan} rate for ${b.roomTypeId} on ${n}.`)
-        amounts.push(a)
-      }
-
-      const g = b.guest!
-      const mobile = g.mobile ? '+91' + g.mobile.replace(/\D/g, '').slice(-10) : null
-      let [guest] = mobile ? await t.query<{ id: string }>('select id from guest where mobile = $1', [mobile]) : []
-      if (!guest) {
-        guest = { id: newId('G') }
-        await t.query('insert into guest (id, name, mobile, email, nationality, company, gstin) values ($1, $2, $3, $4, $5, $6, $7)',
-          [guest.id, g.name!.trim(), mobile, g.email ?? null, (g.nationality ?? 'IN').toUpperCase(), g.company ?? null, g.gstin ?? null])
-      }
-      const id = newId('R')
-      await t.query(
-        `insert into reservation (id, property_id, guest_id, status, room_type_id, rate_plan_code, arrival, departure, adults, children,
-           source, eta, bill_to_company, bill_to_gstin, requests, created_by, created_at, bill_to_address, bill_to_city, bill_to_pin, ota_ref)
-         values ($1, $2, $3, 'confirmed', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
-        [id, PROPERTY, guest.id, b.roomTypeId, b.plan, b.arrival, b.departure, adults, children, b.source ?? 'direct', b.eta ?? null,
-          b.billToCompany ?? null, b.billToGstin ?? null, b.requests ?? null, who.userId, now(),
-          b.billToAddress ?? null, b.billToCity ?? null, b.billToPin ?? null, b.otaRef?.trim() || null])
-      for (let i = 0; i < nights.length; i++) {
-        await t.query('insert into room_night (reservation_id, night, room_type_id, amount_paise) values ($1, $2, $3, $4)',
-          [id, nights[i], b.roomTypeId, amounts[i]])
-      }
-      await t.query('insert into folio (id, reservation_id, bill_to, gstin) values ($1, $2, $3, $4)',
-        [newId('F'), id, b.billToCompany ?? g.name!.trim(), b.billToGstin ?? null])
-      const total = amounts.reduce((a, x) => a + x, 0)
-      await appendAudit(t, { actor: who, action: 'reservation.create', entity: { type: 'reservation', id }, amount: total,
-        after: { guest: g.name, roomTypeId: b.roomTypeId, plan: b.plan, arrival: b.arrival, departure: b.departure, nights: nights.length } }, now())
-      return { id, guestId: guest.id, nights: nights.length, roomTotal: total }
-    })
+    const result = await db.tx((t) => bookStay(ctx, t, who, (req.body ?? {}) as BookingInput))
     return reply.status(201).send(result)
   })
 

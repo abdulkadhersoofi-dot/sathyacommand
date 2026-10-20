@@ -348,14 +348,19 @@ export async function postPending(db: Db, now: Date) {
         ...d.lines.map((l) => ({ code: EVENT_REVENUE[l.kind ?? ''] ?? '4320', amount: -n(l.taxable) })),
         { code: '2200', amount: -n(d.cgst_paise) }, { code: '2201', amount: -n(d.sgst_paise) }] })
     }
-    const evPay = await t.query<{ id: string; event_id: string; title: string; number: string; method: string; amount_paise: string; business_date: string; reference: string | null }>(
-      `select p.id, p.event_id, e.title, e.number, p.method, p.amount_paise, p.business_date::text, p.reference from event_payment p join event e on e.id = p.event_id
+    const evPay = await t.query<{ id: string; event_id: string; title: string; number: string; method: string; amount_paise: string; business_date: string; reference: string | null; debtor_id: string | null; debtor: string | null; invoice: string | null }>(
+      `select p.id, p.event_id, e.title, e.number, p.method, p.amount_paise, p.business_date::text, p.reference, p.debtor_id, d.name as debtor,
+              (select x.number from tax_document x where x.event_id = e.id and x.doc_type = 'invoice' order by x.issued_at desc limit 1) as invoice
+         from event_payment p join event e on e.id = p.event_id left join debtor d on d.id = p.debtor_id
         where not exists (select 1 from posted_source v where v.source_type = 'event_pay' and v.source_id = p.id) order by p.received_at`)
     for (const p of evPay) {
       const amt = n(p.amount_paise)
-      await post({ kind: amt > 0 ? 'receipt' : 'payment', date: p.business_date, narration: `${amt > 0 ? 'Received for' : 'Refunded on'} ${p.number}, ${p.title}`, source: { type: 'event_pay', id: p.id }, lines: [
-        { code: p.method === 'bank' || p.method === 'cheque' ? bank : METHOD[p.method] ?? '1100', amount: amt, ref: p.reference },
-        { code: '1340', amount: -amt, party: { type: 'event', id: p.event_id, name: p.title }, ref: p.number }] })
+      // Moved to the company's account: the bill becomes its own line there, named by the invoice.
+      const debit: PostLine = p.method === 'company'
+        ? { code: '1310', amount: amt, party: { type: 'company', id: p.debtor_id!, name: p.debtor }, ref: p.invoice ?? p.number }
+        : { code: p.method === 'bank' || p.method === 'cheque' ? bank : METHOD[p.method] ?? '1100', amount: amt, ref: p.reference }
+      await post({ kind: p.method === 'company' ? 'journal' : amt > 0 ? 'receipt' : 'payment', date: p.business_date, narration: `${p.method === 'company' ? `To ${p.debtor}'s account:` : amt > 0 ? 'Received for' : 'Refunded on'} ${p.number}, ${p.title}`, source: { type: 'event_pay', id: p.id }, lines: [
+        debit, { code: '1340', amount: -amt, party: { type: 'event', id: p.event_id, name: p.title }, ref: p.number }] })
     }
 
     // ---------- purchases ----------

@@ -93,6 +93,8 @@ export class FrontDesk {
   // ---------- forms ----------
   async newBooking() {
     const types = (await this.api.get<RoomType[]>('/api/room-types')).filter((t) => t.active)
+    // Company accounts with contracted rates (Phase 7); none when this login cannot read them.
+    const accounts = (await this.api.get<{ accounts: { id: string; name: string; active: boolean; rates: number }[] }>('/api/sales/accounts').catch(() => ({ accounts: [] }))).accounts.filter((a) => a.active)
     const today = todayKey()
     const form = this.open('New booking', `
       <div class="form-grid">
@@ -106,6 +108,7 @@ export class FrontDesk {
         <label>Nights<input name="nights" type="number" min="1" max="60" value="1"></label>
         <label>Adults<input name="adults" type="number" min="1" value="2"></label>
         <label>Children<input name="children" type="number" min="0" value="0"></label>
+        ${accounts.length ? `<label class="span2">Company account (its contracted rate, billed to it)<select name="debtor"><option value="">—</option>${accounts.map((a) => `<option value="${esc(a.id)}">${esc(a.name)}${a.rates ? ' · contracted rate' : ''}</option>`).join('')}</select></label>` : ''}
         <label class="span2">Company (for a GST bill)<input name="company" autocomplete="off"></label>
         <label>Company GSTIN<input name="gstin" maxlength="15" autocomplete="off"></label>
         <label>Company PIN code<input name="pin" maxlength="6" inputmode="numeric"></label>
@@ -126,7 +129,7 @@ export class FrontDesk {
         adults: Number(this.val(f, 'adults')), children: Number(this.val(f, 'children')), eta: this.val(f, 'eta') || undefined,
         billToCompany: this.val(f, 'company') || undefined, billToGstin: this.val(f, 'gstin').toUpperCase() || undefined,
         billToAddress: this.val(f, 'address') || undefined, billToCity: this.val(f, 'city') || undefined, billToPin: this.val(f, 'pin') || undefined,
-        source: this.val(f, 'source'), otaRef: this.val(f, 'otaRef') || undefined,
+        source: this.val(f, 'source'), otaRef: this.val(f, 'otaRef') || undefined, debtorId: this.val(f, 'debtor') || undefined,
       })
       await this.after()
       return `Booked ${r.id} · ${rs(r.roomTotal)} for the room before tax`
