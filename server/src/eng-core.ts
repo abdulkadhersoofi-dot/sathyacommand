@@ -106,6 +106,14 @@ export async function sweepEngineering(db: Db, now: Date) {
       await t.query('update licence set reminded = $2 where id = $1', [l.id, tier])
       await appendAudit(t, { actor: SYSTEM, action: 'compliance.reminder', entity: { type: 'licence', id: l.id }, after: { name: l.name, due: l.valid_until, daysLeft: daysBetween(today, l.valid_until) } }, now)
     }
+    const measures = await t.query<{ id: string; name: string; due_on: string; reminded: number }>(
+      `select id, name, due_on::text, reminded from measure where active and due_on is not null and due_on <= $1`, [addDays(today, 60)])
+    for (const m of measures) {
+      const tier = reminderTier(today, m.due_on)
+      if (tierRank(tier) <= tierRank(m.reminded)) continue
+      await t.query('update measure set reminded = $2 where id = $1', [m.id, tier])
+      await appendAudit(t, { actor: SYSTEM, action: 'compliance.reminder', entity: { type: 'measure', id: m.id }, after: { name: `Stamping: ${m.name}`, due: m.due_on, daysLeft: daysBetween(today, m.due_on) } }, now)
+    }
     const amc = await t.query<{ id: string; name: string; amc_until: string; amc_reminded: number }>(
       `select id, name, amc_until::text, amc_reminded from asset where active and amc_until is not null and amc_until <= $1`, [addDays(today, 60)])
     for (const a of amc) {

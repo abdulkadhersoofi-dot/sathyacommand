@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
-import { rupees } from '@sathya/tax'
+import { rupees, tcsPaidOnPurchase } from '@sathya/tax'
 import { appendAudit } from '../audit-store'
 import { can, HttpError, type Caller, type Ctx } from '../context'
 import type { Db } from '../db'
@@ -172,10 +172,12 @@ export function barRoutes(app: FastifyInstance, ctx: Ctx) {
   // ---------- purchases (only from the licensed source) ----------
   app.post('/api/bar/purchases', async (req, reply) => {
     const who = await need(req, 'bar.stock')
-    const b = req.body as { supplier?: string; invoiceNo?: string; invoiceDate?: string; vat?: number; lines?: { brandId: string; bottles: number; cost: number }[] }
+    const b = req.body as { supplier?: string; invoiceNo?: string; invoiceDate?: string; vat?: number; tcs?: number; permitNo?: string; permitDate?: string; lines?: { brandId: string; bottles: number; cost: number }[] }
     const allowed = ctx.tax.liquor_controls.purchase_only_from ?? ['TASMAC']
     if (!allowed.includes((b?.supplier ?? '').toUpperCase())) throw new HttpError(400, `Liquor can only be bought from ${allowed.join(' or ')}.`)
     if (!b.invoiceNo?.trim() || !DATE.test(b.invoiceDate ?? '')) throw new HttpError(400, 'Send the TASMAC invoice number and date.')
+    if (!b.permitNo?.trim()) throw new HttpError(400, 'Enter the transport permit number the stock came under.')
+    if (b.permitDate && !DATE.test(b.permitDate)) throw new HttpError(400, 'Permit date as YYYY-MM-DD.')
     if (!Array.isArray(b.lines) || !b.lines.length) throw new HttpError(400, 'Add at least one brand.')
     return db.tx(async (t) => {
       const lines = []
@@ -188,19 +190,21 @@ export function barRoutes(app: FastifyInstance, ctx: Ctx) {
       }
       const value = lines.reduce((a, l) => a + l.bottles * l.costPaise, 0)
       const vat = rupees(b.vat ?? 0)
+      // TCS collected by TASMAC on the sale: a credit for the resort's income-tax return (as on the invoice, else worked out).
+      const tcs = b.tcs != null ? rupees(b.tcs) : tcsPaidOnPurchase(ctx.tax, 'liquor_purchases_from_tasmac', value + vat).amount
       const id = newId('TP'), day = await businessDate(t)
       try {
         await t.query(
-          `insert into tasmac_purchase (id, supplier, invoice_no, invoice_date, lines, value_paise, vat_paise, total_paise, business_date, received_by, received_at)
-           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-          [id, b.supplier!.toUpperCase(), b.invoiceNo!.trim(), b.invoiceDate, JSON.stringify(lines), value, vat, value + vat, day, who.userId, now()])
+          `insert into tasmac_purchase (id, supplier, invoice_no, invoice_date, lines, value_paise, vat_paise, total_paise, business_date, received_by, received_at, permit_no, permit_date, tcs_paise)
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+          [id, b.supplier!.toUpperCase(), b.invoiceNo!.trim(), b.invoiceDate, JSON.stringify(lines), value, vat, value + vat + tcs, day, who.userId, now(), b.permitNo!.trim(), b.permitDate || null, tcs])
       } catch { throw new HttpError(409, `Invoice ${b.invoiceNo} from ${b.supplier} is already entered.`) }
       for (const l of lines) {
         await t.query('insert into bar_stock_move (id, brand_id, business_date, kind, ml, ref, note, by_user, at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
           [newId('BM'), l.brandId, day, 'purchase', l.bottles * l.bottleMl, id, `${l.bottles} × ${l.bottleMl} ml · ${b.supplier} ${b.invoiceNo}`, who.userId, now()])
       }
       await appendAudit(t, { actor: who, action: 'bar.purchase', entity: { type: 'tasmac_purchase', id }, amount: value + vat, after: { invoiceNo: b.invoiceNo, lines: lines.length } }, now())
-      return reply.status(201).send({ id, valuePaise: value, totalPaise: value + vat })
+      return reply.status(201).send({ id, valuePaise: value, tcsPaise: tcs, totalPaise: value + vat + tcs })
     })
   })
 
@@ -209,7 +213,7 @@ export function barRoutes(app: FastifyInstance, ctx: Ctx) {
     await need(req, 'bar.stock', 'tax.vat')
     const q = req.query as { from?: string; to?: string }
     return db.query(
-      `select p.id, p.supplier, p.invoice_no, p.invoice_date::text, p.lines, p.value_paise, p.vat_paise, p.total_paise, p.business_date::text, u.name as received_by
+      `select p.id, p.supplier, p.invoice_no, p.invoice_date::text, p.lines, p.value_paise, p.vat_paise, p.tcs_paise, p.total_paise, p.permit_no, p.permit_date::text, p.business_date::text, u.name as received_by
          from tasmac_purchase p join app_user u on u.id = p.received_by
         where ($1::date is null or p.invoice_date >= $1) and ($2::date is null or p.invoice_date <= $2) order by p.invoice_date desc, p.received_at desc`,
       [q.from ?? null, q.to ?? null])

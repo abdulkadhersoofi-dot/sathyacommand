@@ -63,6 +63,7 @@ export function receiptRoutes(app: FastifyInstance, ctx: Ctx) {
         const itemId = pl?.item_id ?? l.itemId
         const [i] = await t.query<ItemRow>('select * from item where id = $1', [itemId])
         if (!i) throw new HttpError(404, 'No such item.')
+        if (i.brand_id) throw new HttpError(400, `${i.name}: liquor comes in only through a TASMAC purchase (with its transport permit), not a goods receipt.`)
         const got = Number(l.qtyReceived), ok = l.qtyAccepted == null ? got : Number(l.qtyAccepted)
         if (!(got >= 0) || !(ok >= 0) || ok > got) throw new HttpError(400, `${i.name}: accepted cannot be more than received.`)
         if (got === 0) continue

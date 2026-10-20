@@ -16,7 +16,7 @@ import { requireCaller } from './auth'
 const DATE = /^\d{4}-\d{2}-\d{2}$/
 const HOME_STATE = '33'
 
-interface ItemRow { id: string; name: string; unit: string; purchase_unit: string; purchase_factor: string; gst_rate: string | null; default_store_id: string | null
+interface ItemRow { id: string; name: string; category: string; unit: string; purchase_unit: string; purchase_factor: string; gst_rate: string | null; default_store_id: string | null
   par_level: string | null; reorder_qty: string | null; perishable: boolean; ingredient_id: string | null; brand_id: string | null; spare_id: string | null; linen_item_id: string | null }
 
 async function approvePo(t: Db, poId: string, who: Caller, now: Date) {
@@ -139,6 +139,7 @@ export function purchaseRoutes(app: FastifyInstance, ctx: Ctx) {
     for (const l of lines) {
       const i = await item(t, l.itemId)
       if (!(Number(l.qty) > 0)) throw new HttpError(400, `How many ${i.purchase_unit} of ${i.name}?`)
+      if (i.brand_id || i.category === 'liquor') throw new HttpError(400, `${i.name}: liquor is bought only from TASMAC, entered under Restaurant → Bar stock → TASMAC purchases.`)
       if (i.gst_rate == null) throw new HttpError(400, `Set the GST rate for ${i.name} first (Items).`)
       const contract = await rateOf(t, vendorId, i.id)
       const rate = l.rate != null ? Math.round(Number(l.rate) * 100) : contract != null ? Number(contract) : null

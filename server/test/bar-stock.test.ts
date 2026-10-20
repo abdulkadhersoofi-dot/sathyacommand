@@ -38,14 +38,16 @@ describe('brands and purchases', () => {
 
   it('accepts purchases only from TASMAC, once per invoice', async () => {
     expect((await R.post('/api/bar/purchases', BM, { supplier: 'Local Wines', invoiceNo: '1', invoiceDate: '2026-10-31', lines: [{ brandId: 'BR-BEER650', bottles: 24, cost: 150 }] })).json().error).toMatch(/only be bought from TASMAC/)
-    const r = await R.post('/api/bar/purchases', BM, { supplier: 'tasmac', invoiceNo: 'TSM/CBE/88231', invoiceDate: '2026-10-31', vat: 0,
-      lines: [{ brandId: 'BR-BEER650', bottles: 24, cost: 150 }, { brandId: 'BR-WHISKY750', bottles: 6, cost: 900 }] })
-    expect(r.json()).toMatchObject({ valuePaise: 24 * 15000 + 6 * 90000 })
-    expect((await R.post('/api/bar/purchases', BM, { supplier: 'TASMAC', invoiceNo: 'TSM/CBE/88231', invoiceDate: '2026-10-31', lines: [{ brandId: 'BR-BEER650', bottles: 1, cost: 150 }] })).statusCode).toBe(409)
+    const lines = [{ brandId: 'BR-BEER650', bottles: 24, cost: 150 }, { brandId: 'BR-WHISKY750', bottles: 6, cost: 900 }]
+    expect((await R.post('/api/bar/purchases', BM, { supplier: 'TASMAC', invoiceNo: 'TSM/CBE/88231', invoiceDate: '2026-10-31', lines })).json().error).toMatch(/transport permit/)
+    const r = await R.post('/api/bar/purchases', BM, { supplier: 'tasmac', invoiceNo: 'TSM/CBE/88231', invoiceDate: '2026-10-31', vat: 0, permitNo: 'TP/CBE/2026/4411', lines })
+    // TCS at 1% on what TASMAC charged, a credit for the income-tax return.
+    expect(r.json()).toMatchObject({ valuePaise: 24 * 15000 + 6 * 90000, tcsPaise: 9000, totalPaise: 909000 })
+    expect((await R.post('/api/bar/purchases', BM, { supplier: 'TASMAC', invoiceNo: 'TSM/CBE/88231', invoiceDate: '2026-10-31', permitNo: 'X', lines: [{ brandId: 'BR-BEER650', bottles: 1, cost: 150 }] })).statusCode).toBe(409)
     const s = await stock()
     expect(s['BR-BEER650']).toMatchObject({ ml: 24 * 650, fullBottles: 24, openMl: 0 })
     expect(s['BR-WHISKY750']).toMatchObject({ ml: 4500, valuePaise: 540000 })
-    expect((await R.get('/api/bar/purchases', ACC)).json()[0]).toMatchObject({ supplier: 'TASMAC', invoice_no: 'TSM/CBE/88231' })
+    expect((await R.get('/api/bar/purchases', ACC)).json()[0]).toMatchObject({ supplier: 'TASMAC', invoice_no: 'TSM/CBE/88231', permit_no: 'TP/CBE/2026/4411' })
   })
 })
 

@@ -234,6 +234,9 @@ export function utilityRoutes(app: FastifyInstance, ctx: Ctx) {
     }
     const amc = await db.query<{ id: string; name: string; amc_vendor: string | null; amc_until: string }>(`select id, name, amc_vendor, amc_until::text from asset where active and amc_until is not null`)
     for (const a of amc) items.push({ type: 'amc', id: a.id, name: `AMC: ${a.name}`, due: a.amc_until, daysLeft: daysBetween(today, a.amc_until), tier: reminderTier(today, a.amc_until), owner: null, detail: a.amc_vendor })
+    // Legal metrology: peg measures and scales must be re-verified and stamped.
+    const ms = await db.query<{ id: string; name: string; capacity: string | null; location: string | null; due_on: string }>(`select id, name, capacity, location, due_on::text from measure where active and due_on is not null`)
+    for (const m of ms) items.push({ type: 'metrology', id: m.id, name: `Stamping: ${m.name}`, due: m.due_on, daysLeft: daysBetween(today, m.due_on), tier: reminderTier(today, m.due_on), owner: null, detail: [m.capacity, m.location].filter(Boolean).join(' · ') || null })
     // Statutory equipment checks (fire, lifts, transformer) and any planned maintenance that is overdue.
     const pm = await db.query<{ id: string; title: string; asset: string; category: string; next_due: string }>(
       `select p.id, p.title, a.name as asset, a.category, p.next_due::text from pm_plan p join asset a on a.id = p.asset_id
