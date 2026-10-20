@@ -693,7 +693,7 @@ button.row-card { width: 100%; text-align: left; font: inherit; background: var(
 
 /* The top bar holds five workspaces: drop the toggle labels first, then the workspace labels. */
 @media (max-width: 1700px) { #btn-night span, #btn-eco span { display: none; } }
-@media (max-width: 1560px) { #btn-staff span, #btn-sec span, #btn-eng span, #btn-hk span, #btn-fnb span, #btn-inv span { display: none; } }
+@media (max-width: 1560px) { #btn-staff span, #btn-sec span, #btn-eng span, #btn-hk span, #btn-fnb span, #btn-inv span, #btn-acc span { display: none; } }
 
 /* stores & purchase */
 .item-row { grid-template-columns: minmax(0, 1.8fr) minmax(0, 1.2fr) minmax(0, 1fr) 90px minmax(0, 1fr) !important; }
@@ -754,3 +754,19 @@ button.row-card { width: 100%; text-align: left; font: inherit; background: var(
 .mc-figs span { display: flex; flex-direction: column; min-width: 0; }
 .mc-figs small { color: var(--muted); font-size: 11px; }
 .banner-note { padding: 8px 10px; margin-bottom: 8px; border-radius: var(--r); border: 1px solid color-mix(in srgb, var(--marigold) 50%, var(--line)); background: color-mix(in srgb, var(--marigold) 12%, var(--surface)); font-size: 13px; }
+
+/* accounts */
+.acc-scroll { overflow-x: auto; max-width: 100%; }
+.acc-table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.acc-table th, .acc-table td { padding: 5px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.acc-table th { font-size: 11.5px; color: var(--muted); font-weight: 600; white-space: nowrap; }
+.acc-table .n { text-align: right; white-space: nowrap; }
+.acc-table tfoot td { font-weight: 700; border-top: 2px solid var(--line); }
+.acc-table .acc-grp td { font-weight: 700; background: color-mix(in srgb, var(--accent) 6%, var(--surface)); }
+.acc-table tr.acc-click { cursor: pointer; }
+.acc-table tr.acc-click:hover td { background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+.acc-table tr.retired td { opacity: .55; }
+.row-card.acc-voucher { grid-template-columns: 1fr; cursor: default; }
+.row-card.acc-voucher .rc-title { white-space: normal; }
+.row-card.acc-voucher .rc-right { grid-row: auto; grid-column: 1; align-items: flex-start; }
+button.link { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; cursor: pointer; text-align: left; }
