@@ -21,6 +21,7 @@ import { roleColour } from './scene/Overlays'
 import { Studio } from './studio/studio'
 import { defaultLayout, type SiteLayout } from './data/layout'
 import { $, toast } from './ui/dom'
+import { showDemoGuide } from './ui/demo-guide'
 import { drawerHtml, tipHtml } from './ui/cards'
 import { sideHtml, type Tab } from './ui/side'
 import { kpisHtml, layersHtml, legendHtml, timelineHtml } from './ui/dock'
@@ -527,6 +528,24 @@ setInterval(() => { if (store.isToday) { store.invalidate('clock') } }, 30000)
 setTimeout(() => $('#hint').style.opacity = '0', 9000)
 
 $('#source-label').textContent = me ? `Sathya Park & Resorts · ${me.name}` : `Sathya Park & Resorts · ${adapter.name}`
+// The hosted demo: say where the modules are, once on the first visit and whenever asked.
+if (!liveMode) {
+  const liveUrl = (import.meta.env.VITE_LIVE_URL as string | undefined) || undefined
+  const guide = document.createElement('button')
+  guide.className = 'icon-btn demo-btn'
+  guide.type = 'button'
+  guide.textContent = liveUrl ? 'Open the live HMS' : 'Where are the modules?'
+  guide.title = 'This is the sample demo: front desk, restaurant, housekeeping, staff, engineering, security, stores and accounts run on the live HMS'
+  guide.addEventListener('click', () => showDemoGuide(liveUrl))
+  document.querySelector('.topbar-actions')!.prepend(guide)
+  const badge = document.querySelector<HTMLElement>('.sample-badge')!
+  badge.style.cursor = 'pointer'
+  badge.title = 'Sample demo: click to see where the live HMS is'
+  badge.addEventListener('click', () => showDemoGuide(liveUrl))
+  let seen = false
+  try { seen = localStorage.getItem('sathya.demoGuideSeen') === '1'; localStorage.setItem('sathya.demoGuideSeen', '1') } catch { /* private window: show it */ }
+  if (!seen) showDemoGuide(liveUrl)
+}
 if (api && me && liveAdapter) {
   const badge = document.querySelector<HTMLElement>('.sample-badge')!
   badge.textContent = 'Live'
@@ -609,6 +628,43 @@ if (api && me && liveAdapter) {
     accBtn.hidden = false
     accBtn.addEventListener('click', () => { if (accWs!.open) accWs!.hide(); else { hideWorkspaces(); void accWs!.show() } })
   }
+  addModulesMenu()
   setTab('arrivals')
+}
+
+/** One labelled menu of every module this person can open: the top-bar icons alone are easy to miss. */
+function addModulesMenu() {
+  const btn = document.createElement('button')
+  btn.className = 'icon-btn modules-btn'
+  btn.type = 'button'
+  btn.setAttribute('aria-haspopup', 'menu')
+  btn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg><b>Modules</b>'
+  const menu = document.createElement('div')
+  menu.className = 'modules-menu'
+  menu.setAttribute('role', 'menu')
+  menu.hidden = true
+  const close = () => { menu.hidden = true; btn.setAttribute('aria-expanded', 'false') }
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation()
+    if (!menu.hidden) { close(); return }
+    const targets = [...document.querySelectorAll<HTMLElement>('.topbar-actions [id^="btn-"]:not([hidden]), #btn-studio:not([hidden])')]
+      .filter((b) => !['btn-night', 'btn-eco'].includes(b.id))
+    menu.innerHTML = targets.map((b) => {
+      const [name, what] = b.id === 'btn-god' ? ['God Mode', 'every change, approvals and alerts'] : (b.getAttribute('title') ?? b.textContent ?? '').split(/:\s*/)
+      return `<button type="button" role="menuitem" data-open="${b.id}"><b>${name}</b>${what ? `<small>${what}</small>` : ''}</button>`
+    }).join('')
+    menu.hidden = false
+    btn.setAttribute('aria-expanded', 'true')
+  })
+  menu.addEventListener('click', (e) => {
+    const id = (e.target as HTMLElement).closest<HTMLElement>('[data-open]')?.dataset.open
+    if (!id) return
+    close()
+    document.getElementById(id)?.click()
+  })
+  document.addEventListener('click', (e) => { if (!menu.hidden && !menu.contains(e.target as Node)) close() })
+  const bar = document.querySelector('.topbar-actions')!
+  bar.prepend(btn)
+  bar.appendChild(menu)
 }
 store.load().then(renderAll).catch((err) => toast(`Couldn't load HMS data: ${err.message}`))

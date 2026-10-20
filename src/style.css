@@ -770,3 +770,25 @@ button.row-card { width: 100%; text-align: left; font: inherit; background: var(
 .row-card.acc-voucher .rc-title { white-space: normal; }
 .row-card.acc-voucher .rc-right { grid-row: auto; grid-column: 1; align-items: flex-start; }
 button.link { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; cursor: pointer; text-align: left; }
+
+/* sample demo: where the live HMS is */
+.icon-btn.demo-btn { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.demo-guide { position: fixed; inset: 0; z-index: 90; background: rgba(0, 0, 0, .45); display: grid; place-items: center; padding: 16px; }
+.demo-guide .dg-card { position: relative; background: var(--surface); color: var(--fg); border-radius: 14px; max-width: 860px; width: 100%; max-height: calc(100vh - 32px); overflow: auto; padding: 20px 22px; box-shadow: 0 20px 60px rgba(0, 0, 0, .3); }
+.demo-guide h2 { margin: 0 32px 8px 0; font-size: 20px; }
+.demo-guide .dr-close { position: absolute; top: 12px; right: 12px; }
+.demo-guide p { line-height: 1.5; }
+.demo-guide .dg-steps { border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin: 10px 0 14px; font-size: 14px; line-height: 1.5; }
+.demo-guide .dg-steps ol { margin: 6px 0; padding-left: 20px; }
+.demo-guide code { font-family: var(--f-mono); font-size: 12.5px; }
+.demo-guide .dg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.demo-guide .dg-mod { border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 4px; }
+
+/* modules menu: every workspace this person can open, by name */
+.topbar-actions { position: relative; }
+.icon-btn.modules-btn { gap: 6px; border-color: var(--accent); }
+.icon-btn.modules-btn b { font-size: 13px; }
+.modules-menu { position: absolute; top: calc(100% + 6px); right: 0; z-index: 85; width: min(360px, calc(100vw - 32px)); max-height: 70vh; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 14px 40px rgba(0, 0, 0, .22); padding: 6px; }
+.modules-menu button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; text-align: left; background: none; border: 0; border-radius: 8px; padding: 8px 10px; color: var(--fg); font: inherit; cursor: pointer; }
+.modules-menu button:hover, .modules-menu button:focus-visible { background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+.modules-menu small { color: var(--muted); font-size: 12px; }

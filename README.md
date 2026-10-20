@@ -1,8 +1,13 @@
-# Sathya Command — Phase 1
+# Sathya Command
 
-Animated 3D command center for Sathya Park & Resorts. The main screen is a digital twin of the
-resort (traced from the satellite image) with live room status, check-ins, kitchen orders (KOTs) and
-events. Phase 1 runs on a deterministic sample HMS so it works before any integration exists.
+Hotel management system for Sathya Park & Resorts, around an animated 3D twin of the resort.
+
+**Two ways to open it:**
+
+- **The live HMS** (web service + PostgreSQL, started on Render with the one-click Blueprint in `render.yaml`, see [Deploying](docs/DEPLOY.md)): sign in with your mobile number; the **Modules** button lists everything your role can use: front desk, restaurant & bar, housekeeping, staff, engineering, security, stores & purchase, accounts, God Mode.
+- **The sample demo** (static site): the 3D map on made-up bookings and the layout editor only. It has no server, so the modules are not there; its **Where are the modules?** button says so.
+
+Phase plans and status: [Phase 2](docs/phase-2/README.md) · [Phase 3](docs/phase-3/README.md) · [Phase 4](docs/phase-4/README.md) · [Phase 5](docs/phase-5/README.md) · [Phase 6](docs/phase-6/README.md)
 
 ## Run
 
