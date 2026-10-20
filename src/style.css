@@ -84,12 +84,12 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .topbar-actions { display: flex; gap: 8px; align-items: center; }
 .icon-btn {
   display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: transparent;
-  padding: 6px 10px; border-radius: 8px; font-size: 12.5px; font-weight: 600;
+  padding: 6px 10px; border-radius: 8px; font-size: 12.5px; font-weight: 600; white-space: nowrap;
 }
 .icon-btn svg, .tool svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .icon-btn[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
 .god-btn {
-  display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; border-radius: 999px;
+  white-space: nowrap; display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--god) 55%, transparent); background: transparent;
   font: 700 12px var(--f-display); letter-spacing: 0.04em; color: var(--god);
 }
@@ -678,3 +678,19 @@ button.row-card { width: 100%; text-align: left; font: inherit; background: var(
   .move-row { grid-template-columns: 50px minmax(0, 1fr) 70px !important; }
   .move-row > :nth-child(4) { display: none; }
 }
+
+/* security */
+.map-label[data-pin] { pointer-events: auto; cursor: pointer; }
+.map-label[data-pin]:hover .ml-name { text-decoration: underline; }
+.plate { font: 700 12px var(--f-mono); background: #f6d34a; color: #1d1404; border-radius: 4px; padding: 1px 5px; letter-spacing: .04em; }
+.btn.danger { background: var(--st-departing); border-color: var(--st-departing); color: #fff; }
+.em-head { background: color-mix(in srgb, var(--st-departing) 14%, var(--surface)); border: 1px solid var(--st-departing); border-radius: 12px; padding: 10px 14px; margin-bottom: 8px; }
+.em-banner { position: fixed; left: 0; right: 0; top: 0; z-index: 80; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: center; padding: 10px 16px calc(10px + env(safe-area-inset-top));
+  background: var(--st-departing); color: #fff; font: 700 15px var(--f-body); box-shadow: var(--shadow); animation: sos-blink 1.2s ease-in-out infinite; }
+.em-banner .btn { background: #fff; color: #7a1f0c; border-color: #fff; }
+.em-banner .btn.ghost { background: transparent; color: #fff; }
+@media (prefers-reduced-motion: reduce) { .em-banner { animation: none; } }
+
+/* The top bar holds five workspaces: drop the toggle labels first, then the workspace labels. */
+@media (max-width: 1700px) { #btn-night span, #btn-eco span { display: none; } }
+@media (max-width: 1480px) { #btn-staff span, #btn-sec span, #btn-eng span, #btn-hk span, #btn-fnb span { display: none; } }

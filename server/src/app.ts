@@ -26,6 +26,7 @@ import { linenLaundryRoutes } from './routes/linen-laundry'
 import { staffRoutes } from './routes/staff'
 import { engineeringRoutes } from './routes/engineering'
 import { utilityRoutes } from './routes/utilities'
+import { securityRoutes } from './routes/security'
 
 export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boolean; appDir?: string } = {}) {
   const ctx: Ctx = {
@@ -68,6 +69,7 @@ export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boo
   staffRoutes(app, ctx)
   engineeringRoutes(app, ctx)
   utilityRoutes(app, ctx)
+  securityRoutes(app, ctx)
 
   // Serve the built 3D app and front desk screens from the same address as the API.
   if (opts.appDir && existsSync(opts.appDir)) app.register(fastifyStatic, { root: opts.appDir, index: 'index.html' })

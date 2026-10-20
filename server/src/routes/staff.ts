@@ -5,6 +5,7 @@ import { can, HttpError, type Caller, type Ctx } from '../context'
 import type { Db } from '../db'
 import { distanceM, geoSettings, spacePosition, toMap } from '../geo'
 import { requireCaller } from './auth'
+import { overdueCheckpoints } from './security'
 
 // The staff app: shifts and rosters, attendance inside the resort boundary (optional selfie), location
 // while on duty only (GPS outdoors, Bluetooth beacons indoors), SOS, broadcasts and a task inbox.
@@ -385,6 +386,13 @@ export function staffRoutes(app: FastifyInstance, ctx: Ctx) {
         where k.status in ('open', 'in_progress', 'on_hold') and (k.assigned_to = $1 or ($2 and k.assigned_to is null and k.priority in ('urgent', 'high')))
         order by case k.priority when 'urgent' then 0 when 'high' then 1 else 2 end, k.reported_at`, [who.userId, can(who, 'eng.work')])
     for (const k of eng) items.push({ kind: 'engineering', title: k.title, detail: `${k.priority}${k.place ? ` · ${k.place}` : ''} · ${k.status.replace('_', ' ')}`, at: k.reported_at, ref: k.id })
+    if (can(who, 'security.gate')) {
+      const late = await overdueCheckpoints(db, now())
+      if (late.size) {
+        const names = await db.query<{ id: string; name: string }>('select id, name from checkpoint where id = any($1)', [[...late.keys()]])
+        for (const c of names) items.unshift({ kind: 'patrol', title: `Patrol due: ${c.name}`, detail: `${late.get(c.id)!.route} · last scan ${late.get(c.id)!.minutes} min ago`, at: null, ref: c.id })
+      }
+    }
     if (can(who, 'fnb.order')) {
       const ready = await db.query<{ id: string; number: number; kind: string; room_no: string | null; table_label: string | null; ready_at: string }>(
         `select k.id, k.number, k.kind, s.room_no, tb.label as table_label, k.ready_at from kot k join fnb_order o on o.id = k.order_id

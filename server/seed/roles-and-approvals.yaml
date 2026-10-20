@@ -45,6 +45,10 @@ sign_in:
 #   eng.work         engineering tickets (take, start, hold, finish), meter readings, pool / STP / fire checks, draw spares
 #   eng.manage       assets, planned maintenance, meters, assign / close / cancel tickets, spares list
 #   eng.approve      approve spares issued above a role's limit
+#   security.gate    gate register, patrol scans, key issue and return (guards)
+#   security.view    incidents, gate register, cameras, patrols and keys (read), the security map layer
+#   security.manage  checkpoints, patrol rounds, cameras, keys, assembly points; close incidents
+#   emergency.start  start and end emergency mode (roll-call of everyone on duty)
 #   compliance.view  the compliance calendar (licences, contracts, statutory checks) and utility costs
 #   (anyone signed in can report a fault and follow the tickets they reported)
 #   menu.edit        add and edit menu items and tables (price changes go to menu.price for approval)
@@ -59,13 +63,13 @@ roles:
     permissions: ['*']
     limits: unlimited
   general_manager:
-    permissions: [inventory.edit, devices.approve, users.manage, front_desk, folio.reverse, discount.approve, night_audit, invoice.view, invoice.credit_note, site.edit, site.publish, fnb.order, fnb.void, fnb.bill, fnb.discount, menu.edit, menu.price, bar.settings, bar.stock, bar.approve, kitchen.stock, kitchen.approve, food_cost.view, printers.manage, licences.edit, hk.view, hk.manage, hk.inspect, staff.track, attendance.view, roster.manage, broadcast.send, staff.settings, eng.manage, eng.approve, compliance.view]
+    permissions: [inventory.edit, devices.approve, users.manage, front_desk, folio.reverse, discount.approve, night_audit, invoice.view, invoice.credit_note, site.edit, site.publish, fnb.order, fnb.void, fnb.bill, fnb.discount, menu.edit, menu.price, bar.settings, bar.stock, bar.approve, kitchen.stock, kitchen.approve, food_cost.view, printers.manage, licences.edit, hk.view, hk.manage, hk.inspect, staff.track, attendance.view, roster.manage, broadcast.send, staff.settings, eng.manage, eng.approve, compliance.view, security.view, security.manage, emergency.start]
     limits: { discount_percent: 25, breakage_per_entry: 10000, refund: 50000, comp_room_nights: 5, purchase_order: 500000, rate_override_below_floor: true }
   operations_manager:
-    permissions: [front_desk, folio.reverse, discount.approve, site.edit, fnb.order, fnb.void, fnb.bill, fnb.discount, hk.view, hk.manage, hk.inspect, staff.track, attendance.view, roster.manage, broadcast.send, eng.manage, eng.approve, compliance.view]
+    permissions: [front_desk, folio.reverse, discount.approve, site.edit, fnb.order, fnb.void, fnb.bill, fnb.discount, hk.view, hk.manage, hk.inspect, staff.track, attendance.view, roster.manage, broadcast.send, eng.manage, eng.approve, compliance.view, security.view, security.manage, emergency.start]
     limits: { discount_percent: 20, void_per_bill: 5000, room_move: true, mark_out_of_order: true, overtime_hours_per_week: 12 }
   front_office_manager:
-    permissions: [front_desk, folio.reverse, night_audit, invoice.credit_note, hk.view, attendance.view, roster.manage, broadcast.send]
+    permissions: [front_desk, folio.reverse, night_audit, invoice.credit_note, hk.view, attendance.view, roster.manage, broadcast.send, security.view, emergency.start]
     limits: { discount_percent: 15, refund: 10000, cashier_variance_writeoff: 500 }
   reception:
     permissions: [front_desk, fnb.order, fnb.bill, hk.view]
@@ -110,8 +114,11 @@ roles:
   engineering:
     permissions: [eng.work]
     limits: { spares_issue: 5000 }
+  security_head:
+    permissions: [staff.track, security.gate, security.view, security.manage, emergency.start, attendance.view, roster.manage, broadcast.send]
+    limits: {}
   security:
-    permissions: [staff.track]
+    permissions: [staff.track, security.gate, security.view, emergency.start]
     limits: {}
   hr_payroll:
     permissions: [users.manage, attendance.view, roster.manage, broadcast.send]

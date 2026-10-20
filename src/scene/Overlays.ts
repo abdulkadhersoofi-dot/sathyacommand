@@ -12,7 +12,7 @@ import type { Rooms } from './Rooms'
 
 interface Label { el: HTMLElement; pos: THREE.Vector3; lift: number }
 /** A point drawn on the map for a live layer (staff on duty, faults, assets…), in layout metres. */
-export interface MapPin { id: string; x: number; z: number; colour: number; shape: 'person' | 'marker' | 'dot'; label?: string; detail?: string | null; tone?: string; pulse?: boolean; faded?: boolean }
+export interface MapPin { id: string; x: number; z: number; colour: number; shape: 'person' | 'marker' | 'dot'; label?: string; detail?: string | null; tone?: string; pulse?: boolean; faded?: boolean; clickable?: boolean }
 interface Effect { start: number; dur: number; update: (k: number) => void; done: () => void }
 
 const MARIGOLD = 0xe8a317
@@ -20,7 +20,7 @@ const ROLE_COLOURS: [RegExp, number][] = [[/security/, 0x3b7be0], [/room_attenda
   [/engineer|maintenance/, 0xe07b2c], [/manager|gm|md|owner|accounts/, 0x9b6bd6], [/reception|front/, 0x35a46b]]
 /** Staff pins are coloured by role. */
 export const roleColour = (roles: string) => ROLE_COLOURS.find(([r]) => r.test(roles))?.[1] ?? 0x8a8f98
-const LABEL_HEIGHT = { person: 10.5, marker: 11, dot: 4 }
+const LABEL_HEIGHT = { person: 10.5, marker: 11, dot: 4.5 }
 const VENUE_TABLE_TYPES = new Set(['LAWN-GRAND', 'LAWN-GARDEN', 'GROUND-CRICKET', 'GROUND-NORTH', 'PAVILION'])
 
 export class Overlays {
@@ -110,6 +110,7 @@ export class Overlays {
       if (s.label && !this.labels.has(key)) {
         this.addLabel(key, s.label, new THREE.Vector3())
         this.labels.get(key)!.el.classList.add('pin-label', `${layer}-label`)
+        if (s.clickable) this.labels.get(key)!.el.dataset.pin = key       // tapping the label opens the record
       } else if (!s.label && this.labels.has(key)) { this.labels.get(key)!.el.remove(); this.labels.delete(key) }
       const l = this.labels.get(key)
       if (l && s.label) {

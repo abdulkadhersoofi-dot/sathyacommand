@@ -14,7 +14,7 @@ export interface SpaceState {
   revenue: number
 }
 
-export type Layer = 'rooms' | 'fnb' | 'events' | 'housekeeping' | 'revenue' | 'staff' | 'engineering'
+export type Layer = 'rooms' | 'fnb' | 'events' | 'housekeeping' | 'revenue' | 'staff' | 'engineering' | 'security'
 
 export interface FeedItem { id: string; at: Date; kind: 'kot' | 'checkin' | 'checkout' | 'hk' | 'alert'; text: string; spaceId?: string }
 
@@ -41,6 +41,8 @@ export class Store {
   staffAllowed = false
   /** Live mode and the person works in engineering (assets and every open ticket on the map). */
   engAllowed = false
+  /** Live mode and the person works in security or oversees it (cameras, patrols, incidents, vehicles). */
+  secAllowed = false
   selectedId: string | null = null
 
   private listeners = new Set<Listener>()
@@ -139,6 +141,16 @@ export class Store {
   private async onSnapshotChanged(e: Extract<DomainEvent, { type: 'snapshot.changed' }>) {
     if (/^(kot|bot|order|order_item)\./.test(e.action)) { await this.reloadOrders(); this.emit('fnb', e); return }
     if (/^(menu_item|menu|outlet|station|table|bar|dry_day|licence|vat_rate|vat_class)\./.test(e.action)) { this.emit('fnb', e); return }
+    if (e.action.startsWith('security.')) {
+      const text: Record<string, string> = {
+        'security.incident': `Incident reported by ${e.actor}`, 'security.patrol_missed': 'A patrol checkpoint was missed',
+        'security.key_overdue': 'A key has not been returned on time', 'security.emergency_start': `EMERGENCY started by ${e.actor}`, 'security.emergency_end': `Emergency ended by ${e.actor}`,
+        'security.emergency_help': `${e.actor}: someone needs help`,
+      }
+      if (text[e.action]) this.pushFeed({ id: `${e.action}-${e.entityId}-${Date.now()}`, at: new Date(), kind: 'alert', text: text[e.action] })
+      this.emit('security', e)
+      return
+    }
     if (/^(eng|asset|pm|spare|meter|compliance)\./.test(e.action)) {
       const text: Record<string, string> = {
         'eng.ticket': `Fault reported by ${e.actor}`, 'eng.escalated': 'A maintenance ticket is running late',

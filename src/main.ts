@@ -8,6 +8,8 @@ import { FnbWorkspace } from './fnb/workspace'
 import { HkWorkspace } from './hk/workspace'
 import { StaffWorkspace } from './staff/workspace'
 import { EngWorkspace } from './eng/workspace'
+import { SecurityWorkspace } from './sec/workspace'
+import { EMERGENCY, type Emergency } from './sec/desk'
 import { Outbox } from './live/outbox'
 import { Store, type Layer } from './data/store'
 import type { DomainEvent, HkStatus } from './data/types'
@@ -45,6 +47,7 @@ let fnb: FnbWorkspace | null = null
 let hkWs: HkWorkspace | null = null
 let staffWs: StaffWorkspace | null = null
 let engWs: EngWorkspace | null = null
+let secWs: SecurityWorkspace | null = null
 
 let tab: Tab = 'live'
 let tipId: string | null = null
@@ -171,7 +174,14 @@ store.on((why, payload) => {
     if (engWs?.open && !engWs.modal.isOpen) void engWs.refresh()
     void loadEng()
   }
-  if (why === 'layers') void loadEng()
+  if (why === 'layers') { void loadEng(); void loadSec() }
+  if (why === 'security') {
+    const e = payload as { action: string }
+    if (secWs?.open && !secWs.modal.isOpen) void secWs.refresh()
+    void loadSec()
+    if (e.action.startsWith('security.emergency')) void checkEmergency()
+    if (!['security.incident', 'security.patrol_missed', 'security.key_overdue', 'security.emergency_start', 'security.emergency_end', 'security.emergency_help'].includes(e.action)) return
+  }
   if (why === 'staff') {
     const e = payload as { action: string; actor: string }
     if (staffWs?.open && !staffWs.modal.isOpen) void staffWs.refresh()
@@ -259,7 +269,68 @@ async function loadEng() {
 }
 setInterval(() => { if (!document.hidden) void loadEng() }, 60_000)
 
-function hideWorkspaces() { for (const w of [fnb, hkWs, staffWs, engWs]) if (w?.open) w.hide() }
+// ---------- security layer, and emergency mode for everyone ----------
+interface SecMap {
+  cameras: { id: string; name: string; hasView: boolean; pos: { x: number; z: number } | null }[]
+  checkpoints: { id: string; name: string; overdue: boolean; pos: { x: number; z: number } | null }[]
+  incidents: { id: string; title: string; severity: string; pos: { x: number; z: number } | null }[]
+  vehicles: { id: string; label: string | null; tag: string | null; pos: { x: number; z: number } }[]
+  assemblyPoints: { id: string; name: string; pos: { x: number; z: number } }[]
+}
+let emergencyOn = false
+async function loadSec() {
+  if (!api || !store.secAllowed) return
+  const off = !store.layers.has('security')
+  if (off) { for (const l of ['cameras', 'checkpoints', 'incidents', 'vehicles']) world.setPins(l, null); if (!emergencyOn) world.setPins('assembly', null); return }
+  try {
+    const m = await api.get<SecMap>('/api/security/map')
+    const has = <T extends { pos: { x: number; z: number } | null }>(l: T[]) => l.filter((x): x is T & { pos: { x: number; z: number } } => !!x.pos)
+    world.setPins('cameras', has(m.cameras).map((c) => ({ id: c.id, x: c.pos.x, z: c.pos.z, shape: 'dot', colour: 0x3b7be0, label: `📹 ${c.name}`, clickable: true })))
+    world.setPins('checkpoints', has(m.checkpoints).map((c) => ({ id: c.id, x: c.pos.x, z: c.pos.z, shape: 'dot', colour: c.overdue ? 0xe0533d : 0x35a46b,
+      label: c.overdue ? c.name : undefined, detail: c.overdue ? '<b>Patrol missed</b>' : null, tone: c.overdue ? 'alert' : '', pulse: c.overdue })))
+    world.setPins('incidents', has(m.incidents).map((i) => ({ id: i.id, x: i.pos.x, z: i.pos.z, shape: 'marker', colour: i.severity === 'low' ? 0xe8a317 : 0xe0533d,
+      label: i.title.length > 34 ? i.title.slice(0, 33) + '…' : i.title, detail: i.severity === 'low' ? null : `<b>${i.severity}</b>`, tone: i.severity === 'low' ? 'event' : 'alert',
+      pulse: i.severity === 'critical', clickable: true })))
+    world.setPins('vehicles', m.vehicles.map((v) => ({ id: v.id, x: v.pos.x, z: v.pos.z, shape: 'dot', colour: 0xf6d34a })))
+    world.setPins('assembly', m.assemblyPoints.map((p) => ({ id: p.id, x: p.pos.x, z: p.pos.z, shape: 'marker', colour: 0x35a46b, label: `Assembly: ${p.name}` })))
+  } catch { /* offline: keep the last pins */ }
+}
+setInterval(() => { if (!document.hidden) void loadSec() }, 30_000)
+
+/** An emergency shows on every signed-in screen until it is ended, with the person's own roll-call answer. */
+async function checkEmergency() {
+  if (!api) return
+  let e: Emergency
+  try { e = await api.get<Emergency>('/api/security/emergency') } catch { return }
+  let el = document.getElementById('em-banner')
+  emergencyOn = !!e.active
+  if (!e.active) { if (el) el.hidden = true; if (!store.layers.has('security')) world.setPins('assembly', null); return }
+  if (!el) {
+    el = document.createElement('div')
+    el.id = 'em-banner'
+    el.className = 'em-banner'
+    el.setAttribute('role', 'alert')
+    el.addEventListener('click', async (ev) => {
+      const a = (ev.target as HTMLElement).closest<HTMLElement>('[data-emb]')?.dataset.emb
+      if (!a) return
+      if (a === 'open') { hideWorkspaces(); void secWs?.show('emergency'); return }
+      const r = await api!.post('/api/security/emergency/check', { status: a }).catch((x: Error) => { toast(x.message); return null })
+      if (r) { toast(a === 'safe' ? 'Marked safe' : 'Security has been told you need help'); void checkEmergency() }
+    })
+    document.getElementById('app')!.appendChild(el)
+  }
+  const mine = e.mine?.status
+  el.innerHTML = `<span>🚨 ${EMERGENCY[e.active.kind] ?? 'Emergency'}${e.active.note ? `: ${e.active.note.replace(/[<>&]/g, '')}` : ''}. Go to the nearest assembly point${e.points.length ? ` (${e.points.map((p) => p.name.replace(/[<>&]/g, '')).join(', ')})` : ''}.</span>
+    ${mine === 'safe' ? '<span>You are marked safe.</span>' : '<button type="button" class="btn" data-emb="safe">I am safe</button>'}
+    ${mine === 'need_help' ? '<span>Help is coming.</span>' : '<button type="button" class="btn" data-emb="need_help">I need help</button>'}
+    <button type="button" class="btn ghost" data-emb="open">${e.counts ? `Roll-call ${e.counts.safe}/${e.counts.total}` : 'Details'}</button>`
+  el.hidden = false
+  // Everyone sees where to go.
+  const pts = await api.get<{ id: string; name: string; x: string | null; z: string | null }[]>('/api/security/assembly-points').catch(() => [])
+  world.setPins('assembly', pts.filter((p) => p.x != null).map((p) => ({ id: p.id, x: Number(p.x), z: Number(p.z), shape: 'marker', colour: 0x35a46b, label: `Assembly: ${p.name}`, pulse: true })))
+}
+
+function hideWorkspaces() { for (const w of [fnb, hkWs, staffWs, engWs, secWs]) if (w?.open) w.hide() }
 
 // ---------- interactions ----------
 document.addEventListener('click', async (e) => {
@@ -268,6 +339,14 @@ document.addEventListener('click', async (e) => {
   if (layer) { store.toggleLayer(layer.dataset.layer as Layer); return }
   const hkRoom = t.closest<HTMLElement>('[data-hk-room]')
   if (hkRoom && hkWs && liveAdapter) { e.stopPropagation(); void hkWs.openRoom(liveAdapter.serverIdOf.get(hkRoom.dataset.hkRoom!) ?? hkRoom.dataset.hkRoom!); return }
+  const pin = t.closest<HTMLElement>('[data-pin]')?.dataset.pin
+  if (pin) {
+    const [layer, id] = pin.split(':')
+    if (layer === 'cameras' && secWs) void secWs.openCamera(id)
+    if (layer === 'incidents' && secWs) { hideWorkspaces(); void secWs.openIncident(id) }
+    if (layer === 'faults' && engWs) { hideWorkspaces(); void engWs.openTicket(id) }
+    return
+  }
   const engRoom = t.closest<HTMLElement>('[data-eng-room]')
   if (engRoom && engWs && liveAdapter) { e.stopPropagation(); engWs.report(liveAdapter.serverIdOf.get(engRoom.dataset.engRoom!) ?? engRoom.dataset.engRoom!, engRoom.dataset.engName ?? ''); return }
   const fnbOrder = t.closest<HTMLElement>('[data-fnb-order]')
@@ -428,6 +507,7 @@ document.addEventListener('keydown', (e) => {
     if (hkWs?.open) { hkWs.hide(); return }
     if (staffWs?.open) { staffWs.hide(); return }
     if (engWs?.open) { engWs.hide(); return }
+    if (secWs?.open) { secWs.hide(); return }
     if (studio.open) return; if (!modal.hidden) modal.hidden = true; else if (fd && document.querySelector('.fd-modal:not([hidden])')) fd.close(); else if (drawerId) closeDrawer(); else hideTip() }
 })
 
@@ -472,6 +552,7 @@ if (api && me && liveAdapter) {
       if (kind === 'housekeeping' && hkWs) void hkWs.show('mine')
       if (kind === 'pickup' && fnb) void fnb.show('kitchen')
       if (kind === 'engineering' && engWs) void engWs.openTicket(ref)
+      if (kind === 'patrol' && secWs) void secWs.show('patrols')
     },
     showOnMap(userId) {
       if (!store.layers.has('staff')) store.toggleLayer('staff')
@@ -499,6 +580,14 @@ if (api && me && liveAdapter) {
   const engBtn = $('#btn-eng')
   engBtn.hidden = false
   engBtn.addEventListener('click', () => { if (engWs!.open) engWs!.hide(); else { hideWorkspaces(); void engWs!.show() } })
+
+  // Security: guards and managers get the full workspace and map layer; everyone can report an incident and answer a roll-call.
+  store.secAllowed = ['*', 'security.gate', 'security.view'].some((x) => me!.permissions.includes(x))
+  secWs = new SecurityWorkspace(api, me, outbox, () => renderSide())
+  const secBtn = $('#btn-sec')
+  secBtn.hidden = false
+  secBtn.addEventListener('click', () => { if (secWs!.open) secWs!.hide(); else { hideWorkspaces(); void secWs!.show() } })
+  void checkEmergency()
   setTab('arrivals')
 }
 store.load().then(renderAll).catch((err) => toast(`Couldn't load HMS data: ${err.message}`))

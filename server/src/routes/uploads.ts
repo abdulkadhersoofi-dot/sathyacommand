@@ -7,7 +7,7 @@ import { requireCaller } from './auth'
 // sending, so they fit in the database and nothing depends on a server disk.
 
 const MAX = 1_500_000
-const KINDS = ['hk', 'fault', 'lost_found', 'incident', 'selfie', 'wastage', 'document', 'other']
+const KINDS = ['hk', 'fault', 'lost_found', 'incident', 'selfie', 'wastage', 'document', 'gate', 'other']
 
 export function uploadRoutes(app: FastifyInstance, ctx: Ctx) {
   const db = ctx.db

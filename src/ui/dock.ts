@@ -3,7 +3,7 @@ import { fmtDay, inr, todayKey } from '../data/dates'
 
 // Layers, legend, KPI strip and the date scrubber.
 
-const LAYERS: { id: Layer; label: string; god?: boolean; staff?: boolean; eng?: boolean }[] = [
+const LAYERS: { id: Layer; label: string; god?: boolean; staff?: boolean; eng?: boolean; sec?: boolean }[] = [
   { id: 'rooms', label: 'Occupancy' },
   { id: 'fnb', label: 'Food & KOTs' },
   { id: 'events', label: 'Events' },
@@ -11,10 +11,11 @@ const LAYERS: { id: Layer; label: string; god?: boolean; staff?: boolean; eng?: 
   { id: 'revenue', label: 'Revenue', god: true },
   { id: 'staff', label: 'Staff on duty', staff: true },
   { id: 'engineering', label: 'Maintenance', eng: true },
+  { id: 'security', label: 'Security', sec: true },
 ]
 
 export function layersHtml(store: Store) {
-  return `<div class="layers-title">Layers</div>` + LAYERS.filter((l) => (!l.staff || store.staffAllowed) && (!l.eng || store.engAllowed)).map((l) => {
+  return `<div class="layers-title">Layers</div>` + LAYERS.filter((l) => (!l.staff || store.staffAllowed) && (!l.eng || store.engAllowed) && (!l.sec || store.secAllowed)).map((l) => {
     const locked = l.god && !store.godMode
     return `<button class="layer" type="button" data-layer="${l.id}" aria-pressed="${store.layers.has(l.id)}" ${locked ? 'disabled title="Unlock God Mode to see revenue"' : ''}>
       <span class="sw"></span>${l.label}${locked ? '<span class="lock">OWNER</span>' : ''}</button>`

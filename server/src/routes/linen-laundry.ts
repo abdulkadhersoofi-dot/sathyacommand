@@ -1,12 +1,12 @@
 import { randomBytes, randomUUID } from 'node:crypto'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
-import qrcode from 'qrcode-generator'
 import { rupees, splitGst } from '@sathya/tax'
 import { appendAudit } from '../audit-store'
 import { can, HttpError, type Ctx } from '../context'
 import type { Db } from '../db'
 import { businessDate, folioBalance, LODGING } from '../fo-core'
 import { placeAt } from '../geo'
+import { qrLabelsPage } from '../qr-labels'
 import { requireCaller } from './auth'
 
 // Linen stock (on the shelf, at the laundry, lost), guest laundry charged to the room, and public-area
@@ -229,14 +229,7 @@ export function linenLaundryRoutes(app: FastifyInstance, ctx: Ctx) {
   app.get('/api/hk/areas/labels', async (req, reply) => {
     await need(req, 'hk.manage')
     const areas = await db.query<{ name: string; code: string }>('select name, code from public_area where active order by name')
-    const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!))
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Cleaning round QR codes</title><style>
-      body{font:14px system-ui;margin:16px}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
-      .l{border:1px dashed #999;padding:12px;text-align:center;break-inside:avoid}.l svg{width:150px;height:150px}.n{font-weight:700;font-size:16px}.c{font:11px monospace;color:#555}
-    </style></head><body><div class="grid">${areas.map((a) => {
-      const q = qrcode(0, 'M'); q.addData(a.code); q.make()
-      return `<div class="l"><div class="n">${esc(a.name)}</div>${q.createSvgTag({ cellSize: 4, margin: 2, scalable: true })}<div>Scan with the Sathya staff app after cleaning</div><div class="c">${esc(a.code)}</div></div>`
-    }).join('')}</div><script>window.onload=()=>window.print()</script></body></html>`
+    const html = qrLabelsPage('Cleaning round QR codes', 'Scan with the Sathya staff app after cleaning', areas)
     return reply.type('text/html; charset=utf-8').send(html)
   })
 
