@@ -6,6 +6,9 @@ import type { Me } from '../live/signin'
 import { esc, statusPill, tonePill } from './dom'
 import { FormModal, val } from './form-modal'
 
+/** Where a booking came from; an OTA booking needs the OTA's booking ID to match its payout. */
+const SOURCES: Record<string, string> = { direct: 'Direct', phone: 'Phone', walk_in: 'Walk-in', website: 'Website', travel_agent: 'Travel agent', corporate: 'Corporate', booking_com: 'Booking.com', makemytrip: 'MakeMyTrip', goibibo: 'Goibibo', agoda: 'Agoda', expedia: 'Expedia', airbnb: 'Airbnb', cleartrip: 'Cleartrip', yatra: 'Yatra', easemytrip: 'EaseMyTrip' }
+
 // Front desk on the live HMS: the desk panel plus forms for booking, check-in, payment,
 // check-out (with the tax invoice), cashier shift and closing the day.
 
@@ -109,6 +112,8 @@ export class FrontDesk {
         <label class="span2">Company address<input name="address"></label>
         <label>Company city<input name="city"></label>
         <label>Expected arrival time<input name="eta" type="time"></label>
+        <label>Booked through<select name="source">${Object.entries(SOURCES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></label>
+        <label>OTA booking ID<input name="otaRef" maxlength="40" autocomplete="off" placeholder="for OTA bookings"></label>
       </div>
       <div class="fd-quote" aria-live="polite"></div>`, 'Book', async (f) => {
       const nights = Number(this.val(f, 'nights'))
@@ -121,6 +126,7 @@ export class FrontDesk {
         adults: Number(this.val(f, 'adults')), children: Number(this.val(f, 'children')), eta: this.val(f, 'eta') || undefined,
         billToCompany: this.val(f, 'company') || undefined, billToGstin: this.val(f, 'gstin').toUpperCase() || undefined,
         billToAddress: this.val(f, 'address') || undefined, billToCity: this.val(f, 'city') || undefined, billToPin: this.val(f, 'pin') || undefined,
+        source: this.val(f, 'source'), otaRef: this.val(f, 'otaRef') || undefined,
       })
       await this.after()
       return `Booked ${r.id} · ${rs(r.roomTotal)} for the room before tax`

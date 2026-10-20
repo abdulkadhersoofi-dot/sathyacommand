@@ -70,3 +70,21 @@ export async function openItems(t: Db, debtorId: string, asOf: string, termsDays
   for (const c of open) ageing[c.daysOld <= 30 ? 0 : c.daysOld <= 60 ? 1 : c.daysOld <= 90 ? 2 : 3] += c.openPaise
   return { open, unappliedPaise: credit, ageing, overduePaise: open.filter((c) => c.overdue).reduce((a, c) => a + c.openPaise, 0) }
 }
+
+/** Online travel agents the resort sells through: the booking's source names its account. */
+export const OTAS: Record<string, string> = {
+  booking_com: 'Booking.com', makemytrip: 'MakeMyTrip', goibibo: 'Goibibo', agoda: 'Agoda', expedia: 'Expedia', airbnb: 'Airbnb', cleartrip: 'Cleartrip', yatra: 'Yatra', easemytrip: 'EaseMyTrip',
+}
+/** Where a booking came from. */
+export const SOURCES: Record<string, string> = { direct: 'Direct', phone: 'Phone', walk_in: 'Walk-in', website: 'Website', travel_agent: 'Travel agent', corporate: 'Corporate', ...OTAS }
+
+/** The OTA's account, opened the first time a booking through it is paid for by the OTA. */
+export async function otaDebtorFor(t: Db, source: string, now: Date) {
+  const name = OTAS[source]
+  if (!name) return null
+  const [d] = await t.query<{ id: string }>('select id from debtor where lower(name) = lower($1)', [name])
+  if (d) return d.id
+  const id = `DR-${randomUUID().slice(0, 8).toUpperCase()}`
+  await t.query(`insert into debtor (id, name, kind, terms_days, created_at) values ($1,$2,'ota',30,$3)`, [id, name, now])
+  return id
+}

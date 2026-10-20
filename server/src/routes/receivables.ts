@@ -18,7 +18,7 @@ const KINDS = ['company', 'travel_agent', 'ota', 'government', 'other']
 const VIEW = ['receivables.view', 'receivables.manage', 'accounts.view']
 const MODES = ['bank', 'upi', 'cheque', 'cash'] as const
 
-interface DebtorRow { id: string; name: string; kind: string; gstin: string | null; pan: string | null; address: string | null; city: string | null; contact_name: string | null; phone: string | null; email: string | null; credit_limit_paise: string | null; terms_days: number; active: boolean }
+interface DebtorRow { id: string; name: string; kind: string; gstin: string | null; pan: string | null; tan: string | null; address: string | null; city: string | null; contact_name: string | null; phone: string | null; email: string | null; credit_limit_paise: string | null; terms_days: number; active: boolean }
 
 
 export interface ReceiptIn { debtorId?: string; amount?: number; tds?: number; tdsSection?: string; mode?: string; reference?: string; bankAccountId?: string; date?: string; note?: string }
@@ -91,6 +91,11 @@ export function receivablesRoutes(app: FastifyInstance, ctx: Ctx) {
       if (pan && !PAN_RE.test(pan)) throw new HttpError(400, 'PAN: 5 letters, 4 digits, a letter (ABCDE1234F).')
       out.pan = pan || null
     }
+    if (b.tan !== undefined) {
+      const tan = String(b.tan ?? '').trim().toUpperCase()
+      if (tan && !/^[A-Z]{4}\d{5}[A-Z]$/.test(tan)) throw new HttpError(400, 'TAN: 4 letters, 5 digits, a letter (e.g. CHEK12345B).')
+      out.tan = tan || null
+    }
     for (const [k, col] of [['address', 'address'], ['city', 'city'], ['contactName', 'contact_name'], ['phone', 'phone'], ['email', 'email']] as const) if (b[k] !== undefined) out[col] = String(b[k] ?? '').trim() || null
     if (b.termsDays !== undefined) { const d = Number(b.termsDays); if (!(Number.isInteger(d) && d >= 0 && d <= 365)) throw new HttpError(400, 'Terms: 0 to 365 days.'); out.terms_days = d }
     if (b.active !== undefined) out.active = !!b.active
@@ -127,8 +132,8 @@ export function receivablesRoutes(app: FastifyInstance, ctx: Ctx) {
       const [dup] = await t.query<{ name: string }>('select name from debtor where lower(name) = lower($1) or (gstin is not null and gstin = $2)', [f.name, f.gstin ?? null])
       if (dup) throw new HttpError(409, `${dup.name} already has an account.`)
       const id = newId('DR')
-      await t.query(`insert into debtor (id, name, kind, gstin, pan, address, city, contact_name, phone, email, credit_limit_paise, terms_days, created_at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-        [id, f.name, f.kind ?? 'company', f.gstin ?? null, f.pan ?? null, f.address ?? null, f.city ?? null, f.contact_name ?? null, f.phone ?? null, f.email ?? null, limit, f.terms_days ?? 30, now()])
+      await t.query(`insert into debtor (id, name, kind, gstin, pan, tan, address, city, contact_name, phone, email, credit_limit_paise, terms_days, created_at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+        [id, f.name, f.kind ?? 'company', f.gstin ?? null, f.pan ?? null, f.tan ?? null, f.address ?? null, f.city ?? null, f.contact_name ?? null, f.phone ?? null, f.email ?? null, limit, f.terms_days ?? 30, now()])
       await appendAudit(t, { actor: who, action: 'debtor.add', entity: { type: 'debtor', id }, after: { ...f, creditLimit: limit } }, now())
       return reply.status(201).send({ id })
     })

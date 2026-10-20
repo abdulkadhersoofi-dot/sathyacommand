@@ -10,7 +10,7 @@ import {
 import { createApproval } from './approvals'
 import { issueReceiptVoucher, issueRefundVoucher, issueStayInvoice } from '../invoicing'
 import { validateGstin } from '@sathya/tax'
-import { checkCredit, debtorFor } from '../receivables'
+import { checkCredit, debtorFor, OTAS, otaDebtorFor, SOURCES } from '../receivables'
 import { requireCaller } from './auth'
 import { onCheckIn, onCheckOut, onRoomMove } from '../hk-core'
 
@@ -85,7 +85,7 @@ export function frontOfficeRoutes(app: FastifyInstance, ctx: Ctx) {
     const b = req.body as {
       guest?: { name?: string; mobile?: string; email?: string; nationality?: string; company?: string; gstin?: string }
       roomTypeId?: string; plan?: string; arrival?: string; departure?: string; adults?: number; children?: number
-      source?: string; eta?: string; billToCompany?: string; billToGstin?: string; requests?: string
+      source?: string; otaRef?: string; eta?: string; billToCompany?: string; billToGstin?: string; requests?: string
       billToAddress?: string; billToCity?: string; billToPin?: string
     }
     if (!b?.guest?.name?.trim()) throw new HttpError(400, 'Give the guest\'s name.')
@@ -96,6 +96,8 @@ export function frontOfficeRoutes(app: FastifyInstance, ctx: Ctx) {
     if (nights.length > 60) throw new HttpError(400, 'A single reservation can be at most 60 nights.')
     const today = await businessDate(db)
     if (b.arrival! < today) throw new HttpError(400, `Arrival can't be before today's business date (${today}).`)
+    if (b.source && !SOURCES[b.source]) throw new HttpError(400, `Booked through: ${Object.keys(SOURCES).join(', ')}.`)
+    if (b.source && OTAS[b.source] && !b.otaRef?.trim()) throw new HttpError(400, `The ${OTAS[b.source]} booking ID, to match the OTA's payout.`)
     if (b.billToGstin) {
       const v = validateGstin(b.billToGstin)
       if (!v.ok) throw new HttpError(400, `Company GSTIN: ${v.reason}`)
@@ -129,11 +131,11 @@ export function frontOfficeRoutes(app: FastifyInstance, ctx: Ctx) {
       const id = newId('R')
       await t.query(
         `insert into reservation (id, property_id, guest_id, status, room_type_id, rate_plan_code, arrival, departure, adults, children,
-           source, eta, bill_to_company, bill_to_gstin, requests, created_by, created_at, bill_to_address, bill_to_city, bill_to_pin)
-         values ($1, $2, $3, 'confirmed', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
+           source, eta, bill_to_company, bill_to_gstin, requests, created_by, created_at, bill_to_address, bill_to_city, bill_to_pin, ota_ref)
+         values ($1, $2, $3, 'confirmed', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
         [id, PROPERTY, guest.id, b.roomTypeId, b.plan, b.arrival, b.departure, adults, children, b.source ?? 'direct', b.eta ?? null,
           b.billToCompany ?? null, b.billToGstin ?? null, b.requests ?? null, who.userId, now(),
-          b.billToAddress ?? null, b.billToCity ?? null, b.billToPin ?? null])
+          b.billToAddress ?? null, b.billToCity ?? null, b.billToPin ?? null, b.otaRef?.trim() || null])
       for (let i = 0; i < nights.length; i++) {
         await t.query('insert into room_night (reservation_id, night, room_type_id, amount_paise) values ($1, $2, $3, $4)',
           [id, nights[i], b.roomTypeId, amounts[i]])
@@ -411,6 +413,12 @@ export function frontOfficeRoutes(app: FastifyInstance, ctx: Ctx) {
           'select r.bill_to_company as company, r.bill_to_gstin as gstin, f.bill_to, f.gstin as folio_gstin from folio f join reservation r on r.id = f.reservation_id where f.id = $1', [id])
         debtorId = await debtorFor(t, c.company ?? c.bill_to, c.gstin ?? c.folio_gstin, now())
         await checkCredit(t, debtorId, amount)
+      }
+      // Paid to the OTA by the guest: the OTA owes it, and pays out later net of its commission and taxes.
+      if (b.method === 'ota') {
+        const [r] = await t.query<{ source: string }>('select source from reservation where id = $1', [f.reservation_id])
+        debtorId = await otaDebtorFor(t, r.source, now())
+        if (!debtorId) throw new HttpError(400, 'This booking was not made through an OTA: mark where it was booked first, or take the payment another way.')
       }
       await t.query('insert into payment (id, folio_id, line_id, method, amount_paise, reference, shift_id, received_by, at, voucher_id, debtor_id) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
         [newId('P'), id, lineId, b.method, amount, b.reference ?? null, shiftId, who.userId, now(), voucher?.id ?? null, debtorId])

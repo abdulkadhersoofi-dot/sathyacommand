@@ -240,8 +240,8 @@ export async function postPending(db: Db, now: Date) {
           and not exists (select 1 from posted_source v where v.source_type = 'fo_pay_day' and v.source_id = l.business_date::text) order by 1`, [today])
     const bank = await defaultBankCode(t)
     for (const { d } of payDays) {
-      const rows = await t.query<{ method: string; amount_paise: string; reservation_id: string; bill_to: string; debtor_id: string | null; debtor: string | null; invoice: string | null }>(
-        `select p.method, p.amount_paise, f.reservation_id, f.bill_to, p.debtor_id, dr.name as debtor,
+      const rows = await t.query<{ method: string; amount_paise: string; reservation_id: string; bill_to: string; debtor_id: string | null; debtor: string | null; invoice: string | null; ota_ref: string | null }>(
+        `select p.method, p.amount_paise, f.reservation_id, f.bill_to, p.debtor_id, dr.name as debtor, (select ota_ref from reservation where id = f.reservation_id) as ota_ref,
                 (select x.number from tax_document x where x.reservation_id = f.reservation_id and x.doc_type = 'invoice' order by x.issued_at desc limit 1) as invoice
            from payment p join folio_line l on l.id = p.line_id join folio f on f.id = p.folio_id
            left join debtor dr on dr.id = p.debtor_id where l.business_date = $1`, [d])
@@ -249,8 +249,11 @@ export async function postPending(db: Db, now: Date) {
       for (const r of rows) {
         const amt = n(r.amount_paise)
         // Each stay a company is billed for is its own line on the company's account, with the invoice number.
-        lines.push({ code: r.method === 'bank' ? bank : METHOD[r.method] ?? '1100', amount: amt, party: r.method === 'company' ? { type: 'company', id: r.debtor_id ?? r.bill_to, name: r.debtor ?? r.bill_to } : null,
-          ref: r.method === 'company' ? r.invoice ?? `Booking ${r.reservation_id}` : null })
+        // OTA-collected bookings are owed by the OTA, booking by booking.
+        const party: Party | null = r.method === 'company' ? { type: 'company', id: r.debtor_id ?? r.bill_to, name: r.debtor ?? r.bill_to }
+          : r.method === 'ota' && r.debtor_id ? { type: 'ota', id: r.debtor_id, name: r.debtor } : null
+        lines.push({ code: r.method === 'bank' ? bank : METHOD[r.method] ?? '1100', amount: amt, party,
+          ref: r.method === 'company' ? r.invoice ?? `Booking ${r.reservation_id}` : r.method === 'ota' ? r.ota_ref ?? r.reservation_id : null })
         lines.push({ code: '1300', amount: -amt, party: { type: 'guest', id: r.reservation_id, name: r.bill_to } })
       }
       await post({ kind: 'receipt', date: d, narration: `Front office receipts for ${d}`, source: { type: 'fo_pay_day', id: d }, lines })
