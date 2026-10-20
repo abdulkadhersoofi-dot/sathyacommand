@@ -301,7 +301,7 @@ export function storesRoutes(app: FastifyInstance, ctx: Ctx) {
 
   // ---------- rate contracts ----------
   app.get('/api/rate-contracts', async (req) => {
-    await need(req, ...VIEW)
+    await need(req, 'stores.view', 'stores.manage', 'vendors.manage', 'purchase.order', 'purchase.approve')   // vendors' prices: not for departments
     const q = req.query as { itemId?: string; vendorId?: string; current?: string }
     return db.query(
       `select rc.id, rc.vendor_id, v.name as vendor, rc.item_id, i.name as item, i.purchase_unit, rc.rate_paise, rc.valid_from::text, rc.valid_to::text,

@@ -706,3 +706,20 @@ button.row-card { width: 100%; text-align: left; font: inherit; background: var(
   .rate-row { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) 50px !important; font-size: 12px; }
   .rate-row > :nth-child(2), .rate-row > :nth-child(4) { display: none; }
 }
+
+.line-editor { display: grid; gap: 6px; margin: 8px 0; }
+.le-row { display: grid; grid-template-columns: minmax(0, 2fr) 90px minmax(0, 1fr); gap: 6px; }
+.le-row:not(:has(input + input)) { grid-template-columns: minmax(0, 2fr) 110px; }
+.le-row select, .le-row input, .mk-row input[type=number] { font: 500 14px var(--f-body); color: var(--fg); background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; min-width: 0; }
+.mk-row input[type=number] { width: 90px; }
+.po-row { grid-template-columns: minmax(0, 1.8fr) minmax(0, 1.2fr) 90px 60px 100px !important; }
+.mk-row { grid-template-columns: 28px minmax(0, 1.4fr) minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 1.4fr) !important; }
+.po-row.head, .mk-row.head { font-size: 11px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.ind-card input[type=checkbox] { width: 18px; height: 18px; vertical-align: middle; }
+@media (max-width: 900px) {
+  .mk-row { grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1.2fr) !important; }
+  .mk-row > :nth-child(3), .mk-row > :nth-child(5) { display: none; }
+  .po-row { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 90px !important; font-size: 12px; }
+  .po-row > :nth-child(3), .po-row > :nth-child(4) { display: none; }
+}
+.fd-card .le-row input, .fd-card .le-row select { letter-spacing: normal; text-align: left; font: 500 14px var(--f-body); padding: 7px 9px; }
