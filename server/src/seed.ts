@@ -10,6 +10,7 @@ import { ensureBarStock } from './routes/bar'
 import { ensureRecipes } from './routes/kitchen-stock'
 import { ensureRoomHk } from './hk-core'
 import { ensureLinenLaundryAreas } from './routes/linen-laundry'
+import { ensureEngineering } from './eng-core'
 import type { Db } from './db'
 
 // First-run data. Rooms come from seed/rooms.placeholder.csv until the resort's real
@@ -112,6 +113,7 @@ async function seedInto(db: Db, opts: { today?: string; mdMobile?: string }) {
   await ensureRecipes(db)
   await ensureRoomHk(db)
   await ensureLinenLaundryAreas(db)
+  await ensureEngineering(db)
 
   await appendAudit(db, {
     actor: SYSTEM, action: 'system.seed', entity: { type: 'property', id: PROPERTY },

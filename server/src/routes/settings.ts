@@ -107,6 +107,7 @@ export function settingsRoutes(app: FastifyInstance, ctx: Ctx) {
                 authority = case when $5::boolean then $6 else authority end,
                 valid_from = case when $7::boolean then $8::date else valid_from end,
                 valid_until = case when $9::boolean then $10::date else valid_until end,
+                reminded = case when $9::boolean then 0 else reminded end,    -- a renewed licence starts its reminders again
                 print_on = coalesce($11, print_on), notes = case when $12::boolean then $13 else notes end,
                 active = coalesce($14, active), updated_by = $15, updated_at = $16 where id = $1`,
         [id, b.kind ?? null, b.name?.trim() ?? null, b.number?.trim() ?? null, b.authority !== undefined, b.authority ?? null,

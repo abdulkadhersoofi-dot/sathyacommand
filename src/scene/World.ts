@@ -4,7 +4,7 @@ import type { Store } from '../data/store'
 import { Site } from './Site'
 import { defaultLayout, type SiteLayout } from '../data/layout'
 import { Rooms } from './Rooms'
-import { Overlays, type StaffPin } from './Overlays'
+import { Overlays, type MapPin } from './Overlays'
 import { ease } from './geo'
 
 export interface WorldCallbacks {
@@ -103,21 +103,21 @@ export class World {
     this.overlays.group.visible = !this.editMode
     this.scene.add(this.site.root, this.rooms.group, this.overlays.group)
     this.setNight(this.night)
-    this.overlays.setStaff(this.staff)
+    for (const [layer, list] of this.pinLists) this.overlays.setPins(layer, list)
     this.refresh()
   }
 
-  private staff: StaffPin[] | null = null
-  /** Staff on duty on the map (null hides the layer). */
-  setStaff(list: StaffPin[] | null) {
-    this.staff = list
-    this.overlays.setStaff(list)
+  private pinLists = new Map<string, MapPin[] | null>()
+  /** A live layer's pins on the map (null hides it). */
+  setPins(layer: string, list: MapPin[] | null) {
+    this.pinLists.set(layer, list)
+    this.overlays.setPins(layer, list)
     this.dirty = true
   }
 
-  /** Flies to a person on duty; false if the map has no position for them. */
-  focusStaff(id: string) {
-    const p = this.overlays.staffAt(id)
+  /** Flies to one pin; false if that layer has no such pin. */
+  focusPin(layer: string, id: string) {
+    const p = this.overlays.pinAt(layer, id)
     if (!p) return false
     this.flyTo(p, 60)
     return true

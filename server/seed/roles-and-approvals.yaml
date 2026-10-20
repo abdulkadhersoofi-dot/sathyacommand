@@ -42,6 +42,11 @@ sign_in:
 #   roster.manage    shifts and rosters
 #   broadcast.send   send messages to all staff or to roles
 #   staff.settings   resort boundary for attendance, map position, selfie rule, beacons
+#   eng.work         engineering tickets (take, start, hold, finish), meter readings, pool / STP / fire checks, draw spares
+#   eng.manage       assets, planned maintenance, meters, assign / close / cancel tickets, spares list
+#   eng.approve      approve spares issued above a role's limit
+#   compliance.view  the compliance calendar (licences, contracts, statutory checks) and utility costs
+#   (anyone signed in can report a fault and follow the tickets they reported)
 #   menu.edit        add and edit menu items and tables (price changes go to menu.price for approval)
 #   menu.price       change menu prices and import the menu
 #   bar.settings     licensed bar hours and dry days
@@ -54,10 +59,10 @@ roles:
     permissions: ['*']
     limits: unlimited
   general_manager:
-    permissions: [inventory.edit, devices.approve, users.manage, front_desk, folio.reverse, discount.approve, night_audit, invoice.view, invoice.credit_note, site.edit, site.publish, fnb.order, fnb.void, fnb.bill, fnb.discount, menu.edit, menu.price, bar.settings, bar.stock, bar.approve, kitchen.stock, kitchen.approve, food_cost.view, printers.manage, licences.edit, hk.view, hk.manage, hk.inspect, staff.track, attendance.view, roster.manage, broadcast.send, staff.settings]
+    permissions: [inventory.edit, devices.approve, users.manage, front_desk, folio.reverse, discount.approve, night_audit, invoice.view, invoice.credit_note, site.edit, site.publish, fnb.order, fnb.void, fnb.bill, fnb.discount, menu.edit, menu.price, bar.settings, bar.stock, bar.approve, kitchen.stock, kitchen.approve, food_cost.view, printers.manage, licences.edit, hk.view, hk.manage, hk.inspect, staff.track, attendance.view, roster.manage, broadcast.send, staff.settings, eng.manage, eng.approve, compliance.view]
     limits: { discount_percent: 25, breakage_per_entry: 10000, refund: 50000, comp_room_nights: 5, purchase_order: 500000, rate_override_below_floor: true }
   operations_manager:
-    permissions: [front_desk, folio.reverse, discount.approve, site.edit, fnb.order, fnb.void, fnb.bill, fnb.discount, hk.view, hk.manage, hk.inspect, staff.track, attendance.view, roster.manage, broadcast.send]
+    permissions: [front_desk, folio.reverse, discount.approve, site.edit, fnb.order, fnb.void, fnb.bill, fnb.discount, hk.view, hk.manage, hk.inspect, staff.track, attendance.view, roster.manage, broadcast.send, eng.manage, eng.approve, compliance.view]
     limits: { discount_percent: 20, void_per_bill: 5000, room_move: true, mark_out_of_order: true, overtime_hours_per_week: 12 }
   front_office_manager:
     permissions: [front_desk, folio.reverse, night_audit, invoice.credit_note, hk.view, attendance.view, roster.manage, broadcast.send]
@@ -69,7 +74,7 @@ roles:
     permissions: [front_desk, night_audit]
     limits: {}
   accounts:
-    permissions: [invoice.view, invoice.credit_note, einvoice.generate, licences.edit, tax.vat]
+    permissions: [invoice.view, invoice.credit_note, einvoice.generate, licences.edit, tax.vat, compliance.view]
     limits: { vendor_payment_needs_approval_above: 25000, delete_vouchers: false }
   stores:
     limits: { purchase_order: 25000, stock_adjustment: 0 }
@@ -99,7 +104,11 @@ roles:
     limits: {}
   sales_banquets:
     limits: { package_discount_percent: 10, hold_dates_days: 7 }
+  chief_engineer:
+    permissions: [eng.work, eng.manage, compliance.view, attendance.view, roster.manage, broadcast.send]
+    limits: { spares_issue: 25000 }
   engineering:
+    permissions: [eng.work]
     limits: { spares_issue: 5000 }
   security:
     permissions: [staff.track]

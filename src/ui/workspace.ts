@@ -142,7 +142,7 @@ export abstract class Workspace<Tab extends string> implements WorkspaceHost {
     if (t.closest('[data-wsdismiss]')) { this.outbox.dismissFailed(); return }
     const tab = t.closest<HTMLElement>('[data-wstab]')?.dataset.wstab as Tab | undefined
     if (tab) { if (tab !== this.tab) { this.tab = tab; await this.refresh() } return }
-    if (!t.closest('button, [data-item], [data-table], [data-order], [data-room]')) return
+    if (!t.closest('button, [data-item], [data-table], [data-order], [data-room], [data-ticket], [data-asset], [data-plan], [data-cal]')) return
     await this.guard(async () => { if (await this.views[this.tab].click(t)) this.render() })
   }
 }

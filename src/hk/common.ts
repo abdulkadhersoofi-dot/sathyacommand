@@ -2,6 +2,7 @@ import { esc, toast, tonePill } from '../ui/dom'
 import { checked, val } from '../ui/form-modal'
 import { takePhoto, uploadPhoto } from '../ui/photo'
 import type { WorkspaceHost } from '../ui/workspace'
+import { reportFault } from '../eng/common'
 
 // Shared pieces for the housekeeping screens.
 
@@ -45,7 +46,7 @@ export async function roomActions(h: HkHost, r: Room) {
   if (h.can('hk.attend', 'hk.manage', 'front_desk')) actions.push(`<button type="button" class="btn" data-ra="dnd">${r.dnd ? 'Clear' : 'Set'} do-not-disturb</button>`)
   if (r.in_house && h.can('hk.attend', 'hk.manage', 'front_desk')) actions.push('<button type="button" class="btn" data-ra="minibar">Minibar used…</button>', '<button type="button" class="btn" data-ra="laundry">Collect laundry…</button>')
   if (h.can('hk.attend', 'hk.manage')) actions.push('<button type="button" class="btn" data-ra="seen-v">I found it empty</button>', '<button type="button" class="btn" data-ra="seen-o">I found a guest / luggage</button>')
-  actions.push('<button type="button" class="btn" data-ra="found">Found an item…</button>')
+  actions.push('<button type="button" class="btn" data-ra="found">Found an item…</button>', '<button type="button" class="btn" data-ra="fault">Report a fault…</button>')
   h.modal.open(`Room ${r.room_no}`, `<div class="room-head">${hkPill(r.status)}${r.dnd ? tonePill('Do not disturb', '--god') : ''}${r.discrepancy ? tonePill(r.discrepancy === 'skipper' ? 'Skipper?' : 'Sleeper?', '--st-departing') : ''}</div>
     <dl class="kv"><dt>Section</dt><dd>${esc(r.section)}</dd>${r.room_type ? `<dt>Type</dt><dd>${esc(r.room_type)}</dd>` : ''}
       ${r.guest ? `<dt>Guest</dt><dd>${esc(r.guest)}${r.departing ? ' · leaving today' : ''}</dd>` : ''}${r.arriving ? '<dt>Arrival</dt><dd>Guest arriving today</dd>' : ''}
@@ -105,6 +106,7 @@ export async function roomActions(h: HkHost, r: Room) {
         })
       }
       if (a === 'found') await foundItem(h, r.space_id, `room ${r.room_no}`)
+      if (a === 'fault') reportFault(h, { spaceId: r.space_id, where: `Room ${r.room_no}` })
     } catch (err) { toast((err as Error).message) }
   })
 }

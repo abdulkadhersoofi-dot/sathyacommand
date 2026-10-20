@@ -7,11 +7,13 @@ import { FrontDesk } from './ui/frontdesk'
 import { FnbWorkspace } from './fnb/workspace'
 import { HkWorkspace } from './hk/workspace'
 import { StaffWorkspace } from './staff/workspace'
+import { EngWorkspace } from './eng/workspace'
 import { Outbox } from './live/outbox'
 import { Store, type Layer } from './data/store'
 import type { DomainEvent, HkStatus } from './data/types'
 import { addDays, fmtDay, inr, setToday, todayKey } from './data/dates'
 import { World } from './scene/World'
+import { roleColour } from './scene/Overlays'
 import { Studio } from './studio/studio'
 import { defaultLayout, type SiteLayout } from './data/layout'
 import { $, toast } from './ui/dom'
@@ -42,6 +44,7 @@ let fd: FrontDesk | null = null
 let fnb: FnbWorkspace | null = null
 let hkWs: HkWorkspace | null = null
 let staffWs: StaffWorkspace | null = null
+let engWs: EngWorkspace | null = null
 
 let tab: Tab = 'live'
 let tipId: string | null = null
@@ -164,6 +167,11 @@ store.on((why, payload) => {
   if (why === 'site') { if (!studio.open) void refreshLayout(); return }
   if (why === 'hkchange' && hkWs?.open && !hkWs.modal.isOpen) void hkWs.refresh()
   if (why === 'layers') void loadStaff()
+  if (why === 'eng') {
+    if (engWs?.open && !engWs.modal.isOpen) void engWs.refresh()
+    void loadEng()
+  }
+  if (why === 'layers') void loadEng()
   if (why === 'staff') {
     const e = payload as { action: string; actor: string }
     if (staffWs?.open && !staffWs.modal.isOpen) void staffWs.refresh()
@@ -201,12 +209,13 @@ function animate(e: DomainEvent) {
 interface LiveStaff { user_id: string; name: string; roles: string | null; at: string | null; x: string | number | null; z: string | number | null; inside: boolean | null; sos: boolean }
 async function loadStaff() {
   if (!api || !store.staffAllowed) return
-  if (!store.layers.has('staff')) { world.setStaff(null); return }
+  if (!store.layers.has('staff')) { world.setPins('staff', null); return }
   try {
     const rows = await api.get<LiveStaff[]>('/api/staff/live')
-    world.setStaff(rows.filter((r) => r.x != null && r.z != null).map((r) => ({
-      id: r.user_id, name: r.name, roles: r.roles ?? '', x: Number(r.x), z: Number(r.z), sos: r.sos, outside: r.inside === false,
-      stale: !r.at || Date.now() - new Date(r.at).getTime() > 10 * 60_000,
+    world.setPins('staff', rows.filter((r) => r.x != null && r.z != null).map((r) => ({
+      id: r.user_id, label: r.name, x: Number(r.x), z: Number(r.z), shape: 'person', colour: roleColour(r.roles ?? ''), pulse: r.sos,
+      detail: r.sos ? '<b>SOS</b>' : r.inside === false ? 'Outside the boundary' : null, tone: r.sos ? 'alert' : r.inside === false ? 'event' : '',
+      faded: !r.at || Date.now() - new Date(r.at).getTime() > 10 * 60_000,
     })))
   } catch { /* offline: keep the last pins */ }
 }
@@ -228,7 +237,29 @@ function sosAlert(who: string) {
   el.hidden = false
 }
 
-function hideWorkspaces() { for (const w of [fnb, hkWs, staffWs]) if (w?.open) w.hide() }
+// ---------- maintenance layer (engineering) ----------
+interface EngMap {
+  assets: { id: string; name: string; category: string; open: number; pos: { x: number; z: number } | null }[]
+  tickets: { id: string; title: string; priority: string; status: string; kind: string; reportedAt: string; escalation: number; pos: { x: number; z: number } | null }[]
+}
+const PRIORITY_COLOUR: Record<string, number> = { urgent: 0xe0533d, high: 0xe8a317, normal: 0x3b7be0, low: 0x8a8f98 }
+async function loadEng() {
+  if (!api || !store.engAllowed) return
+  if (!store.layers.has('engineering')) { world.setPins('assets', null); world.setPins('faults', null); return }
+  try {
+    const m = await api.get<EngMap>('/api/eng/map')
+    world.setPins('assets', m.assets.filter((a) => a.pos && !a.open).map((a) => ({ id: a.id, x: a.pos!.x, z: a.pos!.z, shape: 'dot', colour: 0x7f8ea3 })))
+    world.setPins('faults', m.tickets.filter((k) => k.pos).map((k) => {
+      const mins = Math.round((Date.now() - new Date(k.reportedAt).getTime()) / 60000)
+      return { id: k.id, x: k.pos!.x, z: k.pos!.z, shape: 'marker', colour: PRIORITY_COLOUR[k.priority] ?? 0x8a8f98, label: k.title.length > 34 ? k.title.slice(0, 33) + '…' : k.title,
+        detail: k.escalation ? `<b>Late</b> · ${mins < 60 ? `${mins} min` : `${Math.round(mins / 60)} h`}` : k.status === 'on_hold' ? 'On hold' : null,
+        tone: k.escalation ? 'alert' : '', pulse: k.priority === 'urgent' || k.escalation > 0 }
+    }))
+  } catch { /* offline: keep the last pins */ }
+}
+setInterval(() => { if (!document.hidden) void loadEng() }, 60_000)
+
+function hideWorkspaces() { for (const w of [fnb, hkWs, staffWs, engWs]) if (w?.open) w.hide() }
 
 // ---------- interactions ----------
 document.addEventListener('click', async (e) => {
@@ -237,6 +268,8 @@ document.addEventListener('click', async (e) => {
   if (layer) { store.toggleLayer(layer.dataset.layer as Layer); return }
   const hkRoom = t.closest<HTMLElement>('[data-hk-room]')
   if (hkRoom && hkWs && liveAdapter) { e.stopPropagation(); void hkWs.openRoom(liveAdapter.serverIdOf.get(hkRoom.dataset.hkRoom!) ?? hkRoom.dataset.hkRoom!); return }
+  const engRoom = t.closest<HTMLElement>('[data-eng-room]')
+  if (engRoom && engWs && liveAdapter) { e.stopPropagation(); engWs.report(liveAdapter.serverIdOf.get(engRoom.dataset.engRoom!) ?? engRoom.dataset.engRoom!, engRoom.dataset.engName ?? ''); return }
   const fnbOrder = t.closest<HTMLElement>('[data-fnb-order]')
   if (fnbOrder && fnb) { e.stopPropagation(); void fnb.openOrder(fnbOrder.dataset.fnbOrder!); return }
   const fdBtn = t.closest<HTMLElement>('[data-fd]')
@@ -394,6 +427,7 @@ document.addEventListener('keydown', (e) => {
     if (fnb?.open) { fnb.hide(); return }
     if (hkWs?.open) { hkWs.hide(); return }
     if (staffWs?.open) { staffWs.hide(); return }
+    if (engWs?.open) { engWs.hide(); return }
     if (studio.open) return; if (!modal.hidden) modal.hidden = true; else if (fd && document.querySelector('.fd-modal:not([hidden])')) fd.close(); else if (drawerId) closeDrawer(); else hideTip() }
 })
 
@@ -434,13 +468,14 @@ if (api && me && liveAdapter) {
   store.staffAllowed = me.permissions.includes('*') || me.permissions.includes('staff.track')
   if (store.staffAllowed) store.layers.add('staff')
   staffWs = new StaffWorkspace(api, me, outbox, {
-    openWork(kind) {
+    openWork(kind, ref) {
       if (kind === 'housekeeping' && hkWs) void hkWs.show('mine')
       if (kind === 'pickup' && fnb) void fnb.show('kitchen')
+      if (kind === 'engineering' && engWs) void engWs.openTicket(ref)
     },
     showOnMap(userId) {
       if (!store.layers.has('staff')) store.toggleLayer('staff')
-      void loadStaff().then(() => { if (userId && !world.focusStaff(userId)) toast('The map has no position for this person yet.') })
+      void loadStaff().then(() => { if (userId && !world.focusPin('staff', userId)) toast('The map has no position for this person yet.') })
     },
   }, () => renderSide())
   const staffBtn = $('#btn-staff')
@@ -457,6 +492,13 @@ if (api && me && liveAdapter) {
   staffWs.tracker.onChange = () => { duty.hidden = !staffWs!.tracker.active }
   void staffWs.resume()
   void loadStaff()
+
+  // Engineering: anyone reports a fault; engineering sees assets and every open ticket on the map.
+  store.engAllowed = me.permissions.includes('*') || me.permissions.includes('eng.work') || me.permissions.includes('eng.manage')
+  engWs = new EngWorkspace(api, me, outbox, () => renderSide())
+  const engBtn = $('#btn-eng')
+  engBtn.hidden = false
+  engBtn.addEventListener('click', () => { if (engWs!.open) engWs!.hide(); else { hideWorkspaces(); void engWs!.show() } })
   setTab('arrivals')
 }
 store.load().then(renderAll).catch((err) => toast(`Couldn't load HMS data: ${err.message}`))

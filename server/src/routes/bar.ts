@@ -5,7 +5,7 @@ import { appendAudit } from '../audit-store'
 import { can, HttpError, type Caller, type Ctx } from '../context'
 import type { Db } from '../db'
 import { businessDate } from '../fo-core'
-import { createApproval, registerApprovalKind } from './approvals'
+import { createApproval, registerApprovalKind, roleLimit } from './approvals'
 import { requireCaller } from './auth'
 
 // Bar stock in millilitres per brand. Pegs and bottles poured on a BOT come off the book stock at once;
@@ -45,12 +45,6 @@ async function costPerMl(t: Db, brandId: string, bottleMl: number) {
   const [p] = await t.query<{ cost: string }>(
     `select (l->>'costPaise') as cost from tasmac_purchase p, jsonb_array_elements(p.lines) l where l->>'brandId' = $1 order by p.received_at desc limit 1`, [brandId])
   return p ? Number(p.cost) / bottleMl : 0
-}
-
-async function roleLimit(t: Db, who: Caller, key: string) {
-  if (who.permissions.has('*')) return Infinity
-  const rows = await t.query<{ limits: Record<string, unknown> }>('select limits from role where id = any($1)', [who.roles])
-  return Math.max(0, ...rows.map((r) => Number(r.limits?.[key] ?? 0)))
 }
 
 async function applyCount(t: Db, countId: string, decider: Caller, now: Date) {

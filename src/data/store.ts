@@ -14,7 +14,7 @@ export interface SpaceState {
   revenue: number
 }
 
-export type Layer = 'rooms' | 'fnb' | 'events' | 'housekeeping' | 'revenue' | 'staff'
+export type Layer = 'rooms' | 'fnb' | 'events' | 'housekeeping' | 'revenue' | 'staff' | 'engineering'
 
 export interface FeedItem { id: string; at: Date; kind: 'kot' | 'checkin' | 'checkout' | 'hk' | 'alert'; text: string; spaceId?: string }
 
@@ -39,6 +39,8 @@ export class Store {
   live = false
   /** Live mode and the person may see where staff are (managers, security). */
   staffAllowed = false
+  /** Live mode and the person works in engineering (assets and every open ticket on the map). */
+  engAllowed = false
   selectedId: string | null = null
 
   private listeners = new Set<Listener>()
@@ -137,6 +139,15 @@ export class Store {
   private async onSnapshotChanged(e: Extract<DomainEvent, { type: 'snapshot.changed' }>) {
     if (/^(kot|bot|order|order_item)\./.test(e.action)) { await this.reloadOrders(); this.emit('fnb', e); return }
     if (/^(menu_item|menu|outlet|station|table|bar|dry_day|licence|vat_rate|vat_class)\./.test(e.action)) { this.emit('fnb', e); return }
+    if (/^(eng|asset|pm|spare|meter|compliance)\./.test(e.action)) {
+      const text: Record<string, string> = {
+        'eng.ticket': `Fault reported by ${e.actor}`, 'eng.escalated': 'A maintenance ticket is running late',
+        'eng.check_failed': `Safety check out of range (${e.actor}): a fault was raised`, 'compliance.reminder': 'A licence or contract is due for renewal: see Engineering → Compliance',
+      }
+      if (text[e.action]) this.pushFeed({ id: `${e.action}-${e.entityId}-${Date.now()}`, at: new Date(), kind: 'alert', text: text[e.action] })
+      this.emit('eng', e)
+      return
+    }
     if (/^(staff|shift|roster|beacon)\./.test(e.action)) {
       if (e.action === 'staff.sos') this.pushFeed({ id: `sos-${e.entityId}`, at: new Date(), kind: 'alert', text: `SOS from ${e.actor}` })
       this.emit('staff', e)

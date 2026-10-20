@@ -5,7 +5,7 @@ import { appendAudit } from '../audit-store'
 import { can, HttpError, type Caller, type Ctx } from '../context'
 import type { Db } from '../db'
 import { businessDate } from '../fo-core'
-import { createApproval, registerApprovalKind } from './approvals'
+import { createApproval, registerApprovalKind, roleLimit } from './approvals'
 import { requireCaller } from './auth'
 
 // Kitchen ingredients, recipes per dish, automatic stock deduction when a KOT is sent, receipts,
@@ -34,12 +34,6 @@ export async function consumeRecipes(t: Db, who: Caller, orderItemIds: string[],
 async function stockOf(t: Db, id: string) {
   const [{ q }] = await t.query<{ q: string }>('select coalesce(sum(qty), 0) as q from kitchen_stock_move where ingredient_id = $1', [id])
   return Number(q)
-}
-
-async function roleLimit(t: Db, who: Caller, key: string) {
-  if (who.permissions.has('*')) return Infinity
-  const rows = await t.query<{ limits: Record<string, unknown> }>('select limits from role where id = any($1)', [who.roles])
-  return Math.max(0, ...rows.map((r) => Number(r.limits?.[key] ?? 0)))
 }
 
 async function recordWastage(t: Db, p: { ingredientId: string; qty: number; value: number; reason: string; day: string }, userId: string, now: Date) {

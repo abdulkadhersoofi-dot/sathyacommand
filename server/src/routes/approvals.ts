@@ -43,6 +43,13 @@ const KINDS: Record<string, ApprovalKind> = {
 /** Modules add their own kinds (e.g. the restaurant's cancellations after KOT). */
 export function registerApprovalKind(kind: string, k: ApprovalKind) { KINDS[kind] = k }
 
+/** The highest of the caller's roles' limits for one key in roles-and-approvals.yaml (God Mode: no limit). */
+export async function roleLimit(t: Db, who: Caller, key: string) {
+  if (who.permissions.has('*')) return Infinity
+  const rows = await t.query<{ limits: Record<string, unknown> }>('select limits from role where id = any($1)', [who.roles])
+  return Math.max(0, ...rows.map((r) => Number(r.limits?.[key] ?? 0)))
+}
+
 export async function createApproval(ctx: Ctx, db: Db, kind: string, requestedBy: string, payload: Record<string, unknown>, reason?: string) {
   if (!KINDS[kind]) throw new Error(`Unknown approval kind ${kind}`)
   const [open] = await db.query<{ id: string }>(

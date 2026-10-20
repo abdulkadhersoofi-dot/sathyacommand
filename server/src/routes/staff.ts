@@ -380,6 +380,11 @@ export function staffRoutes(app: FastifyInstance, ctx: Ctx) {
       `select k.id, s.room_no, k.area, k.kind, k.status, k.created_at from hk_task k left join space s on s.id = k.space_id
         where k.assigned_to = $1 and k.status in ('pending', 'in_progress', 'reclean') order by k.priority desc, k.created_at`, [who.userId])
     for (const k of hk) items.push({ kind: 'housekeeping', title: k.room_no ? `Room ${k.room_no}` : k.area ?? '', detail: `${k.kind.replace('_', ' ')} · ${k.status.replace('_', ' ')}`, at: k.created_at, ref: k.id })
+    const eng = await db.query<{ id: string; title: string; priority: string; status: string; place: string | null; reported_at: string }>(
+      `select k.id, k.title, k.priority, k.status, coalesce(s.name, a.name) as place, k.reported_at from ticket k left join space s on s.id = k.space_id left join asset a on a.id = k.asset_id
+        where k.status in ('open', 'in_progress', 'on_hold') and (k.assigned_to = $1 or ($2 and k.assigned_to is null and k.priority in ('urgent', 'high')))
+        order by case k.priority when 'urgent' then 0 when 'high' then 1 else 2 end, k.reported_at`, [who.userId, can(who, 'eng.work')])
+    for (const k of eng) items.push({ kind: 'engineering', title: k.title, detail: `${k.priority}${k.place ? ` · ${k.place}` : ''} · ${k.status.replace('_', ' ')}`, at: k.reported_at, ref: k.id })
     if (can(who, 'fnb.order')) {
       const ready = await db.query<{ id: string; number: number; kind: string; room_no: string | null; table_label: string | null; ready_at: string }>(
         `select k.id, k.number, k.kind, s.room_no, tb.label as table_label, k.ready_at from kot k join fnb_order o on o.id = k.order_id
