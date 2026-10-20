@@ -30,3 +30,16 @@ describe('amount in words', () => {
     expect(amountInWords(10000000)).toBe('Rupees One Lakh Only')
   })
 })
+
+describe('PAN and IFSC', () => {
+  it('reads the holder type from the PAN for the TDS rate', async () => {
+    const { PAN_RE, payeeTypeFromPan, IFSC_RE } = await import('../src')
+    expect(PAN_RE.test('AAPFU0939F')).toBe(true)
+    expect(PAN_RE.test('AAPXU0939F')).toBe(false)
+    expect(payeeTypeFromPan('ABCPK1234L')).toBe('individual')
+    expect(payeeTypeFromPan('AAACS1234A')).toBe('company')
+    expect(payeeTypeFromPan('AAPFU0939F')).toBe('firm')
+    expect(IFSC_RE.test('SBIN0001234')).toBe(true)
+    expect(IFSC_RE.test('SBIN1001234')).toBe(false)
+  })
+})

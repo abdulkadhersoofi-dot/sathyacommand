@@ -9,6 +9,7 @@ import { HkWorkspace } from './hk/workspace'
 import { StaffWorkspace } from './staff/workspace'
 import { EngWorkspace } from './eng/workspace'
 import { SecurityWorkspace } from './sec/workspace'
+import { InventoryWorkspace } from './inv/workspace'
 import { EMERGENCY, type Emergency } from './sec/desk'
 import { Outbox } from './live/outbox'
 import { Store, type Layer } from './data/store'
@@ -48,6 +49,7 @@ let hkWs: HkWorkspace | null = null
 let staffWs: StaffWorkspace | null = null
 let engWs: EngWorkspace | null = null
 let secWs: SecurityWorkspace | null = null
+let invWs: InventoryWorkspace | null = null
 
 let tab: Tab = 'live'
 let tipId: string | null = null
@@ -330,7 +332,7 @@ async function checkEmergency() {
   world.setPins('assembly', pts.filter((p) => p.x != null).map((p) => ({ id: p.id, x: Number(p.x), z: Number(p.z), shape: 'marker', colour: 0x35a46b, label: `Assembly: ${p.name}`, pulse: true })))
 }
 
-function hideWorkspaces() { for (const w of [fnb, hkWs, staffWs, engWs, secWs]) if (w?.open) w.hide() }
+function hideWorkspaces() { for (const w of [fnb, hkWs, staffWs, engWs, secWs, invWs]) if (w?.open) w.hide() }
 
 // ---------- interactions ----------
 document.addEventListener('click', async (e) => {
@@ -508,6 +510,7 @@ document.addEventListener('keydown', (e) => {
     if (staffWs?.open) { staffWs.hide(); return }
     if (engWs?.open) { engWs.hide(); return }
     if (secWs?.open) { secWs.hide(); return }
+    if (invWs?.open) { invWs.hide(); return }
     if (studio.open) return; if (!modal.hidden) modal.hidden = true; else if (fd && document.querySelector('.fd-modal:not([hidden])')) fd.close(); else if (drawerId) closeDrawer(); else hideTip() }
 })
 
@@ -588,6 +591,12 @@ if (api && me && liveAdapter) {
   secBtn.hidden = false
   secBtn.addEventListener('click', () => { if (secWs!.open) secWs!.hide(); else { hideWorkspaces(); void secWs!.show() } })
   void checkEmergency()
+
+  // Stores & purchase: stores, accounts and managers.
+  invWs = new InventoryWorkspace(api, me, outbox, () => renderSide())
+  const invBtn = $('#btn-inv')
+  invBtn.hidden = !InventoryWorkspace.allowed(me)
+  invBtn.addEventListener('click', () => { if (invWs!.open) invWs!.hide(); else { hideWorkspaces(); void invWs!.show() } })
   setTab('arrivals')
 }
 store.load().then(renderAll).catch((err) => toast(`Couldn't load HMS data: ${err.message}`))

@@ -693,4 +693,16 @@ button.row-card { width: 100%; text-align: left; font: inherit; background: var(
 
 /* The top bar holds five workspaces: drop the toggle labels first, then the workspace labels. */
 @media (max-width: 1700px) { #btn-night span, #btn-eco span { display: none; } }
-@media (max-width: 1480px) { #btn-staff span, #btn-sec span, #btn-eng span, #btn-hk span, #btn-fnb span { display: none; } }
+@media (max-width: 1560px) { #btn-staff span, #btn-sec span, #btn-eng span, #btn-hk span, #btn-fnb span, #btn-inv span { display: none; } }
+
+/* stores & purchase */
+.item-row { grid-template-columns: minmax(0, 1.8fr) minmax(0, 1.2fr) minmax(0, 1fr) 90px minmax(0, 1fr) !important; }
+.rate-row { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 1fr) 60px !important; }
+.item-row.head, .rate-row.head { font-size: 11px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.item-row[data-asset] { cursor: pointer; }
+@media (max-width: 900px) {
+  .item-row { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 70px !important; font-size: 12px; }
+  .item-row > :nth-child(3), .item-row > :nth-child(5) { display: none; }
+  .rate-row { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) 50px !important; font-size: 12px; }
+  .rate-row > :nth-child(2), .rate-row > :nth-child(4) { display: none; }
+}

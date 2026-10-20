@@ -49,6 +49,10 @@ sign_in:
 #   security.view    incidents, gate register, cameras, patrols and keys (read), the security map layer
 #   security.manage  checkpoints, patrol rounds, cameras, keys, assembly points; close incidents
 #   emergency.start  start and end emergency mode (roll-call of everyone on duty)
+#   stores.view      stores, items, vendors and rates (read)
+#   stores.manage    stores, the item master, rate contracts
+#   vendors.manage   the vendor master (GSTIN, PAN, TDS category, MSME status), rate contracts
+#   vendors.bank     vendor bank details (accounts only: a changed account is flagged to God Mode)
 #   compliance.view  the compliance calendar (licences, contracts, statutory checks) and utility costs
 #   (anyone signed in can report a fault and follow the tickets they reported)
 #   menu.edit        add and edit menu items and tables (price changes go to menu.price for approval)
@@ -63,7 +67,7 @@ roles:
     permissions: ['*']
     limits: unlimited
   general_manager:
-    permissions: [inventory.edit, devices.approve, users.manage, front_desk, folio.reverse, discount.approve, night_audit, invoice.view, invoice.credit_note, site.edit, site.publish, fnb.order, fnb.void, fnb.bill, fnb.discount, menu.edit, menu.price, bar.settings, bar.stock, bar.approve, kitchen.stock, kitchen.approve, food_cost.view, printers.manage, licences.edit, hk.view, hk.manage, hk.inspect, staff.track, attendance.view, roster.manage, broadcast.send, staff.settings, eng.manage, eng.approve, compliance.view, security.view, security.manage, emergency.start]
+    permissions: [inventory.edit, devices.approve, users.manage, front_desk, folio.reverse, discount.approve, night_audit, invoice.view, invoice.credit_note, site.edit, site.publish, fnb.order, fnb.void, fnb.bill, fnb.discount, menu.edit, menu.price, bar.settings, bar.stock, bar.approve, kitchen.stock, kitchen.approve, food_cost.view, printers.manage, licences.edit, hk.view, hk.manage, hk.inspect, staff.track, attendance.view, roster.manage, broadcast.send, staff.settings, eng.manage, eng.approve, compliance.view, security.view, security.manage, emergency.start, stores.view, stores.manage, vendors.manage, vendors.bank]
     limits: { discount_percent: 25, breakage_per_entry: 10000, refund: 50000, comp_room_nights: 5, purchase_order: 500000, rate_override_below_floor: true }
   operations_manager:
     permissions: [front_desk, folio.reverse, discount.approve, site.edit, fnb.order, fnb.void, fnb.bill, fnb.discount, hk.view, hk.manage, hk.inspect, staff.track, attendance.view, roster.manage, broadcast.send, eng.manage, eng.approve, compliance.view, security.view, security.manage, emergency.start]
@@ -78,9 +82,10 @@ roles:
     permissions: [front_desk, night_audit]
     limits: {}
   accounts:
-    permissions: [invoice.view, invoice.credit_note, einvoice.generate, licences.edit, tax.vat, compliance.view]
+    permissions: [invoice.view, invoice.credit_note, einvoice.generate, licences.edit, tax.vat, compliance.view, stores.view, vendors.manage, vendors.bank]
     limits: { vendor_payment_needs_approval_above: 25000, delete_vouchers: false }
   stores:
+    permissions: [stores.view, stores.manage, vendors.manage]
     limits: { purchase_order: 25000, stock_adjustment: 0 }
   executive_housekeeper:
     permissions: [hk.view, hk.attend, hk.inspect, hk.manage, attendance.view, roster.manage, broadcast.send]

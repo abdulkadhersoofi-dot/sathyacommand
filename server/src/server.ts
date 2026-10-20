@@ -12,6 +12,7 @@ import { ensureBarStock } from './routes/bar'
 import { ensureRecipes } from './routes/kitchen-stock'
 import { ensureRoomHk } from './hk-core'
 import { ensureLinenLaundryAreas } from './routes/linen-laundry'
+import { ensureStores } from './routes/stores'
 import { ensureEngineering, sweepEngineering } from './eng-core'
 import { sweepSecurity } from './routes/security'
 
@@ -31,6 +32,7 @@ await ensureRecipes(db)
 await ensureRoomHk(db)
 await ensureLinenLaundryAreas(db)
 await ensureEngineering(db)
+await ensureStores(db)
 const app = buildApp(db, { logger: true, printAgentKey: process.env.PRINT_AGENT_KEY || undefined, appDir: process.env.APP_DIR ?? fileURLToPath(new URL('../../dist/', import.meta.url)) })
 app.log.info({ engine: db.engine, migrationsApplied: applied, seeded }, 'database ready')
 // Escalations, planned maintenance, expiry reminders, missed patrols and keys not returned, once a minute.
