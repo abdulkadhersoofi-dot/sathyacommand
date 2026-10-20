@@ -42,6 +42,7 @@ const moveId = (p: string) => `${p}-${Date.now().toString(36).toUpperCase()}${(s
  */
 export async function moveStock(t: Db, m: Move) {
   const ledger = await storeLedger(t, m.storeId)
+  if (m.kind === 'receipt' && m.qty > 0 && m.value > 0) await t.query('update item set last_cost_paise = $2 where id = $1', [m.item.id, m.value / m.qty])
   if (!ledger) throw new Error(`Unknown store ${m.storeId}`)
   const inward = m.qty > 0
   const link = { kitchen: m.item.ingredient_id, bar: m.item.brand_id, spares: m.item.spare_id, linen: m.item.linen_item_id }[ledger as 'kitchen']
@@ -57,13 +58,13 @@ export async function moveStock(t: Db, m: Move) {
     const kind = m.kind === 'count_adjust' ? 'count_adjust' : inward ? 'receipt' : m.kind === 'issue' || m.kind === 'transfer_out' ? 'count_adjust' : 'wastage'
     await t.query('insert into kitchen_stock_move (id, ingredient_id, business_date, kind, qty, cost_paise, ref, note, by_user, at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
       [moveId('KM'), link, m.day, kind, m.qty, Math.round(m.value), m.ref, m.note ?? null, m.userId, m.at])
-    if (inward && m.value > 0 && m.kind === 'receipt') await t.query('update ingredient set cost_per_unit = $2, placeholder = false where id = $1', [link, m.value / m.qty])
+    if (inward && m.value > 0 && (m.kind === 'receipt' || m.kind === 'transfer_in')) await t.query('update ingredient set cost_per_unit = $2, placeholder = false where id = $1', [link, m.value / m.qty])
   } else if (ledger === 'bar') {
     const kind = m.kind === 'breakage' ? 'breakage' : inward && m.kind !== 'count_adjust' ? 'purchase' : 'count_adjust'
     await t.query('insert into bar_stock_move (id, brand_id, business_date, kind, ml, ref, note, by_user, at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
       [moveId('BM'), link, m.day, kind, Math.round(m.qty), m.ref, m.note ?? null, m.userId, m.at])
   } else if (ledger === 'spares') {
-    if (inward && m.kind === 'receipt') {
+    if (inward && (m.kind === 'receipt' || m.kind === 'transfer_in')) {
       const [s] = await t.query<{ cost_paise: string; stock: string }>('select s.cost_paise, coalesce((select sum(qty) from spare_move x where x.spare_id = s.id), 0) as stock from spare s where s.id = $1 for update', [link])
       const stock = Math.max(0, Number(s.stock))
       await t.query('update spare set cost_paise = $2 where id = $1', [link, ((stock * Number(s.cost_paise) + m.value) / (stock + m.qty)).toFixed(2)])
@@ -76,5 +77,31 @@ export async function moveStock(t: Db, m: Move) {
     const kind = m.kind === 'count_adjust' ? 'count_adjust' : inward ? 'purchase' : 'discard'
     await t.query('insert into linen_move (id, item_id, kind, qty, vendor, note, business_date, by_user, at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
       [moveId('LM'), link, kind, Math.abs(m.qty) * (kind === 'count_adjust' ? Math.sign(m.qty) : 1), m.vendor ?? null, m.note ?? (m.ref ? `Ref ${m.ref}` : null), m.day, m.userId, m.at])
+  }
+}
+
+/** Weighted average cost per stock unit of an item in a store, in paise. */
+export async function avgCost(t: Db, item: StockItem, storeId: string): Promise<number> {
+  const ledger = await storeLedger(t, storeId)
+  const num = (v: string | number | null | undefined) => (v == null ? 0 : Number(v))
+  if (ledger === 'own') {
+    const [r] = await t.query<{ q: string | null; v: string | null }>('select sum(qty) as q, sum(value_paise) as v from stock_move where item_id = $1 and store_id = $2', [item.id, storeId])
+    if (num(r.q) > 0 && num(r.v) > 0) return num(r.v) / num(r.q)
+  }
+  if (ledger === 'kitchen' && item.ingredient_id) return num((await t.query<{ c: string }>('select cost_per_unit as c from ingredient where id = $1', [item.ingredient_id]))[0]?.c)
+  if (ledger === 'spares' && item.spare_id) return num((await t.query<{ c: string }>('select cost_paise as c from spare where id = $1', [item.spare_id]))[0]?.c)
+  return num((await t.query<{ c: string | null }>('select last_cost_paise as c from item where id = $1', [item.id]))[0]?.c)
+}
+
+/** Takes stock out of an own-ledger store's batches, first to expire first (undated batches last). */
+export async function takeFromBatches(t: Db, itemId: string, storeId: string, qty: number) {
+  let left = qty
+  const batches = await t.query<{ id: string; qty_left: string }>(
+    'select id, qty_left from stock_batch where item_id = $1 and store_id = $2 and qty_left > 0 order by expiry nulls last, created_at for update', [itemId, storeId])
+  for (const b of batches) {
+    if (left <= 0) break
+    const take = Math.min(left, Number(b.qty_left))
+    await t.query('update stock_batch set qty_left = qty_left - $2 where id = $1', [b.id, take])
+    left -= take
   }
 }

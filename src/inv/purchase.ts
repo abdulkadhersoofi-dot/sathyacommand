@@ -3,6 +3,7 @@ import { checked, val } from '../ui/form-modal'
 import type { WorkspaceHost } from '../ui/workspace'
 import { rupees, type Item, type Store } from './items'
 import { receivePo } from './payables'
+import { issueForm } from './stock'
 
 // Indents (departments ask), purchase orders (stores order, approved within limits, printed and sent)
 // and the market list (perishables below their level, ordered at the best rate in one step).
@@ -60,6 +61,7 @@ export class IndentsView {
         <div class="rc-sub">${esc(i.requested_by)}, ${when(i.requested_at)}${i.needed_by ? ` · needed by ${esc(i.needed_by)}` : ''}${i.estimatePaise ? ` · about ${rupees(i.estimatePaise)}` : ''}${i.note ? ` · ${esc(i.note)}` : ''}${i.decision_note ? ` · ${esc(i.decided_by ?? '')}: ${esc(i.decision_note)}` : ''}</div>
         <div class="rc-right">${tonePill(...(IND_STATE[i.status] ?? [i.status, '--muted']))}
           ${i.status === 'submitted' && this.h.can('indent.approve') && i.requester_id !== this.h.me.id ? `<button type="button" class="btn small primary" data-in="approve:${esc(i.id)}">Approve</button><button type="button" class="btn small" data-in="reject:${esc(i.id)}">Turn down…</button>` : ''}
+          ${['approved', 'ordered'].includes(i.status) && this.h.can('stores.issue') ? `<button type="button" class="btn small" data-in="issue:${esc(i.id)}">Issue from stock…</button>` : ''}
           ${['submitted', 'approved'].includes(i.status) && (i.requester_id === this.h.me.id || canOrder) ? `<button type="button" class="btn small" data-in="cancel:${esc(i.id)}">Cancel</button>` : ''}</div></div>`).join('') || '<div class="empty">No indents.</div>'}`
   }
 
@@ -94,6 +96,12 @@ export class IndentsView {
     const [act, id] = a.split(':')
     if (act === 'approve') { await api.post(`/api/indents/${id}/approve`); await this.load(); toast('Approved'); return true }
     if (act === 'cancel') { await api.post(`/api/indents/${id}/cancel`); await this.load(); toast('Cancelled'); return true }
+    if (act === 'issue') {
+      const ind = this.list.find((x) => x.id === id)!
+      const stores = await this.h.stores()
+      await issueForm(this.h, { fromStoreId: 'ST-MAIN', indent: { id, number: ind.number, store_id: stores.find((s) => s.name === ind.store)?.id, lines: ind.lines.map((l) => ({ item_id: l.item_id, purchaseQty: l.purchaseQty })) } }, async () => { await this.load(); this.h.render() })
+      return false
+    }
     if (act === 'reject') {
       this.h.modal.open('Turn down indent', '<div class="form-grid"><label class="span2">Why<input name="note" maxlength="200"></label></div>', 'Turn down', async (f) => {
         await api.post(`/api/indents/${id}/reject`, { note: val(f, 'note') }); return done('Turned down')

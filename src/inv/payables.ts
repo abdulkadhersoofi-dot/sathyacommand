@@ -44,7 +44,7 @@ export async function receivePo(h: WorkspaceHost, poId: string, done: () => Prom
 
 export class ReceiptsView {
   private list: Grn[] = []
-  private expiring: { item: string; store: string; batch_no: string | null; expiry: string; qty_left: string; unit: string; days_left: number }[] = []
+  private expiring: { id: string; item: string; store: string; batch_no: string | null; expiry: string; qty_left: string; unit: string; days_left: number }[] = []
   constructor(private h: Host) {}
 
   async load() {
@@ -55,7 +55,8 @@ export class ReceiptsView {
   html() {
     return `<div class="ws-toolbar">${this.h.can('stores.receive') ? '<button type="button" class="btn primary" data-gr="po">Receive against a PO</button>' : ''}${this.h.can('purchase.order') ? '<button type="button" class="btn" data-gr="cash">Cash purchase (no PO)</button>' : ''}</div>
       ${this.expiring.length ? `<div class="sec-title">Expiring in 3 days <span>${this.expiring.length}</span></div>${this.expiring.map((x) => `<div class="row-card late"><div class="rc-title">${esc(x.item)} · ${q3(x.qty_left)} ${esc(x.unit)}</div>
-        <div class="rc-sub">${esc(x.store)}${x.batch_no ? ` · batch ${esc(x.batch_no)}` : ''} · ${x.days_left < 0 ? '<span class="fd-warn">expired</span>' : `expires ${esc(x.expiry)}`}</div></div>`).join('')}` : ''}
+        <div class="rc-sub">${esc(x.store)}${x.batch_no ? ` · batch ${esc(x.batch_no)}` : ''} · ${x.days_left < 0 ? '<span class="fd-warn">expired</span>' : `expires ${esc(x.expiry)}`}</div>
+        ${this.h.can('stores.issue') ? `<div class="rc-right"><button type="button" class="btn small" data-gr="expire:${esc(x.id)}">Write off</button></div>` : ''}</div>`).join('')}` : ''}
       <div class="sec-title">Goods received <span>${this.list.length}</span></div>
       ${this.list.map((g) => `<div class="row-card"><div class="rc-title">${esc(g.number)} · ${esc(g.vendor)}${g.po_number ? ` · ${esc(g.po_number)}` : ' · <span class="fd-warn">no PO</span>'}</div>
         <div class="rc-sub">${g.lines.map((l) => `${esc(l.item)} ${q3(l.qty_accepted)} ${esc(l.purchase_unit)}${n(l.qty_accepted) < n(l.qty_received) ? ` <span class="fd-warn">(${q3(n(l.qty_received) - n(l.qty_accepted))} rejected: ${esc(l.reject_reason ?? '')})</span>` : ''}`).join(' · ')}</div>
@@ -67,6 +68,11 @@ export class ReceiptsView {
     const a = el.closest<HTMLElement>('[data-gr]')?.dataset.gr
     if (!a) return false
     const done = async () => { await this.load(); this.h.render() }
+    if (a.startsWith('expire:')) {
+      if (!confirm('Write this batch off as expired? It comes out of stock at cost.')) return false
+      const r = await this.h.api.post<{ valuePaise: number }>(`/api/stock/batches/${a.slice(7)}/expire`)
+      toast(`Written off (${rupees(r.valuePaise)})`); await this.load(); return true
+    }
     if (a === 'po') {
       const pos = (await this.h.api.get<{ id: string; number: string; vendor: string; status: string; store: string }[]>('/api/pos')).filter((p) => ['approved', 'sent', 'partly_received'].includes(p.status))
       if (!pos.length) { toast('No approved purchase orders waiting for goods.'); return false }

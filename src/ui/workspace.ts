@@ -114,6 +114,7 @@ export abstract class Workspace<Tab extends string> implements WorkspaceHost {
 
   render() {
     if (!this.open) return
+    this.el.style.setProperty('--ws-top', `${document.querySelector<HTMLElement>('.topbar')?.offsetHeight ?? 56}px`)   // the top bar may wrap on a phone
     const scroll = this.el.querySelector('.ws-body')?.scrollTop ?? 0
     const search = document.activeElement?.classList.contains('ws-search') ? (document.activeElement as HTMLInputElement).selectionStart : null
     this.el.innerHTML = `<header class="ws-head">
@@ -142,7 +143,7 @@ export abstract class Workspace<Tab extends string> implements WorkspaceHost {
     if (t.closest('[data-wsdismiss]')) { this.outbox.dismissFailed(); return }
     const tab = t.closest<HTMLElement>('[data-wstab]')?.dataset.wstab as Tab | undefined
     if (tab) { if (tab !== this.tab) { this.tab = tab; await this.refresh() } return }
-    if (!t.closest('button, [data-item], [data-table], [data-order], [data-room], [data-ticket], [data-asset], [data-plan], [data-cal], [data-ic], [data-is], [data-ps], [data-mk], [data-bs]')) return
+    if (!t.closest('button, [data-item], [data-table], [data-order], [data-room], [data-ticket], [data-asset], [data-plan], [data-cal], [data-ic], [data-is], [data-ps], [data-mk], [data-bs], [data-sk], [data-ct]')) return
     await this.guard(async () => { if (await this.views[this.tab].click(t)) this.render() })
   }
 }

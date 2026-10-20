@@ -327,7 +327,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
   #app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; }
   .topbar { flex-wrap: wrap; gap: 8px 10px; }
   .topbar-mid { order: 3; width: 100%; margin: 0; justify-content: flex-start; }
-  .topbar-actions { margin-left: auto; }
+  .topbar-actions { margin-left: auto; flex-wrap: wrap; justify-content: flex-end; row-gap: 6px; }
   .icon-btn span { display: none; }
   .brand-sub { display: none; }
   .layers { flex-direction: row; top: 10px; left: 10px; right: 58px; overflow-x: auto; padding: 5px; scrollbar-width: none; }
@@ -737,3 +737,12 @@ button.row-card { width: 100%; text-align: left; font: inherit; background: var(
 
 /* The closed drawers sit off-screen to the right: clip them so they never widen the page (focus would scroll it sideways). */
 #app { overflow: hidden; overflow: clip; }
+
+.stock-row { grid-template-columns: minmax(0, 1.8fr) minmax(0, 1.4fr) minmax(0, 1.2fr) 100px minmax(0, 1fr) !important; }
+.stock-row.head { font-size: 11px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+[data-store] { font: 600 14px var(--f-body); color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; }
+.fd-card [data-find] { font: 500 14px var(--f-body); color: var(--fg); background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; flex: 1; min-width: 0; letter-spacing: normal; text-align: left; }
+@media (max-width: 900px) {
+  .stock-row { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.2fr) 80px !important; font-size: 12px; }
+  .stock-row > :nth-child(3), .stock-row > :nth-child(5) { display: none; }
+}

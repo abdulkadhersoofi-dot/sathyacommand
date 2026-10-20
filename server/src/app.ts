@@ -31,6 +31,7 @@ import { storesRoutes } from './routes/stores'
 import { purchaseRoutes } from './routes/purchase'
 import { receiptRoutes } from './routes/receipts'
 import { payablesRoutes } from './routes/payables'
+import { stockOpsRoutes } from './routes/stock-ops'
 
 export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boolean; appDir?: string } = {}) {
   const ctx: Ctx = {
@@ -78,6 +79,7 @@ export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boo
   purchaseRoutes(app, ctx)
   receiptRoutes(app, ctx)
   payablesRoutes(app, ctx)
+  stockOpsRoutes(app, ctx)
 
   // Serve the built 3D app and front desk screens from the same address as the API.
   if (opts.appDir && existsSync(opts.appDir)) app.register(fastifyStatic, { root: opts.appDir, index: 'index.html' })
