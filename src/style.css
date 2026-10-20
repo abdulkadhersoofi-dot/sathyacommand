@@ -800,3 +800,22 @@ button.link { background: none; border: 0; padding: 0; color: var(--accent); fon
 /* Accounts has many books: its tabs wrap onto a second row rather than scroll out of sight. */
 .ws[aria-label="Accounts"] .ws-tabs { flex-wrap: wrap; overflow-x: visible; }
 @media (max-width: 700px) { .ws[aria-label="Accounts"] .ws-tabs { flex-wrap: nowrap; overflow-x: auto; } }
+
+/* Staff logins */
+.login-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 1.3fr) 190px 210px !important; }
+.logins-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.logins-bar p { margin: 0; }
+.login-row.head { font-size: 11px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.login-row .rc-right { display: flex; gap: 6px; justify-content: flex-end; }
+.role-checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 6px 12px; border: 1px solid var(--line, rgba(127,127,127,.25)); border-radius: 10px; padding: 10px 12px; margin: 0; }
+.role-checks legend { font-size: 12px; font-weight: 700; color: var(--muted); padding: 0 4px; }
+.role-checks label.check { display: flex; align-items: center; gap: 8px; font-weight: 500; }
+.handover { display: grid; gap: 10px; margin: 12px 0; padding: 12px 14px; border-radius: 10px; background: var(--surface-2); }
+.handover div { display: flex; flex-direction: column; gap: 2px; }
+.handover b { font-size: 18px; user-select: all; overflow-wrap: anywhere; }
+@media (max-width: 720px) {
+  .login-row { grid-template-columns: minmax(0, 1fr) auto !important; }
+  .logins-bar { flex-direction: column; align-items: flex-start; }
+  .login-row > span:nth-child(2), .login-row > span:nth-child(3) { grid-column: 1 / -1; font-size: 12px; }
+  .login-row.head { display: none; }
+}

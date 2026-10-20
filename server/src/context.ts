@@ -12,6 +12,10 @@ export interface SmsSender { sendOtp(mobile: string, code: string): Promise<void
 
 export interface RolesConfig {
   sign_in: {
+    /** SMS codes to the staff mobile; off until an SMS provider is set up. */
+    mobile_otp?: boolean
+    /** The authenticator app after the password too, for second_factor_required roles. */
+    password_second_factor?: boolean
     second_factor_required: string[]
     device_registration_required: string[]
     session_timeout_minutes: { god_mode: number; back_office: number; operations: number }
@@ -36,7 +40,7 @@ export interface Caller extends Actor {
   godMode: boolean
   permissions: Set<string>
   sessionId: string
-  scope: 'full' | 'enroll_2fa'
+  scope: 'full' | 'enroll_2fa' | 'set_password'
 }
 
 export const can = (c: Caller, permission: string) => c.permissions.has('*') || c.permissions.has(permission)

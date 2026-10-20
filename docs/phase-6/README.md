@@ -48,3 +48,14 @@ Every module so far already keeps its own records (bills, payments, purchases, s
 - **Resort / sales**: the OTAs used, the commission agreed with each, and a sample payout report from each (to check the columns read)
 - **CA**: the base for GST TCS (0.5%) and 194-O TDS (0.1%) that OTAs apply: the room value before GST is assumed
 - **Resort**: the card and UPI acquirers (which bank settles, how often) and their fee rates
+
+## After Phase 6: sign-in by email and password
+
+At the MD's request, sign-in is now an email and a password instead of a mobile number and SMS code.
+
+- The MD's first login comes from `MD_EMAIL` and `MD_PASSWORD` in Render's settings; the MD chooses their own password at the first sign-in ([Deploying](../DEPLOY.md)).
+- **Staff → Logins** (MD, GM, HR): add a login with name, email and roles; a temporary password is shown once to hand over, and the person chooses their own at the first sign-in. **Reset password** issues a new temporary one and signs the person out everywhere. Only the MD can touch a God Mode login.
+- **Password** in the top bar changes one's own password and signs out other devices.
+- Five wrong passwords lock the login for 15 minutes (or until reset). Passwords are kept only as scrypt hashes.
+- Back-office devices still need the MD's or GM's approval.
+- SMS codes and the authenticator step are still in the code, switched off in `roles-and-approvals.yaml` (`mobile_otp`, `password_second_factor`), for when an SMS provider is chosen.

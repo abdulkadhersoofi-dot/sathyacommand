@@ -1,7 +1,7 @@
 // The staff app speaks Tamil or English, chosen on each phone.
 
 const TA: Record<string, string> = {
-  'Today': 'இன்று', 'Messages': 'செய்திகள்', 'My attendance': 'என் வருகை', 'Team': 'குழு', 'Rosters': 'பணி அட்டவணை', 'Settings': 'அமைப்புகள்',
+  'Today': 'இன்று', 'Messages': 'செய்திகள்', 'My attendance': 'என் வருகை', 'Team': 'குழு', 'Rosters': 'பணி அட்டவணை', 'Settings': 'அமைப்புகள்', 'Logins': 'உள்நுழைவுகள்',
   'Clock in': 'பணிக்கு வருகை', 'Clock out': 'பணி முடிவு', 'On duty': 'பணியில்', 'Off duty': 'பணியில் இல்லை',
   'Location on: on duty': 'இருப்பிடம் இயக்கத்தில்: பணி நேரம்', 'Location is shared only while you are on duty.': 'நீங்கள் பணியில் இருக்கும் போது மட்டுமே இருப்பிடம் பகிரப்படும்.',
   'SOS': 'அவசர உதவி', 'Tap, then confirm': 'தட்டி, பின் உறுதிப்படுத்தவும்', 'Help is on the way. Stay where you are if it is safe.': 'உதவி வருகிறது. பாதுகாப்பாக இருந்தால் அங்கேயே இருங்கள்.',

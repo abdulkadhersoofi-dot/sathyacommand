@@ -15,8 +15,10 @@ The repository has a `render.yaml` that creates both the database and the servic
 
 1. Render dashboard → **New + → Blueprint** → choose the repository `sathyacommand` (branch `main`).
 2. Render lists what it will create: **sathya-hms-db** (PostgreSQL 16, Singapore) and **sathya-hms** (web service, Singapore).
-3. It asks for **MD_MOBILE**: enter the MD's 10-digit mobile number.
-4. Press **Apply**. The first build takes a few minutes. On first start the service creates the tables, loads the placeholder rooms, menus, roles and chart of accounts, and gives the MD login the mobile number above.
+3. It asks for **MD_EMAIL** (the MD's email address) and **MD_PASSWORD** (a first password, at least 8 characters; you change it at the first sign-in).
+4. Press **Apply**. The first build takes a few minutes. On first start the service creates the tables, loads the placeholder rooms, menus, roles and chart of accounts, and gives the MD login the email and password above.
+
+**Already running the Blueprint from before (with MD_MOBILE)?** Open the **sathya-hms** service → **Environment** → add `MD_EMAIL` and `MD_PASSWORD` → **Save, rebuild and deploy**. `MD_MOBILE` and `OTP_DELIVERY` can stay or go; nothing uses them while SMS sign-in is off.
 5. Every merge into `main` from then on goes live by itself.
 
 The plans in `render.yaml` are paid (an always-on service and a database that is kept). Change `plan` there to `free` only to try it out: a free service sleeps when idle and a free database is deleted after a trial period.
@@ -41,23 +43,32 @@ To point the old demo at it: on the **Static Site**, add the environment variabl
 | `NODE_VERSION` | `22` |
 | `NODE_ENV` | `production` |
 | `DATABASE_URL` | the Internal Database URL |
-| `MD_MOBILE` | the MD's 10-digit mobile number |
-| `OTP_DELIVERY` | `log` (pilot only, see below) |
+| `MD_EMAIL` | the MD's email address |
+| `MD_PASSWORD` | the MD's first password (changed at the first sign-in) |
+| `MD_PASSWORD_RESET` | `yes` only if the MD has forgotten the password: the service sets `MD_PASSWORD` again on its next start. **Remove it afterwards**, or every restart resets it |
+| `MD_MOBILE` | optional: the MD's mobile, for SMS sign-in later |
 | `PRINT_AGENT_KEY` | a long random value, shared with the print agent on the edge box ([edge box guide](EDGE.md)); leave unset until printers are installed |
 
 ## 3. First sign-in
 
 1. Open the service's address (`https://<name>.onrender.com`).
-2. Enter the MD's mobile number.
-   Once signed in, the **Modules** button in the top bar lists every module your role can open.
-3. **Until an SMS provider is connected**, the 6-digit code is written to the service's **Logs** tab (`[sign-in code] +9198•••••001: 123456`). This is why `OTP_DELIVERY=log` is set; remove it once SMS is set up.
-4. Scan the QR code with Google Authenticator or Microsoft Authenticator and enter the code it shows. From then on, every MD sign-in needs the SMS code and the authenticator code.
-5. Enter the company's legal name, GSTIN, address and PIN code (check-out is blocked until they are set).
-6. Load the real room list (`POST /api/rooms/import`, or ask Claude to do it from your list).
-7. Add staff logins: `POST /api/users` with name, mobile and role.
+2. Enter `MD_EMAIL` and `MD_PASSWORD`.
+3. Choose your own password (at least 8 characters). The one in Render's settings stops working, so nobody who can see the settings can sign in as you.
+   Once signed in, the **Modules** button in the top bar lists every module your role can open. **Password** in the top bar changes it later.
+4. Enter the company's legal name, GSTIN, address and PIN code (check-out is blocked until they are set).
+5. Load the real room list (`POST /api/rooms/import`, or ask Claude to do it from your list).
+6. Add staff logins: **Staff → Logins → Add login** (name, email, roles). It shows a temporary password once; give it to the person with their email. They choose their own at the first sign-in. **Reset password** there gives a new temporary one to someone who forgot theirs (or got locked out by 5 wrong passwords, which otherwise clears after 15 minutes).
+
+Accounts, HR, stores and the front-office manager can still only sign in from a device the MD or GM has approved (the approval inbox in God Mode).
+
+### SMS codes and the authenticator app (later)
+
+Both are built and switched off in `server/seed/roles-and-approvals.yaml`:
+
+- `mobile_otp: true` turns on sign-in by SMS code (needs a DLT-registered SMS provider, and mobile numbers on the logins).
+- `password_second_factor: true` makes the MD, GM, accounts and HR also enter an authenticator-app code after the password.
 
 ## Before real guests
 
-- Connect a DLT-registered SMS provider and remove `OTP_DELIVERY`.
 - Choose a GST Suvidha Provider for e-invoicing (IRNs come from a sandbox until then).
 - Turn on Render's daily database backups and test a restore.

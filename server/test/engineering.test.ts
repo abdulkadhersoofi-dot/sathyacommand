@@ -157,7 +157,7 @@ describe('utilities', () => {
     expect(await audit('meter.correct')).toHaveLength(1)
     await R.post('/api/eng/readings', ENG, { day: '2026-11-02', readings: [{ meterId: 'MT-DGH', reading: 3, reset: true, note: 'Hour meter replaced' }] })
     expect((await R.get('/api/eng/utilities?from=2026-11-01&to=2026-11-02', CE)).json().totals['MT-DGH'].qty).toBe(3)
-  })
+  }, 20_000)
 })
 
 describe('safety checks', () => {

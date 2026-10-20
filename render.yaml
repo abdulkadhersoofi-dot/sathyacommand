@@ -1,5 +1,5 @@
 # Render Blueprint: the live Sathya HMS (app and API at one address) and its PostgreSQL database, in Singapore.
-# Render dashboard → New → Blueprint → choose this repository → enter MD_MOBILE → Apply.
+# Render dashboard → New → Blueprint → choose this repository → enter MD_EMAIL and MD_PASSWORD → Apply.
 # The existing static demo site is separate and keeps running on sample data.
 
 databases:
@@ -15,7 +15,7 @@ services:
     name: sathya-hms
     runtime: node
     region: singapore
-    plan: starter                # always on: free services sleep, and sign-in codes and alerts need it awake
+    plan: starter                # always on: free services sleep, and alerts need it awake
     branch: main
     autoDeploy: true             # each merge into main goes live
     buildCommand: npm ci --include=dev && npm run build
@@ -30,7 +30,7 @@ services:
         fromDatabase:
           name: sathya-hms-db
           property: connectionString
-      - key: MD_MOBILE           # the MD's 10-digit mobile number: the first login
+      - key: MD_EMAIL            # the MD's email: the first login
         sync: false
-      - key: OTP_DELIVERY        # sign-in codes go to the Logs tab until an SMS provider is connected
-        value: log
+      - key: MD_PASSWORD         # the MD's first password (changed at the first sign-in)
+        sync: false

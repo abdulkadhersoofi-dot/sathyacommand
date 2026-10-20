@@ -102,7 +102,7 @@ Each person signs in with their own login and sees only what their job needs. Th
 
 #### How people sign in
 
-- Mobile number with a one-time code for personal logins. MD, GM and Accounts also need a second factor (authenticator app or fingerprint/face on their phone).
+- Email and password for personal logins (temporary password changed at first sign-in; locked for 15 minutes after 5 wrong tries). Mobile number with a one-time code, and a second factor for MD, GM and Accounts (authenticator app), are built and switched off until an SMS provider is chosen.
 - Shared tablets at the restaurant and bar use quick-switch: each captain taps their name and enters a 4-digit PIN, so every order is tied to a person.
 - Device registration: back-office logins only work on approved devices. A new device needs MD or GM approval.
 - Shift-bound access: operational staff can sign in only during their rostered shift, apart from self-service screens.

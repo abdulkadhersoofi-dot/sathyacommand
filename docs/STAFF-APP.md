@@ -1,6 +1,6 @@
 # Sathya Staff app (Android and iPhone)
 
-The staff app is the same HMS web app, opened on a phone. Everyone signs in with their mobile number and OTP, then taps **Staff**.
+The staff app is the same HMS web app, opened on a phone. Everyone signs in with their email and password (the MD or GM adds logins under **Staff → Logins**), then taps **Staff**.
 
 | Screen | Who | What |
 |---|---|---|

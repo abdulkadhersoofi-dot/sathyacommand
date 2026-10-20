@@ -21,6 +21,7 @@ import { roleColour } from './scene/Overlays'
 import { Studio } from './studio/studio'
 import { defaultLayout, type SiteLayout } from './data/layout'
 import { $, toast } from './ui/dom'
+import { FormModal, val } from './ui/form-modal'
 import { showDemoGuide } from './ui/demo-guide'
 import { drawerHtml, tipHtml } from './ui/cards'
 import { sideHtml, type Tab } from './ui/side'
@@ -557,7 +558,23 @@ if (api && me && liveAdapter) {
   out.type = 'button'
   out.textContent = 'Sign out'
   out.addEventListener('click', async () => { try { await api!.post('/auth/sign-out') } finally { api!.setToken(null); location.reload() } })
-  document.querySelector('.topbar-actions')!.appendChild(out)
+  // Changing one's own password; other devices are signed out.
+  const pw = document.createElement('button')
+  pw.className = 'icon-btn'
+  pw.type = 'button'
+  pw.id = 'btn-password'
+  pw.textContent = 'Password'
+  pw.title = `Signed in as ${me.name}: change your password`
+  const pwModal = new FormModal()
+  pw.addEventListener('click', () => pwModal.open('Change your password', `<div class="form-grid"><label class="span2">Current password<input name="current" type="password" autocomplete="current-password" required></label>
+    <label class="span2">New password<input name="next" type="password" autocomplete="new-password" minlength="8" required></label>
+    <label class="span2">Type it again<input name="again" type="password" autocomplete="new-password" minlength="8" required></label></div>
+    <p class="muted small">At least 8 characters. Your other devices are signed out.</p>`, 'Change', async (f) => {
+    if (val(f, 'next') !== val(f, 'again')) throw new Error('The two new passwords are not the same.')
+    await api!.post('/auth/password', { current: (f.elements.namedItem('current') as HTMLInputElement).value, next: (f.elements.namedItem('next') as HTMLInputElement).value })
+    return 'Password changed'
+  }))
+  document.querySelector('.topbar-actions')!.append(pw, out)
   fd = new FrontDesk(api, store, me, () => renderSide())
   const outbox = new Outbox(api)
   fnb = new FnbWorkspace(api, me, outbox, () => store.reservations.filter((r) => r.status === 'in-house').map((r) => ({ id: r.id, guest: r.guest, roomNo: r.roomNo ?? null })), () => renderSide())

@@ -1,7 +1,8 @@
 import qrcode from 'qrcode-generator'
 import { ApiError, type Api } from './api'
 
-// Sign-in screen: mobile number → SMS code → authenticator code (or first-time set-up) → signed in.
+// Sign-in screen: email and password → a new password if the one given was temporary → signed in.
+// (The authenticator steps are used only if the server asks for them: sign_in.password_second_factor.)
 
 export interface Me { id: string; name: string; roles: string[]; godMode: boolean; permissions: string[]; scope: string }
 
@@ -57,31 +58,20 @@ export async function signIn(api: Api): Promise<Me> {
 
   let token = ''
   for (;;) {
-    // Step 1: mobile number
-    let form = card(`<h1>Sign in</h1><label for="si-mobile">Mobile number</label>
-      <input id="si-mobile" inputmode="tel" autocomplete="tel" placeholder="98400 00000" required>
-      <button class="btn primary" type="submit">Send code</button>`)
-    let challengeId = ''
-    let mobile = ''
-    for (;;) {
-      await submitted(form)
-      mobile = form.querySelector<HTMLInputElement>('#si-mobile')!.value
-      try { challengeId = (await api.post<{ challengeId: string }>('/auth/otp', { mobile })).challengeId; break }
-      catch (e) { fail(form, (e as Error).message) }
-    }
-
-    // Step 2: SMS code
-    form = card(`<h1>Enter the code</h1><p class="muted">We sent a 6-digit code to ${esc(mobile)}.</p>
-      <label for="si-code">Code</label><input id="si-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required>
-      <button class="btn primary" type="submit">Continue</button><button class="btn ghost" type="button" data-restart>Use a different number</button>`)
+    // Step 1: email and password
+    let form = card(`<h1>Sign in</h1>
+      <label for="si-email">Email</label><input id="si-email" type="email" inputmode="email" autocomplete="username" placeholder="name@example.com" required>
+      <label for="si-password">Password</label><input id="si-password" type="password" autocomplete="current-password" required>
+      <button class="btn primary" type="submit">Sign in</button>
+      <p class="muted small">Forgot your password? Ask the MD or GM to reset it.</p>`)
+    let password = ''
     let restart = false
-    form.querySelector('[data-restart]')!.addEventListener('click', () => { restart = true; form.requestSubmit() })
     let res: { stage: string; token?: string; loginChallengeId?: string } | null = null
     for (;;) {
       await submitted(form)
-      if (restart) break
+      password = form.querySelector<HTMLInputElement>('#si-password')!.value
       try {
-        res = await api.post('/auth/otp/verify', { challengeId, code: form.querySelector<HTMLInputElement>('#si-code')!.value.trim(), deviceId: deviceId(), deviceLabel: deviceLabel() })
+        res = await api.post('/auth/login', { email: form.querySelector<HTMLInputElement>('#si-email')!.value.trim(), password, deviceId: deviceId(), deviceLabel: deviceLabel() })
         break
       } catch (e) {
         if (e instanceof ApiError && e.body.stage === 'device_pending') {
@@ -111,6 +101,21 @@ export async function signIn(api: Api): Promise<Me> {
       }
     } else token = res.token!
     api.setToken(token)
+
+    // Step 4: a temporary password (new login, or reset by the MD or GM) is swapped for the person's own
+    if (res.stage === 'set_password') {
+      form = card(`<h1>Choose your password</h1><p class="muted">You signed in with a temporary password. Choose your own: at least 8 characters, and not your name or email.</p>
+        <label for="si-new">New password</label><input id="si-new" type="password" autocomplete="new-password" minlength="8" required>
+        <label for="si-new2">Type it again</label><input id="si-new2" type="password" autocomplete="new-password" minlength="8" required>
+        <button class="btn primary" type="submit">Save and continue</button>`)
+      for (;;) {
+        await submitted(form)
+        const next = form.querySelector<HTMLInputElement>('#si-new')!.value
+        if (next !== form.querySelector<HTMLInputElement>('#si-new2')!.value) { fail(form, 'The two passwords are not the same.'); continue }
+        try { await api.post('/auth/password', { current: password, next }); break }
+        catch (e) { fail(form, (e as Error).message) }
+      }
+    }
 
     // Step 3b: first sign-in for owner and finance roles sets up the authenticator app
     if (res.stage === 'enroll_2fa') {

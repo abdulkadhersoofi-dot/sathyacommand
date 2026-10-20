@@ -2,7 +2,9 @@
 # Amounts in ₹. Change any number; the software reads this file as configuration.
 
 sign_in:
-  personal: mobile_otp
+  personal: email_password
+  mobile_otp: false              # SMS codes to the staff mobile: switch on once an SMS provider is set up
+  password_second_factor: false  # true: the roles below also enter their authenticator code after the password
   second_factor_required: [managing_director, general_manager, accounts, hr_payroll]
   shared_tablets: quick_switch_pin_4_digits
   device_registration_required: [accounts, hr_payroll, stores, front_office_manager]

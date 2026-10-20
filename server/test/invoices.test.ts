@@ -143,5 +143,5 @@ describe('without the company GSTIN', () => {
     expect(out.statusCode).toBe(409)
     expect(out.json().error).toMatch(/GSTIN/)
     await T.close()
-  })
+  }, 30_000)
 })

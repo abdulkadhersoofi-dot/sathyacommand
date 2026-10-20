@@ -1,11 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { buildApp } from '../src/app'
+import { loadRolesConfig } from '../src/context'
 import { migrate, openPglite, type Db } from '../src/db'
 import { seed } from '../src/seed'
 import { totpCode } from '../src/totp'
 import { normaliseMobile } from '../src/routes/auth'
 
-// Runs against a real Postgres engine (PGlite, in memory) with the real migrations, seed and roles file.
+// Runs against a real Postgres engine (PGlite, in memory) with the real migrations, seed and roles file,
+// with sign-in by SMS code switched on (email and password sign-in is in passwords.test.ts).
 
 let db: Db
 let app: ReturnType<typeof buildApp>
@@ -36,6 +38,7 @@ beforeAll(async () => {
   app = buildApp(db, {
     now: () => new Date(clock),
     sms: { async sendOtp(mobile, code) { sms[mobile] = code } },
+    roles: (() => { const r = loadRolesConfig(); r.sign_in.mobile_otp = true; return r })(),
   })
 }, 30_000)
 
@@ -108,7 +111,7 @@ describe('sign-in', () => {
   })
 
   it('lets the MD add a receptionist, who signs in with just the SMS code', async () => {
-    const add = await app.inject({ method: 'POST', url: '/api/users', headers: auth(MD), payload: { name: 'Priya', mobile: '9840000002', roles: ['reception'] } })
+    const add = await app.inject({ method: 'POST', url: '/api/users', headers: auth(MD), payload: { name: 'Priya', email: 'priya@sathya.test', mobile: '9840000002', roles: ['reception'] } })
     expect(add.statusCode).toBe(201)
     const res = await signIn('9840000002')
     expect(res.json()).toMatchObject({ stage: 'done', idleMinutes: 240 })
@@ -131,7 +134,7 @@ describe('sign-in', () => {
   })
 
   it('holds a new accounts device until the MD or GM approves it', async () => {
-    await app.inject({ method: 'POST', url: '/api/users', headers: auth(MD), payload: { name: 'Karthik', mobile: '9840000003', roles: ['accounts'] } })
+    await app.inject({ method: 'POST', url: '/api/users', headers: auth(MD), payload: { name: 'Karthik', email: 'karthik@sathya.test', mobile: '9840000003', roles: ['accounts'] } })
     const first = await signIn('9840000003', { deviceId: 'acc-pc-1', deviceLabel: 'Accounts PC' })
     expect(first.statusCode).toBe(403)
     expect(first.json().stage).toBe('device_pending')
@@ -144,7 +147,7 @@ describe('sign-in', () => {
   })
 
   it('only the MD can give God Mode or lock people out', async () => {
-    const r = await app.inject({ method: 'POST', url: '/api/users', headers: auth(FD), payload: { name: 'X', mobile: '9840000009', roles: ['reception'] } })
+    const r = await app.inject({ method: 'POST', url: '/api/users', headers: auth(FD), payload: { name: 'X', email: 'x@sathya.test', mobile: '9840000009', roles: ['reception'] } })
     expect(r.statusCode).toBe(403)
     const [u] = await db.query<{ id: string }>(`select id from app_user where mobile = '+919840000002'`)
     const lock = await app.inject({ method: 'POST', url: `/api/users/${u.id}/lock`, headers: auth(MD), payload: { reason: 'Test' } })

@@ -25,13 +25,13 @@ export function showDemoGuide(liveUrl: string | undefined) {
   el.innerHTML = `<div class="dg-card">
       <button type="button" class="dr-close" data-dg-close aria-label="Close">✕</button>
       <h2>You are looking at the sample demo</h2>
-      <p>This address shows the 3D resort on made-up bookings, with Twin Studio for editing the map. It has no HMS server behind it, so the modules below do not appear here. They run on the <b>live HMS</b>, where each person signs in with their mobile number and sees the buttons for their role.</p>
+      <p>This address shows the 3D resort on made-up bookings, with Twin Studio for editing the map. It has no HMS server behind it, so the modules below do not appear here. They run on the <b>live HMS</b>, where each person signs in with their email and password and sees the buttons for their role.</p>
       ${liveUrl
         ? `<p><a class="btn primary" href="${esc(liveUrl)}">Open the live HMS</a> <span class="muted small">${esc(liveUrl)}</span></p>`
         : `<div class="dg-steps"><b>Start the live HMS on Render (one time, about 10 minutes)</b><ol>
             <li>Render dashboard → <b>New → Blueprint</b> → choose the <code>sathyacommand</code> repository.</li>
-            <li>Enter the MD's mobile number when asked (<code>MD_MOBILE</code>) and press <b>Apply</b>. Render creates the database and the HMS service.</li>
-            <li>Open the new service's address (<code>https://sathya-hms….onrender.com</code>), enter the MD's mobile number; the sign-in code appears in the service's <b>Logs</b> tab until SMS is connected.</li>
+            <li>Enter the MD's email and a first password when asked (<code>MD_EMAIL</code>, <code>MD_PASSWORD</code>) and press <b>Apply</b>. Render creates the database and the HMS service.</li>
+            <li>Open the new service's address (<code>https://sathya-hms….onrender.com</code>), sign in with that email and password, then choose your own password.</li>
             <li>Optional: on this demo site set <code>VITE_LIVE_URL</code> to that address, and this box will link straight to it.</li>
           </ol><span class="muted small">Full guide: docs/DEPLOY.md in the repository.</span></div>`}
       <div class="dg-grid">${MODULES.map(([name, phase, what]) => `<div class="dg-mod"><div><b>${esc(name)}</b> <small class="muted">${esc(phase)}</small></div><div class="small">${esc(what)}</div></div>`).join('')}</div>
