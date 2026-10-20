@@ -13,7 +13,9 @@ import type { Party } from './einvoice'
 
 export type DocType = 'invoice' | 'fnb_invoice' | 'credit_note' | 'receipt_voucher' | 'refund_voucher'
 
-export interface DocLine { slNo: number; description: string; sac: string | null; qty: number; gstRate: number; taxable: number; cgst: number; sgst: number; total: number }
+export interface DocLine { slNo: number; description: string; sac: string | null; qty: number; gstRate: number; taxable: number; cgst: number; sgst: number; total: number
+  /** Event bills: hall, catering or other, for the revenue account. */
+  kind?: string }
 
 const PREFIX: Record<Exclude<DocType, 'invoice'>, string> = { fnb_invoice: 'RST', credit_note: 'CN', receipt_voucher: 'RV', refund_voucher: 'RF' }
 
@@ -59,6 +61,8 @@ function summarise(lines: DocLine[]) {
 export interface IssueInput {
   docType: DocType
   reservationId: string | null
+  /** A banquet event's advances and bill (Phase 7). */
+  eventId?: string | null
   folioId?: string | null
   originalId?: string | null
   recipient: Party
@@ -81,12 +85,12 @@ export async function issue(ctx: Ctx, t: Db, who: Caller, input: IssueInput) {
   await t.query(
     `insert into tax_document (id, doc_type, number, fy, issue_date, reservation_id, folio_id, original_id, supplier, recipient, b2b,
        place_of_supply, lines, tax_summary, taxable_paise, cgst_paise, sgst_paise, total_paise, advance_adjusted_paise, amount_in_words,
-       reason, irn_status, irn_deadline, issued_by, issued_at)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)`,
+       reason, irn_status, irn_deadline, issued_by, issued_at, event_id)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)`,
     [id, input.docType, number, fy, date, input.reservationId, input.folioId ?? null, input.originalId ?? null,
       JSON.stringify(supplierSnap), JSON.stringify(input.recipient), b2b, sup.stateCode, JSON.stringify(input.lines), JSON.stringify(totals.summary),
       totals.taxable, totals.cgst, totals.sgst, totals.total, input.advanceAdjusted ?? 0, amountInWords(totals.total),
-      input.reason ?? null, ei.required ? 'pending' : 'not_required', ei.irnDeadline, who.userId, ctx.now()])
+      input.reason ?? null, ei.required ? 'pending' : 'not_required', ei.irnDeadline, who.userId, ctx.now(), input.eventId ?? null])
   await appendAudit(t, { actor: who, action: `${input.docType}.issue`, entity: { type: 'tax_document', id }, amount: totals.total,
     after: { number, b2b, recipient: input.recipient.name, irnDeadline: ei.irnDeadline }, note: input.reason }, ctx.now())
   return { id, number, total: totals.total, irnStatus: ei.required ? 'pending' : 'not_required', irnDeadline: ei.irnDeadline }
@@ -144,7 +148,7 @@ export async function issueRefundVoucher(ctx: Ctx, t: Db, who: Caller, reservati
 
 /** Credit note against an invoice, e.g. a discount agreed after billing. Cannot exceed what was invoiced at that rate. */
 export async function issueCreditNote(ctx: Ctx, t: Db, who: Caller, invoiceId: string, taxableAmount: number, gstRate: number, reason: string) {
-  const [inv] = await t.query<{ id: string; doc_type: string; reservation_id: string; folio_id: string; recipient: Party; tax_summary: { rate: number; taxable: number }[]; number: string }>(
+  const [inv] = await t.query<{ id: string; doc_type: string; reservation_id: string; event_id: string | null; folio_id: string; recipient: Party; lines: DocLine[]; tax_summary: { rate: number; taxable: number }[]; number: string }>(
     'select * from tax_document where id = $1 for update', [invoiceId])
   if (!inv || inv.doc_type !== 'invoice') throw new HttpError(404, 'No such invoice.')
   const atRate = inv.tax_summary.find((s) => s.rate === gstRate)
@@ -156,9 +160,10 @@ export async function issueCreditNote(ctx: Ctx, t: Db, who: Caller, invoiceId: s
     throw new HttpError(400, `Credit at ${gstRate}% can't exceed ₹${((atRate.taxable - Number(credited)) / 100).toFixed(2)} still invoiced at that rate.`)
   }
   const cgst = Math.round((taxableAmount * gstRate) / 200), sgst = cgst
-  const line: DocLine = { slNo: 1, description: `Credit against ${inv.number}: ${reason}`, sac: ctx.tax.gst.accommodation.sac, qty: 1,
+  const sac = inv.event_id ? inv.lines.find((l) => Number(l.gstRate) === gstRate)?.sac ?? null : ctx.tax.gst.accommodation.sac
+  const line: DocLine = { slNo: 1, description: `Credit against ${inv.number}: ${reason}`, sac, qty: 1,
     gstRate, taxable: taxableAmount, cgst, sgst, total: taxableAmount + cgst + sgst }
-  return issue(ctx, t, who, { docType: 'credit_note', reservationId: inv.reservation_id, folioId: inv.folio_id, originalId: inv.id, recipient: inv.recipient, lines: [line], reason })
+  return issue(ctx, t, who, { docType: 'credit_note', reservationId: inv.reservation_id, eventId: inv.event_id, folioId: inv.folio_id, originalId: inv.id, recipient: inv.recipient, lines: [line], reason })
 }
 
 export const stateName = (code: string | null) => (code ? `${code} - ${STATES[code] ?? ''}` : '')

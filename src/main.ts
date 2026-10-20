@@ -11,6 +11,7 @@ import { EngWorkspace } from './eng/workspace'
 import { SecurityWorkspace } from './sec/workspace'
 import { InventoryWorkspace } from './inv/workspace'
 import { AccountsWorkspace } from './acc/workspace'
+import { BanquetsWorkspace } from './bq/workspace'
 import { EMERGENCY, type Emergency } from './sec/desk'
 import { Outbox } from './live/outbox'
 import { Store, type Layer } from './data/store'
@@ -54,6 +55,7 @@ let engWs: EngWorkspace | null = null
 let secWs: SecurityWorkspace | null = null
 let invWs: InventoryWorkspace | null = null
 let accWs: AccountsWorkspace | null = null
+let bqWs: BanquetsWorkspace | null = null
 
 let tab: Tab = 'live'
 let tipId: string | null = null
@@ -336,7 +338,7 @@ async function checkEmergency() {
   world.setPins('assembly', pts.filter((p) => p.x != null).map((p) => ({ id: p.id, x: Number(p.x), z: Number(p.z), shape: 'marker', colour: 0x35a46b, label: `Assembly: ${p.name}`, pulse: true })))
 }
 
-function hideWorkspaces() { for (const w of [fnb, hkWs, staffWs, engWs, secWs, invWs, accWs]) if (w?.open) w.hide() }
+function hideWorkspaces() { for (const w of [fnb, hkWs, staffWs, engWs, secWs, invWs, accWs, bqWs]) if (w?.open) w.hide() }
 
 // ---------- interactions ----------
 document.addEventListener('click', async (e) => {
@@ -644,6 +646,13 @@ if (api && me && liveAdapter) {
     const accBtn = $('#btn-acc')
     accBtn.hidden = false
     accBtn.addEventListener('click', () => { if (accWs!.open) accWs!.hide(); else { hideWorkspaces(); void accWs!.show() } })
+  }
+  // Banquets: sales, the GM and the MD; departments read their event orders here.
+  if (BanquetsWorkspace.allowed(me)) {
+    bqWs = new BanquetsWorkspace(api, me, outbox, () => renderSide())
+    const bqBtn = $('#btn-bq')
+    bqBtn.hidden = false
+    bqBtn.addEventListener('click', () => { if (bqWs!.open) bqWs!.hide(); else { hideWorkspaces(); void bqWs!.show() } })
   }
   addModulesMenu()
   setTab('arrivals')

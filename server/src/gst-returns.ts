@@ -9,11 +9,11 @@ import { addDays } from './eng-core'
 export const monthEnd = (p: string) => addDays(addDays(`${p}-01`, 32).slice(0, 7) + '-01', -1)
 const HOME = '33'
 /** Supplies taxed without input tax credit: rooms up to ₹7,500 and restaurant service at 5%. CA check */
-const NO_ITC_SAC = ['996311', '996331']
+const NO_ITC_SAC = ['996311', '996331', '996334']
 const SAC_DESC: Record<string, string> = { '996311': 'Room or unit accommodation services', '996331': 'Services provided by restaurants', '996334': 'Event catering services', '999794': 'Agreeing to do an act (damage recovery)' }
 
 interface Line { description: string; sac: string | null; gstRate: number; taxable: number; cgst: number; sgst: number; total: number }
-interface Doc { id: string; doc_type: string; number: string; issue_date: string; b2b: boolean; recipient: { name: string; gstin: string | null }; lines: Line[]; tax_summary: { rate: number; taxable: number; cgst: number; sgst: number }[]; taxable_paise: string; cgst_paise: string; sgst_paise: string; total_paise: string; irn_status: string; reservation_id: string | null; original_id: string | null; advance_adjusted_paise: string }
+interface Doc { id: string; doc_type: string; number: string; issue_date: string; b2b: boolean; recipient: { name: string; gstin: string | null }; lines: Line[]; tax_summary: { rate: number; taxable: number; cgst: number; sgst: number }[]; taxable_paise: string; cgst_paise: string; sgst_paise: string; total_paise: string; irn_status: string; reservation_id: string | null; event_id: string | null; original_id: string | null; advance_adjusted_paise: string }
 export interface RateRow { rate: number; taxable: number; cgst: number; sgst: number; igst: number }
 
 const n = (v: unknown) => Number(v ?? 0)
@@ -31,7 +31,7 @@ const sumRows = (rs: RateRow[]) => rs.reduce((a, r) => ({ taxable: a.taxable + r
 export async function gstr1(t: Db, period: string) {
   const from = `${period}-01`, to = monthEnd(period)
   const docs = await t.query<Doc>(
-    `select id, doc_type, number, issue_date::text, b2b, recipient, lines, tax_summary, taxable_paise, cgst_paise, sgst_paise, total_paise, irn_status, reservation_id, original_id, advance_adjusted_paise
+    `select id, doc_type, number, issue_date::text, b2b, recipient, lines, tax_summary, taxable_paise, cgst_paise, sgst_paise, total_paise, irn_status, reservation_id, event_id, original_id, advance_adjusted_paise
        from tax_document where issue_date between $1 and $2 order by issue_date, number`, [from, to])
   const sales = docs.filter((d) => d.doc_type === 'invoice' || d.doc_type === 'fnb_invoice')
   const notes = docs.filter((d) => d.doc_type === 'credit_note')
@@ -49,12 +49,15 @@ export async function gstr1(t: Db, period: string) {
 
   // Advances: received this month for stays not invoiced this month (11A); received earlier and adjusted in this month's invoices (11B).
   const advDocs = docs.filter((d) => d.doc_type === 'receipt_voucher' || d.doc_type === 'refund_voucher')
-  const invoicedNow = new Set(sales.filter((d) => d.doc_type === 'invoice').map((d) => d.reservation_id))
-  const at = [...byRate(advDocs.filter((d) => !invoicedNow.has(d.reservation_id)).flatMap((d) => d.tax_summary.map((s) => ({ ...s, sign: d.doc_type === 'receipt_voucher' ? 1 : -1 })))
+  // A stay's or an event's advances: keyed by whichever it belongs to.
+  const key = (d: Doc) => d.reservation_id ?? (d.event_id ? `event:${d.event_id}` : null)
+  const invoicedNow = new Set(sales.filter((d) => d.doc_type === 'invoice').map(key))
+  const at = [...byRate(advDocs.filter((d) => !invoicedNow.has(key(d))).flatMap((d) => d.tax_summary.map((s) => ({ ...s, sign: d.doc_type === 'receipt_voucher' ? 1 : -1 })))
     .map((s) => ({ ...s, taxable: s.taxable * s.sign, cgst: s.cgst * s.sign, sgst: s.sgst * s.sign }))).values()].filter((r) => r.taxable)
-  const adjustedRes = sales.filter((d) => d.doc_type === 'invoice' && n(d.advance_adjusted_paise) > 0).map((d) => d.reservation_id!)
-  const earlier = adjustedRes.length ? await t.query<{ doc_type: string; tax_summary: { rate: number; taxable: number; cgst: number; sgst: number }[] }>(
-    `select doc_type, tax_summary from tax_document where reservation_id = any($1) and doc_type in ('receipt_voucher', 'refund_voucher') and issue_date < $2`, [adjustedRes, from]) : []
+  const adjusted = sales.filter((d) => d.doc_type === 'invoice' && n(d.advance_adjusted_paise) > 0)
+  const adjustedRes = adjusted.map((d) => d.reservation_id).filter(Boolean), adjustedEv = adjusted.map((d) => d.event_id).filter(Boolean)
+  const earlier = adjusted.length ? await t.query<{ doc_type: string; tax_summary: { rate: number; taxable: number; cgst: number; sgst: number }[] }>(
+    `select doc_type, tax_summary from tax_document where (reservation_id = any($1) or event_id = any($2)) and doc_type in ('receipt_voucher', 'refund_voucher') and issue_date < $3`, [adjustedRes, adjustedEv, from]) : []
   const atadj = [...byRate(earlier.flatMap((d) => d.tax_summary.map((s) => { const k = d.doc_type === 'receipt_voucher' ? 1 : -1; return { ...s, taxable: s.taxable * k, cgst: s.cgst * k, sgst: s.sgst * k } }))).values()].filter((r) => r.taxable)
 
   // HSN / SAC summary, business and consumer apart.

@@ -779,6 +779,8 @@ Animated 3D model of the resort, room status by date, hover and tap cards, live 
 
 ### Phase 7 · Banquets, sales & guest channels Weeks 35–42
 
+Status and steps: [Phase 7 plan](phase-7/README.md). Step 7.1 (banquets: venue calendar, quotes, contracts, advances, event orders, final bill) is built.
+
 - Venue calendar, quotes, contracts, advances, event orders (BEO) to every department
 - Sales CRM and corporate accounts
 - Channel manager, website booking engine, online check-in

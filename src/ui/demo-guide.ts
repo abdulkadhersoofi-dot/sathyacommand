@@ -11,7 +11,8 @@ const MODULES: [string, string, string][] = [
   ['Engineering', 'Phase 4', 'Fault tickets with escalation, planned maintenance, assets, spares, meters and utility costs, pool / STP / fire logs, compliance calendar'],
   ['Security', 'Phase 4', 'Gate register, QR patrol rounds, incidents, cameras, key register, emergency mode with roll-call'],
   ['Stores & purchase', 'Phase 5', 'Items and vendors, indents, purchase orders, goods received, vendor bills with three-way match, payments with TDS, stock, counts, breakage, month close, excise registers'],
-  ['Accounts', 'Phase 6, being built', 'Ledgers posted automatically from bills, payments and purchases; trial balance, profit & loss by department, balance sheet, journals, locked months'],
+  ['Accounts', 'Phase 6', 'Ledgers posted automatically from bills, payments and purchases; trial balance, profit & loss by department, balance sheet, GST, TDS and VAT returns, receivables, banks, fixed assets, budgets, Tally'],
+  ['Banquets', 'Phase 7, being built', 'Venue calendar with clash checks, weddings and events from enquiry to quote, contract and advances (GST receipt vouchers), event orders to every department, final bill'],
   ['God Mode', 'MD only', 'Every change in a log that cannot be altered, approvals, alerts'],
 ]
 

@@ -18,6 +18,7 @@ import { ensureChart, postPending } from './ledger'
 import { ensureEngineering, sweepEngineering } from './eng-core'
 import { sweepSecurity } from './routes/security'
 import { sweepPayables } from './routes/payables'
+import { ensureBanquets } from './banquets'
 
 // DATABASE_URL set → PostgreSQL (production). Otherwise a local PGlite database in ./data.
 // MD_EMAIL and MD_PASSWORD give the Managing Director's login its email and first password (changed at the first
@@ -39,6 +40,7 @@ await ensureLinenLaundryAreas(db)
 await ensureEngineering(db)
 await ensureStores(db)
 await ensureChart(db)
+await ensureBanquets(db)
 const app = buildApp(db, { logger: true, printAgentKey: process.env.PRINT_AGENT_KEY || undefined, appDir: process.env.APP_DIR ?? fileURLToPath(new URL('../../dist/', import.meta.url)) })
 app.log.info({ engine: db.engine, migrationsApplied: applied, seeded }, 'database ready')
 // Escalations, planned maintenance, expiry reminders, missed patrols and keys not returned, once a minute.

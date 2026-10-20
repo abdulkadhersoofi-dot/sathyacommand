@@ -54,6 +54,9 @@ gst:
   banquets:
     hall_and_lawn_rental: { sac: null, rate: 18, itc: true, ca_status: pending }   # CA to give SAC
     event_catering:       { sac: "996334", rate_follows: restaurant_premises_status, ca_status: pending }
+    event_services:       { sac: null, rate: 18, ca_status: pending }   # decor, sound and lights sold by the resort; CA to give SAC
+    # Each line of an event bill is taxed at its own rate (hall 18%, food at the restaurant rate). CA to confirm
+    # whether a hall-with-food package is instead one composite supply at the rate of its principal supply.
     composite_packages:   { treatment: principal_supply, principal: accommodation, ca_status: pending }
 
   other_services:

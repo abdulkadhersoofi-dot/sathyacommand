@@ -17,6 +17,9 @@ interface ServerReservation {
   requests: string | null; room_type_id: string; space_id: string | null; twin_id: string | null; room_no: string | null
   bill_to_company: string | null; rate_paise: number; balance_paise: number; folio_id: string
 }
+interface ServerBooking { name: string; venueId: string; date: string; from: string; to: string; startsAt: string; endsAt: string; pax: number; number: string; title: string; status: string; kind: string; firm: boolean
+  client: string; turnaroundMinutes: number; valuePaise: number; paidPaise: number }
+const addDaysIso = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10)
 interface ServerOrder {
   id: string; number: number; outlet_id: string; outlet: string; outlet_twin_id: string | null; kind: string; table_label: string | null
   room_no: string | null; twin_id: string | null; guest: string | null; status: string; opened_at: string; kitchen: 'new' | 'cooking' | 'ready' | null
@@ -73,8 +76,20 @@ export class LiveAdapter implements HmsAdapter {
     }))
   }
 
-  // Phases 3, 4 and 7 bring the restaurant, housekeeping and events into the live HMS.
-  async getEvents(): Promise<EventBooking[]> { return [] }
+  // Banquet functions on their venues (Phase 7): pencilled ones are left off the map. Roles without the
+  // banquets screens see none.
+  async getEvents(range: DateRange): Promise<EventBooking[]> {
+    const to = range.to < addDaysIso(range.from, 92) ? range.to : addDaysIso(range.from, 92)
+    let r: { bookings: ServerBooking[] }
+    try { r = await this.api.get(`/api/banquets/calendar?from=${range.from}&to=${to}`) } catch { return [] }
+    const now = Date.now()
+    return r.bookings.filter((b) => b.firm).map((b) => {
+      const start = Date.parse(b.startsAt), end = Date.parse(b.endsAt), setupFrom = start - b.turnaroundMinutes * 60_000
+      const setup: EventBooking['setup'] = now >= end ? 'done' : now >= start ? 'live' : now >= setupFrom ? 'in-progress' : b.status === 'hold' ? 'pending' : 'ready'
+      return { id: `${b.number} · ${b.name}`, spaceId: this.appIdOf.get(b.venueId) ?? b.venueId, date: b.date, title: `${b.title}: ${b.name}`, client: b.client, kind: b.kind,
+        pax: b.pax, slot: `${b.from}–${b.to}`, setup, value: b.valuePaise / 100, advance: b.paidPaise / 100 }
+    })
+  }
   // Restaurant, bar and room-service orders that reached the kitchen, for the 3D map and the kitchen panel.
   async getOrders(date: string): Promise<Order[]> {
     const rows = await this.api.get<ServerOrder[]>(`/api/fnb/orders?date=${date}&status=open,billed,closed`)

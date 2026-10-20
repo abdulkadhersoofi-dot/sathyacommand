@@ -10,6 +10,7 @@ The staff app is the same HMS web app, opened on a phone. Everyone signs in with
 | Team | managers, security | SOS alerts (I'm going / resolve), who is on duty and where, who is rostered but not in, today's attendance with selfies |
 | Rosters | HR, managers | shifts (morning, evening, night…) and the weekly roster; copy last week |
 | Settings | GM, MD | the resort boundary, lining up GPS with the 3D map, selfie at clock-in, indoor beacons |
+| Banquets → Event orders | kitchen, F&B service, housekeeping, engineering, security, front office | each event's sheet for their department (plates to cook, tables and chairs, parking, instructions) from the latest revision, and **Acknowledge**; a new event order arrives as a message |
 
 ## Location and privacy
 

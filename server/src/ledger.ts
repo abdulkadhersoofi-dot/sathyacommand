@@ -24,6 +24,7 @@ export const CHART: [string, string, AccountType, string, string | null][] = [
   ['1310', 'City ledger (companies)', 'asset', 'Trade receivables', null],
   ['1320', 'OTA receivable', 'asset', 'Trade receivables', null],
   ['1330', 'Restaurant sales clearing', 'asset', 'Trade receivables', null],
+  ['1340', 'Banquet ledger (events)', 'asset', 'Trade receivables', null],
   ['1400', 'Inventory: main store', 'asset', 'Inventories', null],
   ['1401', 'Inventory: kitchen', 'asset', 'Inventories', null],
   ['1402', 'Inventory: bar (liquor)', 'asset', 'Inventories', null],
@@ -64,6 +65,9 @@ export const CHART: [string, string, AccountType, string, string | null][] = [
   ['4010', 'Laundry revenue', 'income', 'Revenue from operations', 'rooms'],
   ['4100', 'Food & beverage revenue', 'income', 'Revenue from operations', 'fnb'],
   ['4200', 'Liquor revenue', 'income', 'Revenue from operations', 'bar'],
+  ['4300', 'Banquet hall and lawn rental', 'income', 'Revenue from operations', 'banquets'],
+  ['4310', 'Banquet food revenue', 'income', 'Revenue from operations', 'banquets'],
+  ['4320', 'Banquet services revenue', 'income', 'Revenue from operations', 'banquets'],
   ['4900', 'Other operating income', 'income', 'Other income', 'other'],
   ['4910', 'Profit or loss on sale of assets', 'income', 'Other income', 'admin'],
   ['5000', 'Purchases: food', 'expense', 'Cost of materials consumed', 'fnb'],
@@ -113,6 +117,8 @@ const SERVICE_ACCOUNT: Record<string, string> = {
 }
 const REVENUE: Record<string, string> = { room: '4000', extra_bed: '4000', laundry: '4010', misc: '4900', fnb: '4100' }
 const METHOD: Record<string, string> = { cash: '1100', card: '1210', upi: '1220', bank: '1200', cheque: '1200', company: '1310', ota: '1320' }
+/** A banquet bill's revenue, by the kind of each line. */
+const EVENT_REVENUE: Record<string, string> = { hall: '4300', catering: '4310', other: '4320' }
 
 export async function ensureChart(db: Db, now = new Date()) {
   for (const [code, name, type, grp, dept] of CHART) {
@@ -138,7 +144,7 @@ export async function assignStoreAccounts(db: Db) {
   }
 }
 
-export interface Party { type: 'vendor' | 'company' | 'guest' | 'staff' | 'ota'; id: string; name?: string | null }
+export interface Party { type: 'vendor' | 'company' | 'guest' | 'staff' | 'ota' | 'event'; id: string; name?: string | null }
 export interface PostLine { code: string; amount: number; dept?: string | null; party?: Party | null; ref?: string | null }   // amount: debit +, credit −
 export interface VoucherInput {
   kind: 'sales' | 'receipt' | 'purchase' | 'payment' | 'contra' | 'stock' | 'journal' | 'reversal'
@@ -303,9 +309,9 @@ export async function postPending(db: Db, now: Date) {
     }
 
     // ---------- GST documents: advances, their adjustment, credit notes ----------
-    const docs = await t.query<{ id: string; doc_type: string; number: string; issue_date: string; reservation_id: string | null; cgst_paise: string; sgst_paise: string; taxable_paise: string; total_paise: string; advance_adjusted_paise: string; lines: { sac: string | null }[]; recipient: { name: string } }>(
-      `select d.id, d.doc_type, d.number, d.issue_date::text, d.reservation_id, d.cgst_paise, d.sgst_paise, d.taxable_paise, d.total_paise, d.advance_adjusted_paise, d.lines, d.recipient
-         from tax_document d where (d.doc_type in ('receipt_voucher', 'refund_voucher', 'credit_note') or (d.doc_type = 'invoice' and d.advance_adjusted_paise > 0 and d.reservation_id is not null))
+    const docs = await t.query<{ id: string; doc_type: string; number: string; issue_date: string; reservation_id: string | null; event_id: string | null; cgst_paise: string; sgst_paise: string; taxable_paise: string; total_paise: string; advance_adjusted_paise: string; lines: { sac: string | null }[]; recipient: { name: string } }>(
+      `select d.id, d.doc_type, d.number, d.issue_date::text, d.reservation_id, d.event_id, d.cgst_paise, d.sgst_paise, d.taxable_paise, d.total_paise, d.advance_adjusted_paise, d.lines, d.recipient
+         from tax_document d where (d.doc_type in ('receipt_voucher', 'refund_voucher', 'credit_note') or (d.doc_type = 'invoice' and d.advance_adjusted_paise > 0 and (d.reservation_id is not null or d.event_id is not null)))
           and not exists (select 1 from posted_source v where v.source_type = 'tax_doc' and v.source_id = d.id) order by d.issued_at`)
     for (const d of docs) {
       const cg = n(d.cgst_paise), sg = n(d.sgst_paise)
@@ -313,6 +319,10 @@ export async function postPending(db: Db, now: Date) {
         const s = d.doc_type === 'receipt_voucher' ? 1 : -1
         await post({ kind: 'journal', date: d.issue_date, narration: `GST on advance, ${d.number}`, source: { type: 'tax_doc', id: d.id },
           lines: [{ code: '1510', amount: s * (cg + sg) }, { code: '2200', amount: -s * cg }, { code: '2201', amount: -s * sg }] })
+      } else if (d.doc_type === 'credit_note' && d.event_id) {
+        await post({ kind: 'sales', date: d.issue_date, narration: `Credit note ${d.number}`, source: { type: 'tax_doc', id: d.id }, lines: [
+          { code: d.lines[0]?.sac === '996334' ? '4310' : '4300', amount: n(d.taxable_paise) }, { code: '2200', amount: cg }, { code: '2201', amount: sg },
+          { code: '1340', amount: -n(d.total_paise), party: { type: 'event', id: d.event_id, name: d.recipient?.name } }] })
       } else if (d.doc_type === 'credit_note') {
         const rev = d.lines[0]?.sac === '996331' ? '4100' : '4000'
         await post({ kind: 'sales', date: d.issue_date, narration: `Credit note ${d.number}`, source: { type: 'tax_doc', id: d.id }, lines: [
@@ -322,10 +332,30 @@ export async function postPending(db: Db, now: Date) {
         // A stay invoice that takes in advances: the GST already paid on them comes off what this invoice owes.
         const [a] = await t.query<{ cg: string | null; sg: string | null }>(
           `select sum(case when doc_type = 'receipt_voucher' then cgst_paise else -cgst_paise end) as cg, sum(case when doc_type = 'receipt_voucher' then sgst_paise else -sgst_paise end) as sg
-             from tax_document where reservation_id = $1 and doc_type in ('receipt_voucher', 'refund_voucher')`, [d.reservation_id])
+             from tax_document where ${d.event_id ? 'event_id' : 'reservation_id'} = $1 and doc_type in ('receipt_voucher', 'refund_voucher')`, [d.event_id ?? d.reservation_id])
         await post({ kind: 'journal', date: d.issue_date, narration: `GST on advances adjusted in ${d.number}`, source: { type: 'tax_doc', id: d.id },
           lines: [{ code: '2200', amount: n(a.cg) }, { code: '2201', amount: n(a.sg) }, { code: '1510', amount: -(n(a.cg) + n(a.sg)) }] })
       }
+    }
+
+    // ---------- banquets: each event's bill, and money received or refunded ----------
+    const evInv = await t.query<{ id: string; number: string; issue_date: string; event_id: string; title: string; cgst_paise: string; sgst_paise: string; total_paise: string; lines: { kind?: string; taxable: number }[] }>(
+      `select d.id, d.number, d.issue_date::text, d.event_id, e.title, d.cgst_paise, d.sgst_paise, d.total_paise, d.lines from tax_document d join event e on e.id = d.event_id
+        where d.doc_type = 'invoice' and not exists (select 1 from posted_source v where v.source_type = 'event_inv' and v.source_id = d.id) order by d.issued_at`)
+    for (const d of evInv) {
+      await post({ kind: 'sales', date: d.issue_date, narration: `Event bill ${d.number}, ${d.title}`, source: { type: 'event_inv', id: d.id }, lines: [
+        { code: '1340', amount: n(d.total_paise), party: { type: 'event', id: d.event_id, name: d.title }, ref: d.number },
+        ...d.lines.map((l) => ({ code: EVENT_REVENUE[l.kind ?? ''] ?? '4320', amount: -n(l.taxable) })),
+        { code: '2200', amount: -n(d.cgst_paise) }, { code: '2201', amount: -n(d.sgst_paise) }] })
+    }
+    const evPay = await t.query<{ id: string; event_id: string; title: string; number: string; method: string; amount_paise: string; business_date: string; reference: string | null }>(
+      `select p.id, p.event_id, e.title, e.number, p.method, p.amount_paise, p.business_date::text, p.reference from event_payment p join event e on e.id = p.event_id
+        where not exists (select 1 from posted_source v where v.source_type = 'event_pay' and v.source_id = p.id) order by p.received_at`)
+    for (const p of evPay) {
+      const amt = n(p.amount_paise)
+      await post({ kind: amt > 0 ? 'receipt' : 'payment', date: p.business_date, narration: `${amt > 0 ? 'Received for' : 'Refunded on'} ${p.number}, ${p.title}`, source: { type: 'event_pay', id: p.id }, lines: [
+        { code: p.method === 'bank' || p.method === 'cheque' ? bank : METHOD[p.method] ?? '1100', amount: amt, ref: p.reference },
+        { code: '1340', amount: -amt, party: { type: 'event', id: p.event_id, name: p.title }, ref: p.number }] })
     }
 
     // ---------- purchases ----------
