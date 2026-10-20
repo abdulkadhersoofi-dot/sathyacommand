@@ -233,7 +233,21 @@ export function payablesRoutes(app: FastifyInstance, ctx: Ctx) {
         [vendorId, v.tds_code, `${fy.slice(0, 4)}-04-01`, `${Number(fy.slice(0, 4)) + 1}-03-31`, fy])
       tds = tdsOnPayment(ctx.tax, { code: v.tds_code, payeeType: v.payee_type, hasPan: !!v.pan, amount: base, paidEarlierThisYear: Math.round(Number(y.paid ?? 0)), alreadyTaxedEarlier: Number(y.taxed ?? 0) })
     }
-    return { vendor: v, allocs, gross, tdsBase: tds.base, tds: tds.tds, rate: tds.rate, section: tds.section, code: tds.deduct ? v.tds_code : null, reason: tds.reason, net: gross - tds.tds }
+    // A lower-deduction certificate (section 197): its rate, up to its limit, while it is valid.
+    let ldcId: string | null = null, reasonCode: 'A' | 'C' | null = !v.pan && tds.deduct ? 'C' : null
+    if (tds.deduct && v.pan) {
+      const [l] = await t.query<{ id: string; cert_no: string; rate: string; limit_paise: string; used: string }>(
+        `select l.id, l.cert_no, l.rate, l.limit_paise, coalesce((select sum(e.base_paise) from tds_entry e where e.ldc_id = l.id), 0) as used
+           from ldc l where l.vendor_id = $1 and replace(l.section, '-', '') = replace($2, '-', '') and $3 between l.valid_from and l.valid_to order by l.valid_from desc limit 1`, [vendorId, tds.section, payDate])
+      const room = l ? Number(l.limit_paise) - Number(l.used) : 0
+      if (l && room > 0) {
+        const within = Math.min(tds.base, room)
+        const amount = Math.round((within * Number(l.rate)) / 100) + Math.round(((tds.base - within) * tds.rate) / 100)
+        tds = { ...tds, tds: amount, rate: within === tds.base ? Number(l.rate) : Number(((amount * 100) / tds.base).toFixed(2)), reason: `Lower deduction certificate ${l.cert_no} at ${Number(l.rate)}%${within < tds.base ? ' up to its limit' : ''}` }
+        ldcId = l.id; reasonCode = 'A'
+      }
+    }
+    return { vendor: v, allocs, gross, tdsBase: tds.base, tds: tds.tds, rate: tds.rate, section: tds.section, code: tds.deduct ? v.tds_code : null, reason: tds.reason, net: gross - tds.tds, ldcId, reasonCode }
   }
 
   app.post('/api/payments/preview', async (req) => {
@@ -241,7 +255,7 @@ export function payablesRoutes(app: FastifyInstance, ctx: Ctx) {
     const b = (req.body ?? {}) as { vendorId?: string; billIds?: string[]; payDate?: string }
     return db.tx(async (t) => {
       const w = await workOut(t, b.vendorId!, b.billIds ?? [], b.payDate ?? istDay(now()))
-      return { gross: w.gross, tdsBase: w.tdsBase, tds: w.tds, rate: w.rate, section: w.section, reason: w.reason, net: w.net }
+      return { gross: w.gross, tdsBase: w.tdsBase, tds: w.tds, rate: w.rate, section: w.section, reason: w.reason, net: w.net, lowerDeduction: !!w.ldcId }
     })
   })
 
@@ -260,9 +274,9 @@ export function payablesRoutes(app: FastifyInstance, ctx: Ctx) {
       }
       const id = newId('VP'), number = await nextSeriesNumber(t, 'vendor_payment', financialYear(payDate), 'PAY')
       const needsApproval = !can(who, 'purchase.approve') && w.net > (await roleLimit(t, who, 'vendor_payment_needs_approval_above')) * 100
-      await t.query(`insert into vendor_payment (id, number, vendor_id, pay_date, mode, reference, gross_paise, tds_paise, tds_code, tds_section, tds_base_paise, tds_rate, net_paise, status, created_by, created_at)
-                     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
-        [id, number, b.vendorId, payDate, b.mode, b.reference?.trim() || null, w.gross, w.tds, w.code, w.code ? w.section : null, w.tdsBase, w.code ? w.rate : null, w.net, needsApproval ? 'pending_approval' : 'approved', who.userId, now()])
+      await t.query(`insert into vendor_payment (id, number, vendor_id, pay_date, mode, reference, gross_paise, tds_paise, tds_code, tds_section, tds_base_paise, tds_rate, net_paise, status, created_by, created_at, ldc_id)
+                     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+        [id, number, b.vendorId, payDate, b.mode, b.reference?.trim() || null, w.gross, w.tds, w.code, w.code ? w.section : null, w.tdsBase, w.code ? w.rate : null, w.net, needsApproval ? 'pending_approval' : 'approved', who.userId, now(), w.ldcId])
       for (const a of w.allocs) await t.query('insert into payment_alloc (payment_id, bill_id, amount_paise) values ($1,$2,$3)', [id, a.billId, a.amount])
       let approvalId: string | null = null
       if (needsApproval) {
@@ -279,7 +293,7 @@ export function payablesRoutes(app: FastifyInstance, ctx: Ctx) {
     const { id, action } = req.params as { id: string; action: string }
     const b = (req.body ?? {}) as { reference?: string }
     return db.tx(async (t) => {
-      const [p] = await t.query<{ status: string; number: string; vendor_id: string; pay_date: string; mode: string; tds_paise: string; tds_code: string | null; tds_section: string | null; tds_base_paise: string; tds_rate: string | null; net_paise: string; reference: string | null }>(
+      const [p] = await t.query<{ status: string; number: string; vendor_id: string; pay_date: string; mode: string; tds_paise: string; tds_code: string | null; tds_section: string | null; tds_base_paise: string; tds_rate: string | null; net_paise: string; reference: string | null; ldc_id: string | null }>(
         'select *, pay_date::text from vendor_payment where id = $1 for update', [id])
       if (!p) throw new HttpError(404, 'No such payment.')
       if (action === 'paid') {
@@ -299,8 +313,8 @@ export function payablesRoutes(app: FastifyInstance, ctx: Ctx) {
         }
         if (Number(p.tds_paise) > 0) {
           const [v] = await t.query<{ pan: string | null }>('select pan from vendor where id = $1', [p.vendor_id])
-          await t.query('insert into tds_entry (id, vendor_id, payment_id, code, section, fy, quarter, base_paise, rate, tds_paise, deducted_on, pan) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)',
-            [newId('TD'), p.vendor_id, id, p.tds_code, p.tds_section, financialYear(p.pay_date), quarterOf(p.pay_date), p.tds_base_paise, p.tds_rate, p.tds_paise, p.pay_date, v.pan])
+          await t.query('insert into tds_entry (id, vendor_id, payment_id, code, section, fy, quarter, base_paise, rate, tds_paise, deducted_on, pan, ldc_id, reason_code) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)',
+            [newId('TD'), p.vendor_id, id, p.tds_code, p.tds_section, financialYear(p.pay_date), quarterOf(p.pay_date), p.tds_base_paise, p.tds_rate, p.tds_paise, p.pay_date, v.pan, p.ldc_id, p.ldc_id ? 'A' : v.pan ? null : 'C'])
         }
       } else if (action === 'cancel') {
         if (!['pending_approval', 'approved'].includes(p.status)) throw new HttpError(409, `It is ${p.status}: a paid payment is reversed in accounts.`)

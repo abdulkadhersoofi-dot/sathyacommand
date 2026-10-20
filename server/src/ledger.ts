@@ -37,6 +37,7 @@ export const CHART: [string, string, AccountType, string, string | null][] = [
   ['1520', 'TDS deducted by customers', 'asset', 'Taxes recoverable', null],
   ['1521', 'TCS paid on purchases (TASMAC)', 'asset', 'Taxes recoverable', null],
   ['1522', 'GST TCS deducted by OTAs', 'asset', 'Taxes recoverable', null],
+  ['1540', 'Advance income tax paid', 'asset', 'Taxes recoverable', null],
   ['2100', 'Sundry creditors (vendors)', 'liability', 'Trade payables', null],
   ['2110', 'Goods received, bill pending', 'liability', 'Trade payables', null],
   ['2120', 'TASMAC payable', 'liability', 'Trade payables', null],
@@ -81,6 +82,7 @@ export const CHART: [string, string, AccountType, string, string | null][] = [
   ['6070', 'Cash shortage and excess', 'expense', 'Other expenses', 'admin'],
   ['6080', 'Round off', 'expense', 'Other expenses', 'admin'],
   ['6090', 'Input tax credit reversed (rule 42)', 'expense', 'Other expenses', 'admin'],
+  ['6095', 'Interest and fees on late taxes', 'expense', 'Other expenses', 'admin'],
   ['6100', 'Salaries and wages', 'expense', 'Employee benefits expense', 'admin'],
   ['6200', 'Depreciation', 'expense', 'Depreciation and amortisation', 'admin'],
 ]

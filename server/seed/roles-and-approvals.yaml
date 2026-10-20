@@ -82,6 +82,7 @@ sign_in:
 #   cash.manage      bank the cash, petty cash float and its expenses
 #   gst.view         GST return data: GSTR-1, GSTR-3B, GSTR-2B matching (read)
 #   gst.file         import GSTR-2B, accept or reject invoices (IMS), record returns as filed
+#   tds.manage       TDS deposits (challans), lower-deduction certificates, quarterly statements, advance tax
 #   '*'              everything, including deciding approvals
 roles:
   managing_director:
@@ -104,7 +105,7 @@ roles:
     permissions: [front_desk, night_audit]
     limits: {}
   accounts:
-    permissions: [invoice.view, invoice.credit_note, einvoice.generate, licences.edit, tax.vat, compliance.view, stores.view, vendors.manage, vendors.bank, purchase.bill, purchase.pay, payables.view, accounts.view, accounts.post, receivables.view, receivables.manage, bank.reconcile, cash.manage, gst.view, gst.file]
+    permissions: [invoice.view, invoice.credit_note, einvoice.generate, licences.edit, tax.vat, compliance.view, stores.view, vendors.manage, vendors.bank, purchase.bill, purchase.pay, payables.view, accounts.view, accounts.post, receivables.view, receivables.manage, bank.reconcile, cash.manage, gst.view, gst.file, tds.manage]
     limits: { vendor_payment_needs_approval_above: 25000, delete_vouchers: false }
   stores:
     permissions: [stores.view, stores.manage, vendors.manage, purchase.indent, purchase.order, stores.receive, stores.issue, stores.count, stores.breakage]
