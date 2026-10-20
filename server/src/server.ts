@@ -15,6 +15,7 @@ import { ensureLinenLaundryAreas } from './routes/linen-laundry'
 import { ensureStores } from './routes/stores'
 import { ensureEngineering, sweepEngineering } from './eng-core'
 import { sweepSecurity } from './routes/security'
+import { sweepPayables } from './routes/payables'
 
 // DATABASE_URL set → PostgreSQL (production). Otherwise a local PGlite database in ./data.
 // MD_MOBILE gives the Managing Director's login its mobile number on first start.
@@ -39,5 +40,6 @@ app.log.info({ engine: db.engine, migrationsApplied: applied, seeded }, 'databas
 setInterval(() => {
   sweepEngineering(db, new Date()).catch((e) => app.log.error(e))
   sweepSecurity(db, new Date()).catch((e) => app.log.error(e))
+  sweepPayables(db, new Date()).catch((e) => app.log.error(e))
 }, 60_000)
 await app.listen({ host: '0.0.0.0', port: Number(process.env.PORT ?? 8080) })

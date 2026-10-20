@@ -4,11 +4,13 @@ import type { Outbox } from '../live/outbox'
 import { Workspace, type View } from '../ui/workspace'
 import { ItemsView, StoresView, type Item, type Store } from './items'
 import { IndentsView, MarketView, PosView } from './purchase'
+import { BillsView, PaymentsView, ReceiptsView } from './payables'
 import { RatesView, VendorsView } from './vendors'
 
-// Stores and purchase: indents, purchase orders, the market list, items, vendors, rate contracts and the stores.
+// Stores and purchase: indents, purchase orders, the market list, goods received, vendor bills and payments,
+// items, vendors, rate contracts and the stores.
 
-type Tab = 'indents' | 'pos' | 'market' | 'items' | 'vendors' | 'rates' | 'stores'
+type Tab = 'indents' | 'pos' | 'market' | 'receipts' | 'bills' | 'payments' | 'items' | 'vendors' | 'rates' | 'stores'
 
 export class InventoryWorkspace extends Workspace<Tab> {
   protected views: Record<Tab, View>
@@ -16,13 +18,13 @@ export class InventoryWorkspace extends Workspace<Tab> {
 
   constructor(api: Api, me: Me, outbox: Outbox, onClose: () => void) {
     super(api, me, outbox, 'Stores & purchase', onClose)
-    this.views = { indents: new IndentsView(this), pos: new PosView(this), market: new MarketView(this), items: new ItemsView(this), vendors: new VendorsView(this), rates: new RatesView(this), stores: new StoresView(this) }
-    this.tab = this.tabs()[0][0]
+    this.views = { indents: new IndentsView(this), pos: new PosView(this), market: new MarketView(this), receipts: new ReceiptsView(this), bills: new BillsView(this), payments: new PaymentsView(this), items: new ItemsView(this), vendors: new VendorsView(this), rates: new RatesView(this), stores: new StoresView(this) }
+    this.tab = this.tabs()[0]?.[0] ?? 'items'
   }
 
   static allowed(me: Me) {
     const p = me.permissions
-    return ['*', 'stores.view', 'stores.manage', 'vendors.manage', 'purchase.indent', 'purchase.order', 'purchase.approve', 'indent.approve'].some((x) => p.includes(x))
+    return ['*', 'stores.view', 'stores.manage', 'vendors.manage', 'purchase.indent', 'purchase.order', 'purchase.approve', 'indent.approve', 'stores.receive', 'purchase.bill', 'purchase.pay', 'payables.view'].some((x) => p.includes(x))
   }
 
   tabs(): [Tab, string][] {
@@ -30,6 +32,9 @@ export class InventoryWorkspace extends Workspace<Tab> {
     if (this.can('purchase.indent', 'indent.approve', 'purchase.order')) t.push(['indents', 'Indents'])
     if (this.can('purchase.order', 'purchase.approve', 'stores.view')) t.push(['pos', 'Purchase orders'])
     if (this.can('purchase.order')) t.push(['market', 'Market list'])
+    if (this.can('stores.receive', 'purchase.order', 'stores.view')) t.push(['receipts', 'Goods received'])
+    if (this.can('purchase.bill', 'purchase.approve', 'payables.view')) t.push(['bills', 'Bills'])
+    if (this.can('purchase.pay', 'payables.view')) t.push(['payments', 'Payments'])
     if (this.can('stores.view', 'stores.manage', 'vendors.manage')) t.push(['items', 'Items'], ['vendors', 'Vendors'], ['rates', 'Rates'], ['stores', 'Stores'])
     return t
   }

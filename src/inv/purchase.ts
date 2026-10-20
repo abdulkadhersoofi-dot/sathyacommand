@@ -2,6 +2,7 @@ import { esc, toast, tonePill } from '../ui/dom'
 import { checked, val } from '../ui/form-modal'
 import type { WorkspaceHost } from '../ui/workspace'
 import { rupees, type Item, type Store } from './items'
+import { receivePo } from './payables'
 
 // Indents (departments ask), purchase orders (stores order, approved within limits, printed and sent)
 // and the market list (perishables below their level, ordered at the best rate in one step).
@@ -149,6 +150,7 @@ export class PosView {
     const acts = [btn('print', 'Print / PDF')]
     if (order && po.status === 'draft') acts.push(btn('submit', 'Submit', true))
     if (order && po.status === 'approved') acts.push(btn('send', 'Mark sent to vendor', true))
+    if (this.h.can('stores.receive') && ['approved', 'sent', 'partly_received'].includes(po.status)) acts.push(btn('receive', 'Receive goods…', po.status !== 'approved'))
     if ((order || this.h.can('purchase.approve')) && ['draft', 'pending_approval', 'approved', 'sent'].includes(po.status)) acts.push(btn('cancel', 'Cancel…'))
     const gst = Number(po.gst_paise)
     this.h.modal.open(`${po.number} · ${po.vendor}`, `<div class="room-head">${tonePill(...(PO_STATE[po.status] ?? [po.status, '--muted']))}${po.igst ? tonePill('IGST', '--muted') : ''}</div>
@@ -163,6 +165,7 @@ export class PosView {
       if (!a) return
       try {
         if (a === 'print') { await this.h.api.openDocument(`/api/pos/${id}/print`); return }
+        if (a === 'receive') { await receivePo(this.h, id, async () => { await this.load(); this.h.render() }); return }
         if (a === 'cancel') {
           this.h.modal.open(`Cancel ${po.number}`, '<div class="form-grid"><label class="span2">Why<input name="reason" maxlength="200"></label></div>', 'Cancel order', async (f) => {
             await this.h.api.post(`/api/pos/${id}/cancel`, { reason: val(f, 'reason') }); await this.load(); this.h.render(); return 'Cancelled'

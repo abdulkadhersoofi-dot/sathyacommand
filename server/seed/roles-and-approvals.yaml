@@ -57,6 +57,10 @@ sign_in:
 #   indent.approve   approve or turn down indents
 #   purchase.order   raise, send and cancel purchase orders; turn indents and the market list into POs
 #   purchase.approve approve purchase orders above the raiser's purchase_order limit (up to the approver's own)
+#   stores.receive   receive goods at the store (count, quality check, batch and expiry)
+#   purchase.bill    enter vendor bills and pass matched ones for payment
+#   purchase.pay     pay vendors (TDS worked out); above vendor_payment_needs_approval_above the GM approves
+#   payables.view    bills, payments, MSME due dates and TDS (read)
 #   compliance.view  the compliance calendar (licences, contracts, statutory checks) and utility costs
 #   (anyone signed in can report a fault and follow the tickets they reported)
 #   menu.edit        add and edit menu items and tables (price changes go to menu.price for approval)
@@ -71,7 +75,7 @@ roles:
     permissions: ['*']
     limits: unlimited
   general_manager:
-    permissions: [inventory.edit, devices.approve, users.manage, front_desk, folio.reverse, discount.approve, night_audit, invoice.view, invoice.credit_note, site.edit, site.publish, fnb.order, fnb.void, fnb.bill, fnb.discount, menu.edit, menu.price, bar.settings, bar.stock, bar.approve, kitchen.stock, kitchen.approve, food_cost.view, printers.manage, licences.edit, hk.view, hk.manage, hk.inspect, staff.track, attendance.view, roster.manage, broadcast.send, staff.settings, eng.manage, eng.approve, compliance.view, security.view, security.manage, emergency.start, stores.view, stores.manage, vendors.manage, vendors.bank, purchase.indent, indent.approve, purchase.order, purchase.approve]
+    permissions: [inventory.edit, devices.approve, users.manage, front_desk, folio.reverse, discount.approve, night_audit, invoice.view, invoice.credit_note, site.edit, site.publish, fnb.order, fnb.void, fnb.bill, fnb.discount, menu.edit, menu.price, bar.settings, bar.stock, bar.approve, kitchen.stock, kitchen.approve, food_cost.view, printers.manage, licences.edit, hk.view, hk.manage, hk.inspect, staff.track, attendance.view, roster.manage, broadcast.send, staff.settings, eng.manage, eng.approve, compliance.view, security.view, security.manage, emergency.start, stores.view, stores.manage, vendors.manage, vendors.bank, purchase.indent, indent.approve, purchase.order, purchase.approve, payables.view]
     limits: { discount_percent: 25, breakage_per_entry: 10000, refund: 50000, comp_room_nights: 5, purchase_order: 500000, rate_override_below_floor: true }
   operations_manager:
     permissions: [front_desk, folio.reverse, discount.approve, site.edit, fnb.order, fnb.void, fnb.bill, fnb.discount, hk.view, hk.manage, hk.inspect, staff.track, attendance.view, roster.manage, broadcast.send, eng.manage, eng.approve, compliance.view, security.view, security.manage, emergency.start, purchase.indent, indent.approve]
@@ -86,10 +90,10 @@ roles:
     permissions: [front_desk, night_audit]
     limits: {}
   accounts:
-    permissions: [invoice.view, invoice.credit_note, einvoice.generate, licences.edit, tax.vat, compliance.view, stores.view, vendors.manage, vendors.bank]
+    permissions: [invoice.view, invoice.credit_note, einvoice.generate, licences.edit, tax.vat, compliance.view, stores.view, vendors.manage, vendors.bank, purchase.bill, purchase.pay, payables.view]
     limits: { vendor_payment_needs_approval_above: 25000, delete_vouchers: false }
   stores:
-    permissions: [stores.view, stores.manage, vendors.manage, purchase.indent, purchase.order]
+    permissions: [stores.view, stores.manage, vendors.manage, purchase.indent, purchase.order, stores.receive]
     limits: { purchase_order: 25000, stock_adjustment: 0 }
   executive_housekeeper:
     permissions: [hk.view, hk.attend, hk.inspect, hk.manage, attendance.view, roster.manage, broadcast.send, purchase.indent]

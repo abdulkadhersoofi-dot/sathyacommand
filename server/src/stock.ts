@@ -23,3 +23,58 @@ export async function stockOf(t: Db, item: StockItem, storeId: string): Promise<
   if (ledger === 'own') return Number((await t.query<{ q: string | null }>('select sum(qty) as q from stock_move where item_id = $1 and store_id = $2', [item.id, storeId]))[0]?.q ?? 0)
   return 0
 }
+
+export type MoveKind = 'opening' | 'receipt' | 'issue' | 'transfer_in' | 'transfer_out' | 'return' | 'count_adjust' | 'breakage' | 'expired'
+export interface Move {
+  item: StockItem & { name: string }; storeId: string; kind: MoveKind
+  qty: number                 // stock units: in +, out -
+  value: number               // paise, signed like qty
+  ref: string | null; note?: string | null; vendor?: string | null; userId: string; at: Date; day: string
+}
+
+const BOOK_NAME: Record<string, string> = { kitchen: 'kitchen ingredient', bar: 'bar brand', spares: 'spare part', linen: 'linen item' }
+let seq = 0
+const moveId = (p: string) => `${p}-${Date.now().toString(36).toUpperCase()}${(seq++ % 1296).toString(36).toUpperCase().padStart(2, '0')}${Math.random().toString(36).slice(2, 5).toUpperCase()}`
+
+/**
+ * Posts a movement into the book the store keeps: its own ledger, or the kitchen, bar, spares or linen
+ * book (so a receipt into the kitchen store is a kitchen receipt, with the ingredient's cost updated).
+ */
+export async function moveStock(t: Db, m: Move) {
+  const ledger = await storeLedger(t, m.storeId)
+  if (!ledger) throw new Error(`Unknown store ${m.storeId}`)
+  const inward = m.qty > 0
+  const link = { kitchen: m.item.ingredient_id, bar: m.item.brand_id, spares: m.item.spare_id, linen: m.item.linen_item_id }[ledger as 'kitchen']
+  if (ledger !== 'own' && !link) {
+    const err = new Error(`${m.item.name} is not linked to a ${BOOK_NAME[ledger]}: link it on the item, or use the main store.`) as Error & { statusCode: number }
+    err.statusCode = 409
+    throw err
+  }
+  if (ledger === 'own') {
+    await t.query('insert into stock_move (id, item_id, store_id, business_date, kind, qty, value_paise, ref, note, by_user, at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',
+      [moveId('SM'), m.item.id, m.storeId, m.day, m.kind, m.qty, Math.round(m.value), m.ref, m.note ?? null, m.userId, m.at])
+  } else if (ledger === 'kitchen') {
+    const kind = m.kind === 'count_adjust' ? 'count_adjust' : inward ? 'receipt' : m.kind === 'issue' || m.kind === 'transfer_out' ? 'count_adjust' : 'wastage'
+    await t.query('insert into kitchen_stock_move (id, ingredient_id, business_date, kind, qty, cost_paise, ref, note, by_user, at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
+      [moveId('KM'), link, m.day, kind, m.qty, Math.round(m.value), m.ref, m.note ?? null, m.userId, m.at])
+    if (inward && m.value > 0 && m.kind === 'receipt') await t.query('update ingredient set cost_per_unit = $2, placeholder = false where id = $1', [link, m.value / m.qty])
+  } else if (ledger === 'bar') {
+    const kind = m.kind === 'breakage' ? 'breakage' : inward && m.kind !== 'count_adjust' ? 'purchase' : 'count_adjust'
+    await t.query('insert into bar_stock_move (id, brand_id, business_date, kind, ml, ref, note, by_user, at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+      [moveId('BM'), link, m.day, kind, Math.round(m.qty), m.ref, m.note ?? null, m.userId, m.at])
+  } else if (ledger === 'spares') {
+    if (inward && m.kind === 'receipt') {
+      const [s] = await t.query<{ cost_paise: string; stock: string }>('select s.cost_paise, coalesce((select sum(qty) from spare_move x where x.spare_id = s.id), 0) as stock from spare s where s.id = $1 for update', [link])
+      const stock = Math.max(0, Number(s.stock))
+      await t.query('update spare set cost_paise = $2 where id = $1', [link, ((stock * Number(s.cost_paise) + m.value) / (stock + m.qty)).toFixed(2)])
+    }
+    const kind = m.kind === 'count_adjust' || m.kind === 'breakage' || m.kind === 'expired' ? 'adjust' : inward ? 'receive' : 'issue'
+    await t.query('insert into spare_move (id, spare_id, kind, qty, value_paise, vendor, note, by_user, at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+      [moveId('SM'), link, kind, m.qty, Math.round(m.value), m.vendor ?? null, m.note ?? (m.ref ? `Ref ${m.ref}` : null), m.userId, m.at])
+  } else if (ledger === 'linen') {
+    if (!Number.isInteger(m.qty)) { const err = new Error(`${m.item.name}: linen is counted in whole pieces.`) as Error & { statusCode: number }; err.statusCode = 400; throw err }
+    const kind = m.kind === 'count_adjust' ? 'count_adjust' : inward ? 'purchase' : 'discard'
+    await t.query('insert into linen_move (id, item_id, kind, qty, vendor, note, business_date, by_user, at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+      [moveId('LM'), link, kind, Math.abs(m.qty) * (kind === 'count_adjust' ? Math.sign(m.qty) : 1), m.vendor ?? null, m.note ?? (m.ref ? `Ref ${m.ref}` : null), m.day, m.userId, m.at])
+  }
+}

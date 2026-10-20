@@ -593,10 +593,12 @@ if (api && me && liveAdapter) {
   void checkEmergency()
 
   // Stores & purchase: stores, accounts and managers.
-  invWs = new InventoryWorkspace(api, me, outbox, () => renderSide())
-  const invBtn = $('#btn-inv')
-  invBtn.hidden = !InventoryWorkspace.allowed(me)
-  invBtn.addEventListener('click', () => { if (invWs!.open) invWs!.hide(); else { hideWorkspaces(); void invWs!.show() } })
+  if (InventoryWorkspace.allowed(me)) {
+    invWs = new InventoryWorkspace(api, me, outbox, () => renderSide())
+    const invBtn = $('#btn-inv')
+    invBtn.hidden = false
+    invBtn.addEventListener('click', () => { if (invWs!.open) invWs!.hide(); else { hideWorkspaces(); void invWs!.show() } })
+  }
   setTab('arrivals')
 }
 store.load().then(renderAll).catch((err) => toast(`Couldn't load HMS data: ${err.message}`))

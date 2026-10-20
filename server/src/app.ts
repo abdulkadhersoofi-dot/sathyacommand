@@ -29,6 +29,8 @@ import { utilityRoutes } from './routes/utilities'
 import { securityRoutes } from './routes/security'
 import { storesRoutes } from './routes/stores'
 import { purchaseRoutes } from './routes/purchase'
+import { receiptRoutes } from './routes/receipts'
+import { payablesRoutes } from './routes/payables'
 
 export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boolean; appDir?: string } = {}) {
   const ctx: Ctx = {
@@ -45,7 +47,7 @@ export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boo
   app.setErrorHandler((err, _req, reply) => {
     if (err instanceof HttpError) return reply.status(err.status).send({ error: err.message, ...err.extra })
     const status = (err as { statusCode?: number }).statusCode ?? 500
-    if (status === 500) app.log.error(err)
+    if (status === 500) { app.log.error(err); if (process.env.DEBUG_500) console.error(err) }
     return reply.status(status).send({ error: status === 500 ? 'Something went wrong on the server.' : err.message })
   })
 
@@ -74,6 +76,8 @@ export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boo
   securityRoutes(app, ctx)
   storesRoutes(app, ctx)
   purchaseRoutes(app, ctx)
+  receiptRoutes(app, ctx)
+  payablesRoutes(app, ctx)
 
   // Serve the built 3D app and front desk screens from the same address as the API.
   if (opts.appDir && existsSync(opts.appDir)) app.register(fastifyStatic, { root: opts.appDir, index: 'index.html' })
