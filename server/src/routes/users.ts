@@ -31,7 +31,7 @@ export function userRoutes(app: FastifyInstance, ctx: Ctx) {
   app.post('/api/users', async (req, reply) => {
     const who = await requireCaller(ctx, req)
     if (!can(who, 'users.manage')) throw new HttpError(403, 'You cannot add staff logins.')
-    const b = req.body as { name?: string; mobile?: string; roles?: string[] }
+    const b = req.body as { name?: string; mobile?: string; roles?: string[]; accessDays?: number }
     if (!b?.name?.trim()) throw new HttpError(400, 'Give the person\'s name.')
     const mobile = normaliseMobile(b.mobile ?? '')
     const roles = await checkRoles(b.roles, who.permissions.has('*'))
@@ -39,10 +39,14 @@ export function userRoutes(app: FastifyInstance, ctx: Ctx) {
       const [dup] = await t.query('select 1 from app_user where mobile = $1', [mobile])
       if (dup) throw new HttpError(409, 'Someone already has a login with that mobile number.')
       const id = 'u-' + randomUUID().slice(0, 8)
-      await t.query('insert into app_user (id, name, mobile) values ($1, $2, $3)', [id, b.name!.trim(), mobile])
+      // The CA's login ends by itself (30 days unless set, at most 90): read-only access for the audit.
+      const auditor = roles.includes('external_auditor')
+      const days = auditor ? Math.min(90, Math.max(1, Number(b.accessDays ?? (ctx.roles.roles.external_auditor as { access_expires_days?: number } | undefined)?.access_expires_days ?? 30))) : null
+      const until = days ? new Date(ctx.now().getTime() + days * 86_400_000) : null
+      await t.query('insert into app_user (id, name, mobile, access_until) values ($1, $2, $3, $4)', [id, b.name!.trim(), mobile, until])
       for (const r of roles) await t.query('insert into user_role (user_id, role_id) values ($1, $2)', [id, r])
-      await appendAudit(t, { actor: who, action: 'user.create', entity: { type: 'user', id }, after: { name: b.name, roles } }, ctx.now())
-      return reply.status(201).send({ id })
+      await appendAudit(t, { actor: who, action: 'user.create', entity: { type: 'user', id }, after: { name: b.name, roles, accessUntil: until } }, ctx.now())
+      return reply.status(201).send({ id, accessUntil: until })
     })
   })
 
@@ -87,5 +91,19 @@ export function userRoutes(app: FastifyInstance, ctx: Ctx) {
     if (!res.length) throw new HttpError(404, 'No such user.')
     await appendAudit(ctx.db, { actor: who, action: 'user.unlock', entity: { type: 'user', id } }, ctx.now())
     return { ok: true }
+  })
+
+  // Extending (or ending) a time-limited login, such as the CA's.
+  app.put('/api/users/:id/access', async (req) => {
+    const who = await requireCaller(ctx, req)
+    if (!can(who, 'users.manage')) throw new HttpError(403, 'You cannot change logins.')
+    const { id } = req.params as { id: string }
+    const days = Number((req.body as { days?: number } | null)?.days)
+    if (!(days >= 0 && days <= 90)) throw new HttpError(400, 'Days from today: 0 (ends now) to 90.')
+    const until = new Date(ctx.now().getTime() + days * 86_400_000)
+    const [u] = await ctx.db.query<{ id: string }>('update app_user set access_until = $2 where id = $1 and access_until is not null returning id', [id, until])
+    if (!u) throw new HttpError(404, 'No time-limited login with that id.')
+    await appendAudit(ctx.db, { actor: who, action: 'user.access', entity: { type: 'user', id }, after: { accessUntil: until } }, ctx.now())
+    return { id, accessUntil: until }
   })
 }

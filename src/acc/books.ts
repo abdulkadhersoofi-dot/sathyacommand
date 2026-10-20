@@ -75,14 +75,17 @@ export class TrialBalanceView {
   html() {
     const d = this.d!, ok = d.totals.closingDebitPaise === d.totals.closingCreditPaise
     let grp = ''
-    return `${rangeBar(this.h, `<span class="small">${tonePill(ok ? 'Balanced' : 'Does not balance', ok ? '--st-vacant' : '--st-departing')}</span>`)}
+    return `${rangeBar(this.h, `<span class="small">${tonePill(ok ? 'Balanced' : 'Does not balance', ok ? '--st-vacant' : '--st-departing')}</span>${this.h.can('accounts.view') ? '<button type="button" class="btn" data-tally>Tally file (XML)</button>' : ''}`)}
       <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Account</th><th class="n">Opening</th><th class="n">Debit</th><th class="n">Credit</th><th class="n">Closing</th></tr></thead><tbody>
       ${d.rows.map((r) => `${r.grp !== grp ? `<tr class="acc-grp"><td colspan="5">${esc((grp = r.grp))}</td></tr>` : ''}<tr data-ledger="${esc(r.code)}" class="acc-click"><td><span class="mono">${esc(r.code)}</span> ${esc(r.name)}</td>
         <td class="n">${drcr(r.openingPaise)}</td><td class="n">${r.debitPaise ? money(r.debitPaise) : ''}</td><td class="n">${r.creditPaise ? money(r.creditPaise) : ''}</td><td class="n"><b>${drcr(r.closingPaise)}</b></td></tr>`).join('')}
       </tbody><tfoot><tr><td>Total</td><td></td><td class="n">${money(d.totals.debitPaise)}</td><td class="n">${money(d.totals.creditPaise)}</td><td class="n">${money(d.totals.closingDebitPaise)} Dr · ${money(d.totals.closingCreditPaise)} Cr</td></tr></tfoot></table></div>`
   }
   async change(el: HTMLElement) { if (!rangeChange(this.h, el)) return false; await this.load(); return true }
-  async click(el: HTMLElement) { const c = el.closest<HTMLElement>('[data-ledger]')?.dataset.ledger; if (c) this.h.openLedger(c); return false }
+  async click(el: HTMLElement) {
+    if (el.closest('[data-tally]')) { await (await import('./extra')).downloadTally(this.h); return false }
+    const c = el.closest<HTMLElement>('[data-ledger]')?.dataset.ledger; if (c) this.h.openLedger(c); return false
+  }
 }
 
 export class LedgerView {

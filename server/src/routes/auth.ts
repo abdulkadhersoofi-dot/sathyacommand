@@ -28,7 +28,7 @@ async function loadUser(ctx: Ctx, where: string, param: string): Promise<UserRow
             coalesce(array_agg(ur.role_id) filter (where ur.role_id is not null), '{}') as roles,
             coalesce(bool_or(r.god_mode), false) as god
        from app_user u left join user_role ur on ur.user_id = u.id left join role r on r.id = ur.role_id
-      where ${where} and u.active group by u.id`, [param])
+      where ${where} and u.active and (u.access_until is null or u.access_until > now()) group by u.id`, [param])
   return u
 }
 
@@ -58,7 +58,7 @@ export async function requireCaller(ctx: Ctx, req: FastifyRequest, opts: { allow
   if (!token) throw new HttpError(401, 'Sign in first.')
   const [s] = await ctx.db.query<{ id: string; user_id: string; device_id: string | null; scope: 'full' | 'enroll_2fa'; idle_minutes: number }>(
     `select s.id, s.user_id, s.device_id, s.scope, s.idle_minutes from user_session s join app_user u on u.id = s.user_id
-      where s.token_hash = $1 and s.revoked_at is null and s.expires_at > $2 and u.active`, [sha(token), ctx.now()])
+      where s.token_hash = $1 and s.revoked_at is null and s.expires_at > $2 and u.active and (u.access_until is null or u.access_until > $2)`, [sha(token), ctx.now()])
   if (!s) throw new HttpError(401, 'Your session has ended. Sign in again.')
   if (s.scope === 'enroll_2fa' && !opts.allowEnroll) throw new HttpError(403, 'Set up your authenticator app to continue.', { stage: 'enroll_2fa' })
   await ctx.db.query('update user_session set expires_at = $2 where id = $1', [s.id, new Date(ctx.now().getTime() + s.idle_minutes * 60_000)])

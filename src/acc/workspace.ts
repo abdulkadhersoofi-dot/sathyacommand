@@ -7,10 +7,11 @@ import { BanksView, CashView, ReceivablesView } from './money'
 import { CreditsView, OtaView } from './credits'
 import { GstView } from './gst'
 import { TdsView } from './tds'
+import { AssetsView, BudgetView, VatView } from './extra'
 
 // Accounts: the books the resort's own records post into.
 
-type Tab = 'daybook' | 'tb' | 'ledger' | 'pnl' | 'bs' | 'journal' | 'chart' | 'periods' | 'receivables' | 'banks' | 'cash' | 'ota' | 'credits' | 'gst' | 'tds'
+type Tab = 'daybook' | 'tb' | 'ledger' | 'pnl' | 'bs' | 'journal' | 'chart' | 'periods' | 'receivables' | 'banks' | 'cash' | 'ota' | 'credits' | 'gst' | 'tds' | 'vat' | 'assets' | 'budget'
 const fyStart = (day: string) => `${Number(day.slice(5, 7)) >= 4 ? day.slice(0, 4) : Number(day.slice(0, 4)) - 1}-04-01`
 
 export class AccountsWorkspace extends Workspace<Tab> {
@@ -23,7 +24,7 @@ export class AccountsWorkspace extends Workspace<Tab> {
     super(api, me, outbox, 'Accounts', onClose)
     this.ledger = new LedgerView(this)
     this.views = { daybook: new DayBookView(this), tb: new TrialBalanceView(this), ledger: this.ledger, pnl: new PnlView(this), bs: new BalanceSheetView(this), journal: new JournalView(this), chart: new ChartView(this), periods: new PeriodsView(this),
-      receivables: new ReceivablesView(this), banks: new BanksView(this), cash: new CashView(this), ota: new OtaView(this), credits: new CreditsView(this), gst: new GstView(this), tds: new TdsView(this) }
+      receivables: new ReceivablesView(this), banks: new BanksView(this), cash: new CashView(this), ota: new OtaView(this), credits: new CreditsView(this), gst: new GstView(this), tds: new TdsView(this), vat: new VatView(this), assets: new AssetsView(this), budget: new BudgetView(this) }
     this.tab = this.tabs()[0][0]
   }
 
@@ -34,7 +35,7 @@ export class AccountsWorkspace extends Workspace<Tab> {
     this.from = fyStart(this.to)
   }
 
-  static allowed(me: Me) { return ['*', 'accounts.view', 'accounts.post', 'accounts.lock', 'receivables.view', 'receivables.manage', 'bank.reconcile', 'cash.manage', 'gst.view', 'gst.file', 'tds.manage'].some((p) => me.permissions.includes(p)) }
+  static allowed(me: Me) { return ['*', 'accounts.view', 'accounts.post', 'accounts.lock', 'receivables.view', 'receivables.manage', 'bank.reconcile', 'cash.manage', 'gst.view', 'gst.file', 'tds.manage', 'vat.file', 'assets.manage', 'budget.manage'].some((p) => me.permissions.includes(p)) }
 
   tabs(): [Tab, string][] {
     const t: [Tab, string][] = []
@@ -45,6 +46,9 @@ export class AccountsWorkspace extends Workspace<Tab> {
     if (this.can('cash.manage', 'accounts.view')) t.push(['cash', 'Cash'])
     if (this.can('gst.view', 'gst.file')) t.push(['gst', 'GST'])
     if (this.can('tds.manage', 'payables.view', 'accounts.view')) t.push(['tds', 'TDS & income tax'])
+    if (this.can('vat.file', 'accounts.view', 'tax.vat')) t.push(['vat', 'TN VAT'])
+    if (this.can('assets.manage', 'accounts.view')) t.push(['assets', 'Fixed assets'])
+    if (this.can('budget.manage', 'accounts.view')) t.push(['budget', 'Budgets'])
     if (this.can('accounts.view', 'receivables.view')) t.push(['credits', 'Tax credits'])
     if (books) t.push(['journal', 'Journal'], ['chart', 'Chart of accounts'], ['periods', 'Locked months'])
     return t

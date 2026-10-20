@@ -55,7 +55,7 @@ export function payablesRoutes(app: FastifyInstance, ctx: Ctx) {
   }
 
   // ---------- bills ----------
-  interface BillLineIn { itemId?: string; description?: string; sac?: string; qty: number; rate: number; gstRate?: number; rcm?: boolean }
+  interface BillLineIn { itemId?: string; description?: string; sac?: string; qty: number; rate: number; gstRate?: number; rcm?: boolean; accountCode?: string }
 
   app.post('/api/bills', async (req, reply) => {
     const who = await need(req, 'purchase.bill')
@@ -100,8 +100,14 @@ export function payablesRoutes(app: FastifyInstance, ctx: Ctx) {
         // the vendor charges no GST; the resort pays it to the government, and claims it back where allowed.
         if (l.rcm && item) throw new HttpError(400, `${item.name}: reverse charge applies to the services the law lists, not to goods.`)
         if (l.rcm && !gstRate) throw new HttpError(400, `${l.description}: the GST rate the resort pays under reverse charge.`)
-        await t.query('insert into bill_line (bill_id, line, item_id, description, sac, qty, rate_paise, gst_rate, amount_paise, gst_paise, itc, rcm) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)',
-          [id, ++n, item?.id ?? null, l.description?.trim() || null, l.sac?.trim() || null, qty, rate, gstRate, amount, tax, lineItc, !!l.rcm])
+        // A service line can be charged to a chosen account: a fixed asset bought (capitalised), or a particular expense.
+        if (l.accountCode) {
+          if (item) throw new HttpError(400, `${item.name}: stock items go to purchases; choose an account only for other lines.`)
+          const [a] = await t.query<{ type: string }>('select type from account where code = $1 and active', [l.accountCode])
+          if (!a || !['asset', 'expense'].includes(a.type)) throw new HttpError(400, `${l.description}: choose an expense or asset account.`)
+        }
+        await t.query('insert into bill_line (bill_id, line, item_id, description, sac, qty, rate_paise, gst_rate, amount_paise, gst_paise, itc, rcm, account_code) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)',
+          [id, ++n, item?.id ?? null, l.description?.trim() || null, l.sac?.trim() || null, qty, rate, gstRate, amount, tax, lineItc, !!l.rcm, l.accountCode || null])
         taxable += amount
         if (l.rcm) rcm += tax; else gst += tax
         if (lineItc === 'full') itc += tax
