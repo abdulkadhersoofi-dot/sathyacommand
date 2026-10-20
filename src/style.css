@@ -731,7 +731,7 @@ button.row-card { width: 100%; text-align: left; font: inherit; background: var(
 .grn-line input { letter-spacing: normal; text-align: left; font: 500 14px var(--f-body); color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; min-width: 0; }
 .grn-pick { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px 8px; display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 6px 0; }
 .grn-pick legend { font-size: 12px; font-weight: 700; color: var(--muted); }
-.le-row.bill-row { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.4fr) 70px 90px 100px; }
+.le-row.bill-row { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.4fr) 70px 90px 100px 64px; }
 .pay-preview { margin: 6px 0; }
 @media (max-width: 700px) { .le-row.bill-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
 

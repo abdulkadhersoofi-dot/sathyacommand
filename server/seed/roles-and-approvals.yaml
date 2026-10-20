@@ -80,6 +80,8 @@ sign_in:
 #   credit.limit     set a company's credit limit (credit beyond it is refused at the desk and the restaurant)
 #   bank.reconcile   bank accounts, statement import and matching, settlements and charges from the statement
 #   cash.manage      bank the cash, petty cash float and its expenses
+#   gst.view         GST return data: GSTR-1, GSTR-3B, GSTR-2B matching (read)
+#   gst.file         import GSTR-2B, accept or reject invoices (IMS), record returns as filed
 #   '*'              everything, including deciding approvals
 roles:
   managing_director:
@@ -87,7 +89,7 @@ roles:
     permissions: ['*']
     limits: unlimited
   general_manager:
-    permissions: [inventory.edit, devices.approve, users.manage, front_desk, folio.reverse, discount.approve, night_audit, invoice.view, invoice.credit_note, site.edit, site.publish, fnb.order, fnb.void, fnb.bill, fnb.discount, menu.edit, menu.price, bar.settings, bar.stock, bar.approve, kitchen.stock, kitchen.approve, food_cost.view, printers.manage, licences.edit, hk.view, hk.manage, hk.inspect, staff.track, attendance.view, roster.manage, broadcast.send, staff.settings, eng.manage, eng.approve, compliance.view, security.view, security.manage, emergency.start, stores.view, stores.manage, vendors.manage, vendors.bank, purchase.indent, indent.approve, purchase.order, purchase.approve, payables.view, stock.approve, stores.issue, stores.count, stores.breakage, accounts.view, accounts.lock, receivables.view, credit.limit]
+    permissions: [inventory.edit, devices.approve, users.manage, front_desk, folio.reverse, discount.approve, night_audit, invoice.view, invoice.credit_note, site.edit, site.publish, fnb.order, fnb.void, fnb.bill, fnb.discount, menu.edit, menu.price, bar.settings, bar.stock, bar.approve, kitchen.stock, kitchen.approve, food_cost.view, printers.manage, licences.edit, hk.view, hk.manage, hk.inspect, staff.track, attendance.view, roster.manage, broadcast.send, staff.settings, eng.manage, eng.approve, compliance.view, security.view, security.manage, emergency.start, stores.view, stores.manage, vendors.manage, vendors.bank, purchase.indent, indent.approve, purchase.order, purchase.approve, payables.view, stock.approve, stores.issue, stores.count, stores.breakage, accounts.view, accounts.lock, receivables.view, credit.limit, gst.view]
     limits: { discount_percent: 25, breakage_per_entry: 10000, refund: 50000, comp_room_nights: 5, purchase_order: 500000, rate_override_below_floor: true }
   operations_manager:
     permissions: [front_desk, folio.reverse, discount.approve, site.edit, fnb.order, fnb.void, fnb.bill, fnb.discount, hk.view, hk.manage, hk.inspect, staff.track, attendance.view, roster.manage, broadcast.send, eng.manage, eng.approve, compliance.view, security.view, security.manage, emergency.start, purchase.indent, indent.approve]
@@ -102,7 +104,7 @@ roles:
     permissions: [front_desk, night_audit]
     limits: {}
   accounts:
-    permissions: [invoice.view, invoice.credit_note, einvoice.generate, licences.edit, tax.vat, compliance.view, stores.view, vendors.manage, vendors.bank, purchase.bill, purchase.pay, payables.view, accounts.view, accounts.post, receivables.view, receivables.manage, bank.reconcile, cash.manage]
+    permissions: [invoice.view, invoice.credit_note, einvoice.generate, licences.edit, tax.vat, compliance.view, stores.view, vendors.manage, vendors.bank, purchase.bill, purchase.pay, payables.view, accounts.view, accounts.post, receivables.view, receivables.manage, bank.reconcile, cash.manage, gst.view, gst.file]
     limits: { vendor_payment_needs_approval_above: 25000, delete_vouchers: false }
   stores:
     permissions: [stores.view, stores.manage, vendors.manage, purchase.indent, purchase.order, stores.receive, stores.issue, stores.count, stores.breakage]
@@ -152,7 +154,7 @@ roles:
     limits: {}
   external_auditor:
     read_only: true
-    permissions: [accounts.view, invoice.view, payables.view, receivables.view]
+    permissions: [accounts.view, invoice.view, payables.view, receivables.view, gst.view]
     access_expires_days: 30
 
 god_mode_alerts:

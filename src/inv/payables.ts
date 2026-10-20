@@ -163,14 +163,16 @@ export class BillsView {
         <p class="muted small">Enter the lines as they are on the bill: quantity in the purchase unit and the rate before GST. Differences from the PO and the goods received are flagged.</p>
         <div class="line-editor bill-lines">${Array.from({ length: rows }, (_, k) => `<div class="le-row bill-row"><select name="i_${k}" aria-label="Item">${opts.replace(`value="${esc(lines[k]?.itemId ?? '-')}"`, `value="${esc(lines[k]?.itemId ?? '-')}" selected`)}</select>
           <input name="d_${k}" maxlength="80" placeholder="or service description"><input name="q_${k}" type="number" min="0" step="any" placeholder="Qty" value="${lines[k] ? lines[k].qty : ''}">
-          <input name="r_${k}" type="number" min="0" step="0.01" placeholder="Rate ₹" value="${lines[k] ? lines[k].rate : ''}"><select name="t_${k}" aria-label="GST"><option value="">GST: item's</option>${[0, 5, 12, 18, 28].map((r) => `<option value="${r}">${r}%</option>`).join('')}</select></div>`).join('')}</div>
+          <input name="r_${k}" type="number" min="0" step="0.01" placeholder="Rate ₹" value="${lines[k] ? lines[k].rate : ''}"><select name="t_${k}" aria-label="GST"><option value="">GST: item's</option>${[0, 5, 12, 18, 28].map((r) => `<option value="${r}">${r}%</option>`).join('')}</select>
+          <label class="check" title="Reverse charge: the resort pays this GST to the government (security agency, goods transport, advocate, unregistered landlord, sponsorship)"><input type="checkbox" name="rc_${k}"> RCM</label></div>`).join('')}</div>
         <div class="form-grid"><label>Round-off (₹)<input name="round" type="number" step="0.01" min="-1" max="1" value="0"></label></div>`, 'Enter bill', async (f2) => {
         const out = []
         for (let k = 0; k < rows; k++) {
           const itemId = val(f2, `i_${k}`), desc = val(f2, `d_${k}`), q = Number(val(f2, `q_${k}`)), r = val(f2, `r_${k}`)
           if (!itemId && !desc) continue
           if (!(q > 0) || r === '') throw new Error('Each line needs a quantity and a rate.')
-          out.push({ itemId: itemId || undefined, description: itemId ? undefined : desc, qty: q, rate: Number(r), gstRate: val(f2, `t_${k}`) === '' ? undefined : Number(val(f2, `t_${k}`)) })
+          out.push({ itemId: itemId || undefined, description: itemId ? undefined : desc, qty: q, rate: Number(r), gstRate: val(f2, `t_${k}`) === '' ? undefined : Number(val(f2, `t_${k}`)),
+            rcm: (f2.elements.namedItem(`rc_${k}`) as HTMLInputElement | null)?.checked || undefined })
         }
         if (!out.length) throw new Error('Enter the lines of the bill.')
         const r = await this.h.api.post<{ match: string; differences: string[]; totalPaise: number }>('/api/bills', {

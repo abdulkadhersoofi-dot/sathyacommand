@@ -55,7 +55,7 @@ export function payablesRoutes(app: FastifyInstance, ctx: Ctx) {
   }
 
   // ---------- bills ----------
-  interface BillLineIn { itemId?: string; description?: string; sac?: string; qty: number; rate: number; gstRate?: number }
+  interface BillLineIn { itemId?: string; description?: string; sac?: string; qty: number; rate: number; gstRate?: number; rcm?: boolean }
 
   app.post('/api/bills', async (req, reply) => {
     const who = await need(req, 'purchase.bill')
@@ -80,7 +80,7 @@ export function payablesRoutes(app: FastifyInstance, ctx: Ctx) {
       // The bill first, so its lines can refer to it; totals and the match are filled in below.
       await t.query(`insert into purchase_bill (id, vendor_id, bill_no, bill_date, po_id, grn_ids, taxable_paise, total_paise, due_date, match, entered_by, entered_at)
                      values ($1,$2,$3,$4,$5,$6,0,0,$4,'matched',$7,$8)`, [id, b.vendorId, b.billNo!.trim(), b.billDate, poId, grnIds, who.userId, now()])
-      let n = 0, taxable = 0, gst = 0, itc = 0
+      let n = 0, taxable = 0, gst = 0, itc = 0, rcm = 0
       const differences: string[] = []
       const lines: { line: number; item_id: string | null; description: string | null; qty: number; rate: number; amount: number; tax: number }[] = []
       for (const l of b.lines!) {
@@ -96,9 +96,15 @@ export function payablesRoutes(app: FastifyInstance, ctx: Ctx) {
         if (item && item.gst_rate != null && Number(item.gst_rate) !== gstRate) differences.push(`${item.name}: billed at ${gstRate}% GST, the item is ${Number(item.gst_rate)}%`)
         const amount = Math.round(qty * rate), tax = Math.round((amount * gstRate) / 100)
         const lineItc = item?.itc ?? 'full'
-        await t.query('insert into bill_line (bill_id, line, item_id, description, sac, qty, rate_paise, gst_rate, amount_paise, gst_paise, itc) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',
-          [id, ++n, item?.id ?? null, l.description?.trim() || null, l.sac?.trim() || null, qty, rate, gstRate, amount, tax, lineItc])
-        taxable += amount; gst += tax; if (lineItc === 'full') itc += tax
+        // Reverse charge (security agency, goods transport, advocate, rent from an unregistered landlord, sponsorship):
+        // the vendor charges no GST; the resort pays it to the government, and claims it back where allowed.
+        if (l.rcm && item) throw new HttpError(400, `${item.name}: reverse charge applies to the services the law lists, not to goods.`)
+        if (l.rcm && !gstRate) throw new HttpError(400, `${l.description}: the GST rate the resort pays under reverse charge.`)
+        await t.query('insert into bill_line (bill_id, line, item_id, description, sac, qty, rate_paise, gst_rate, amount_paise, gst_paise, itc, rcm) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)',
+          [id, ++n, item?.id ?? null, l.description?.trim() || null, l.sac?.trim() || null, qty, rate, gstRate, amount, tax, lineItc, !!l.rcm])
+        taxable += amount
+        if (l.rcm) rcm += tax; else gst += tax
+        if (lineItc === 'full') itc += tax
         lines.push({ line: n, item_id: item?.id ?? null, description: item?.name ?? l.description!, qty, rate, amount, tax })
       }
       // Three-way match: each item against the PO's rate and against what was received and not yet billed.
@@ -133,10 +139,10 @@ export function payablesRoutes(app: FastifyInstance, ctx: Ctx) {
       const match = !poId && !grnIds.length ? 'no_po' : differences.length ? 'difference' : 'matched'
       await t.query(
         `update purchase_bill set taxable_paise = $2, cgst_paise = $3, sgst_paise = $4, igst_paise = $5, round_off_paise = $6, total_paise = $7, itc_paise = $8, due_date = $9,
-                msme_due_date = $10, match = $11, differences = $12, photo_id = $13 where id = $1`,
-        [id, taxable, cgst, sgst, igst ? gst : 0, roundOff, total, itc, due, msmeDue, match, JSON.stringify(differences), b.photoId ?? null])
+                msme_due_date = $10, match = $11, differences = $12, photo_id = $13, rcm_paise = $14 where id = $1`,
+        [id, taxable, cgst, sgst, igst ? gst : 0, roundOff, total, itc, due, msmeDue, match, JSON.stringify(differences), b.photoId ?? null, rcm])
       await appendAudit(t, { actor: who, action: 'bill.add', entity: { type: 'purchase_bill', id }, amount: total, after: { vendor: v.name, bill: b.billNo, match, differences } }, now())
-      return reply.status(201).send({ id, totalPaise: total, match, differences, dueDate: due, msmeDueDate: msmeDue })
+      return reply.status(201).send({ id, totalPaise: total, rcmPaise: rcm, match, differences, dueDate: due, msmeDueDate: msmeDue })
     })
   })
 

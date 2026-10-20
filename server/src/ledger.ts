@@ -42,7 +42,11 @@ export const CHART: [string, string, AccountType, string, string | null][] = [
   ['2120', 'TASMAC payable', 'liability', 'Trade payables', null],
   ['2200', 'Output CGST', 'liability', 'Duties and taxes', null],
   ['2201', 'Output SGST', 'liability', 'Duties and taxes', null],
+  ['2202', 'RCM CGST payable', 'liability', 'Duties and taxes', null],
+  ['2203', 'RCM SGST payable', 'liability', 'Duties and taxes', null],
+  ['2204', 'RCM IGST payable', 'liability', 'Duties and taxes', null],
   ['2210', 'TN VAT payable', 'liability', 'Duties and taxes', null],
+  ['2220', 'GST payable after set-off', 'liability', 'Duties and taxes', null],
   ['2300', 'TDS payable', 'liability', 'Duties and taxes', null],
   ['2900', 'Suspense (posting differences)', 'liability', 'Other current liabilities', null],
   ['3000', 'Share capital', 'equity', 'Equity', null],
@@ -76,6 +80,7 @@ export const CHART: [string, string, AccountType, string, string | null][] = [
   ['6060', 'Bank charges', 'expense', 'Finance costs', 'admin'],
   ['6070', 'Cash shortage and excess', 'expense', 'Other expenses', 'admin'],
   ['6080', 'Round off', 'expense', 'Other expenses', 'admin'],
+  ['6090', 'Input tax credit reversed (rule 42)', 'expense', 'Other expenses', 'admin'],
   ['6100', 'Salaries and wages', 'expense', 'Employee benefits expense', 'admin'],
   ['6200', 'Depreciation', 'expense', 'Depreciation and amortisation', 'admin'],
 ]
@@ -335,8 +340,8 @@ export async function postPending(db: Db, now: Date) {
     for (const k of kr) {
       await post({ kind: 'purchase', date: k.d, narration: `Kitchen receipt ${k.ref}`, source: { type: 'kitchen_receipt', id: k.ref }, lines: [{ code: '5000', amount: n(k.v) }, { code: '2110', amount: -n(k.v), ref: k.ref }] })
     }
-    const bills = await t.query<{ id: string; bill_no: string; bill_date: string; vendor_id: string; vendor: string; tds_code: string | null; cgst_paise: string; sgst_paise: string; igst_paise: string; itc_paise: string; round_off_paise: string; total_paise: string; approved_at: Date }>(
-      `select b.id, b.bill_no, b.bill_date::text, b.vendor_id, v.name as vendor, v.tds_code, b.cgst_paise, b.sgst_paise, b.igst_paise, b.itc_paise, b.round_off_paise, b.total_paise, b.approved_at
+    const bills = await t.query<{ id: string; bill_no: string; bill_date: string; vendor_id: string; vendor: string; tds_code: string | null; state_code: string; rcm_paise: string; cgst_paise: string; sgst_paise: string; igst_paise: string; itc_paise: string; round_off_paise: string; total_paise: string; approved_at: Date }>(
+      `select b.id, b.bill_no, b.bill_date::text, b.vendor_id, v.name as vendor, v.tds_code, v.state_code, b.rcm_paise, b.cgst_paise, b.sgst_paise, b.igst_paise, b.itc_paise, b.round_off_paise, b.total_paise, b.approved_at
          from purchase_bill b join vendor v on v.id = b.vendor_id where b.status in ('approved', 'partly_paid', 'paid')
           and not exists (select 1 from posted_source x where x.source_type = 'bill' and x.source_id = b.id) order by b.approved_at`)
     for (const b of bills) {
@@ -348,9 +353,13 @@ export async function postPending(db: Db, now: Date) {
         const code = l.item_id ? '2110' : l.account_code ?? SERVICE_ACCOUNT[b.tds_code ?? ''] ?? '6000'
         lines.push({ code, amount: n(l.amount_paise) + (l.itc === 'full' ? 0 : n(l.gst_paise)), ref: code === '2110' ? b.bill_no : null })
       }
-      const itc = n(b.itc_paise), igst = n(b.igst_paise), cg = n(b.cgst_paise), sg = n(b.sgst_paise)
-      if (igst) lines.push({ code: '1502', amount: itc })
-      else if (cg + sg) { const c = Math.round((itc * cg) / (cg + sg)); lines.push({ code: '1500', amount: c }, { code: '1501', amount: itc - c }) }
+      // Input tax credit by the vendor's state: IGST from outside Tamil Nadu, CGST and SGST in halves within it.
+      const itc = n(b.itc_paise), rcm = n(b.rcm_paise), inter = b.state_code !== '33'
+      if (inter) lines.push({ code: '1502', amount: itc })
+      else { const c = Math.round(itc / 2); lines.push({ code: '1500', amount: c }, { code: '1501', amount: itc - c }) }
+      // Reverse charge: the GST is owed to the government, not the vendor.
+      if (inter) lines.push({ code: '2204', amount: -rcm, ref: b.bill_no })
+      else { const c = Math.round(rcm / 2); lines.push({ code: '2202', amount: -c, ref: b.bill_no }, { code: '2203', amount: -(rcm - c), ref: b.bill_no }) }
       lines.push({ code: '6080', amount: n(b.round_off_paise) }, { code: '2100', amount: -n(b.total_paise), party: { type: 'vendor', id: b.vendor_id, name: b.vendor }, ref: b.bill_no })
       // Booked when passed, in the month of the vendor's bill if it is still open.
       const passed = istDay(b.approved_at)
