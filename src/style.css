@@ -746,3 +746,11 @@ button.row-card { width: 100%; text-align: left; font: inherit; background: var(
   .stock-row { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.2fr) 80px !important; font-size: 12px; }
   .stock-row > :nth-child(3), .stock-row > :nth-child(5) { display: none; }
 }
+
+/* month close */
+.row-card.mc-card { grid-template-columns: 1fr; cursor: default; gap: 6px; }
+.row-card.mc-card .rc-right { grid-row: auto; grid-column: 1; align-items: flex-start; }
+.mc-figs { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 6px 12px; }
+.mc-figs span { display: flex; flex-direction: column; min-width: 0; }
+.mc-figs small { color: var(--muted); font-size: 11px; }
+.banner-note { padding: 8px 10px; margin-bottom: 8px; border-radius: var(--r); border: 1px solid color-mix(in srgb, var(--marigold) 50%, var(--line)); background: color-mix(in srgb, var(--marigold) 12%, var(--surface)); font-size: 13px; }

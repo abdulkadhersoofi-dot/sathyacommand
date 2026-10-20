@@ -32,6 +32,16 @@ export interface Move {
   ref: string | null; note?: string | null; vendor?: string | null; userId: string; at: Date; day: string
 }
 
+/** A store's month, once closed (or sent to the GM to close), takes no more movements dated in it. */
+export async function assertMonthOpen(t: Db, storeId: string, day: string) {
+  const [c] = await t.query<{ month: string }>(`select month from month_close where store_id = $1 and status <> 'rejected' and month >= substr($2, 1, 7) order by month desc limit 1`, [storeId, day])
+  if (c) {
+    const err = new Error(`The stock month ${c.month} is closed for this store: nothing can be dated ${day}.`) as Error & { statusCode: number }
+    err.statusCode = 409
+    throw err
+  }
+}
+
 const BOOK_NAME: Record<string, string> = { kitchen: 'kitchen ingredient', bar: 'bar brand', spares: 'spare part', linen: 'linen item' }
 let seq = 0
 const moveId = (p: string) => `${p}-${Date.now().toString(36).toUpperCase()}${(seq++ % 1296).toString(36).toUpperCase().padStart(2, '0')}${Math.random().toString(36).slice(2, 5).toUpperCase()}`
@@ -44,6 +54,7 @@ export async function moveStock(t: Db, m: Move) {
   const ledger = await storeLedger(t, m.storeId)
   if (m.kind === 'receipt' && m.qty > 0 && m.value > 0) await t.query('update item set last_cost_paise = $2 where id = $1', [m.item.id, m.value / m.qty])
   if (!ledger) throw new Error(`Unknown store ${m.storeId}`)
+  await assertMonthOpen(t, m.storeId, m.day)
   const inward = m.qty > 0
   const link = { kitchen: m.item.ingredient_id, bar: m.item.brand_id, spares: m.item.spare_id, linen: m.item.linen_item_id }[ledger as 'kitchen']
   if (ledger !== 'own' && !link) {
@@ -55,7 +66,7 @@ export async function moveStock(t: Db, m: Move) {
     await t.query('insert into stock_move (id, item_id, store_id, business_date, kind, qty, value_paise, ref, note, by_user, at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',
       [moveId('SM'), m.item.id, m.storeId, m.day, m.kind, m.qty, Math.round(m.value), m.ref, m.note ?? null, m.userId, m.at])
   } else if (ledger === 'kitchen') {
-    const kind = m.kind === 'count_adjust' ? 'count_adjust' : inward ? 'receipt' : m.kind === 'issue' || m.kind === 'transfer_out' ? 'count_adjust' : 'wastage'
+    const kind = m.kind === 'count_adjust' ? 'count_adjust' : inward ? 'receipt' : m.kind === 'issue' || m.kind === 'transfer_out' ? 'consumption' : 'wastage'
     await t.query('insert into kitchen_stock_move (id, ingredient_id, business_date, kind, qty, cost_paise, ref, note, by_user, at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
       [moveId('KM'), link, m.day, kind, m.qty, Math.round(m.value), m.ref, m.note ?? null, m.userId, m.at])
     if (inward && m.value > 0 && (m.kind === 'receipt' || m.kind === 'transfer_in')) await t.query('update ingredient set cost_per_unit = $2, placeholder = false where id = $1', [link, m.value / m.qty])

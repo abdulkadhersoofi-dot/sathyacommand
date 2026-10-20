@@ -209,7 +209,7 @@ export function kitchenStockRoutes(app: FastifyInstance, ctx: Ctx) {
         out.push({ ingredientId: l.ingredientId, name: g.name, difference: diff, valuePaise: value })
       }
       const shortfall = out.reduce((a, l) => a + Math.min(0, l.valuePaise), 0)
-      await appendAudit(t, { actor: who, action: 'kitchen.count', entity: { type: 'kitchen_count', id: ref }, amount: shortfall, after: { lines: out.length } }, now())
+      await appendAudit(t, { actor: who, action: 'kitchen.count', entity: { type: 'kitchen_count', id: ref }, amount: shortfall, after: { lines: out.length, day } }, now())
       return { id: ref, lines: out, shortfallPaise: -shortfall }
     })
   })
@@ -221,41 +221,46 @@ export function kitchenStockRoutes(app: FastifyInstance, ctx: Ctx) {
     const today = await businessDate(db)
     const from = q.from ?? today, to = q.to ?? today
     if (!DATE.test(from) || !DATE.test(to) || to < from) throw new HttpError(400, 'from and to as YYYY-MM-DD.')
-    const rows = await db.query<{ code: string; name: string; qty: number; sales: string; cost: string; has_recipe: boolean }>(
-      `with sold as (
-         select i.id, i.qty, i.price_paise, i.name, m.code from order_item i join menu_item m on m.id = i.item_id join fnb_order o on o.id = i.order_id
-          where i.status = 'sent' and i.liquor_class is null and o.business_date between $1 and $2 and ($3::text is null or o.outlet_id = $3)),
-       used as (select k.ref, -sum(k.cost_paise) as cost from kitchen_stock_move k where k.kind = 'consumption' and k.ref in (select id from sold) group by k.ref)
-       select s.code, min(s.name) as name, sum(s.qty)::int as qty, sum(s.price_paise * s.qty) as sales, coalesce(sum(u.cost), 0) as cost,
-              exists (select 1 from recipe_line r where r.dish_code = s.code) as has_recipe
-         from sold s left join used u on u.ref = s.id group by s.code order by sum(s.price_paise * s.qty) desc`, [from, to, q.outletId ?? null])
-    const dishes = rows.map((r) => ({ code: r.code, name: r.name, qty: r.qty, salesPaise: Number(r.sales), costPaise: Number(r.cost), hasRecipe: r.has_recipe,
-      costPercent: Number(r.sales) ? Math.round((Number(r.cost) / Number(r.sales)) * 1000) / 10 : 0, marginPaise: Number(r.sales) - Number(r.cost) }))
-    // Menu engineering: popularity against 70% of the average share, margin against the average margin per portion.
-    const withRecipe = dishes.filter((d) => d.hasRecipe && d.qty)
-    const totalQty = withRecipe.reduce((a, d) => a + d.qty, 0)
-    const avgMargin = totalQty ? withRecipe.reduce((a, d) => a + d.marginPaise, 0) / totalQty : 0
-    const popular = withRecipe.length ? (totalQty / withRecipe.length) * 0.7 : 0
-    for (const d of dishes as (typeof dishes[number] & { class?: string })[]) {
-      if (!d.hasRecipe || !d.qty) continue
-      const hiPop = d.qty >= popular, hiMargin = d.marginPaise / d.qty >= avgMargin
-      d.class = hiPop && hiMargin ? 'star' : hiPop ? 'plowhorse' : hiMargin ? 'puzzle' : 'dog'
-    }
-    const [mv] = await db.query<{ wastage: string; adjust: string }>(
-      `select coalesce(-sum(cost_paise) filter (where kind = 'wastage'), 0) as wastage, coalesce(-sum(cost_paise) filter (where kind = 'count_adjust'), 0) as adjust
-         from kitchen_stock_move where business_date between $1 and $2`, [from, to])
-    const sales = dishes.reduce((a, d) => a + d.salesPaise, 0), theoretical = dishes.reduce((a, d) => a + d.costPaise, 0)
-    const wastage = Number(mv.wastage), countLoss = Number(mv.adjust)
-    return {
-      from, to, dishes,
-      totals: {
-        salesPaise: sales, theoreticalCostPaise: theoretical, theoreticalPercent: sales ? Math.round((theoretical / sales) * 1000) / 10 : 0,
-        wastagePaise: wastage, countLossPaise: countLoss, actualCostPaise: theoretical + wastage + countLoss,
-        actualPercent: sales ? Math.round(((theoretical + wastage + countLoss) / sales) * 1000) / 10 : 0,
-        dishesWithoutRecipe: dishes.filter((d) => !d.hasRecipe).map((d) => d.code),
-      },
-    }
+    return foodCost(db, from, to, q.outletId ?? null)
   })
+}
+
+/** Food cost of what was sold between two days: theoretical from the recipes, actual with wastage and count losses added. */
+export async function foodCost(t: Db, from: string, to: string, outletId: string | null = null) {
+  const rows = await t.query<{ code: string; name: string; qty: number; sales: string; cost: string; has_recipe: boolean }>(
+    `with sold as (
+       select i.id, i.qty, i.price_paise, i.name, m.code from order_item i join menu_item m on m.id = i.item_id join fnb_order o on o.id = i.order_id
+        where i.status = 'sent' and i.liquor_class is null and o.business_date between $1 and $2 and ($3::text is null or o.outlet_id = $3)),
+     used as (select k.ref, -sum(k.cost_paise) as cost from kitchen_stock_move k where k.kind = 'consumption' and k.ref in (select id from sold) group by k.ref)
+     select s.code, min(s.name) as name, sum(s.qty)::int as qty, sum(s.price_paise * s.qty) as sales, coalesce(sum(u.cost), 0) as cost,
+            exists (select 1 from recipe_line r where r.dish_code = s.code) as has_recipe
+       from sold s left join used u on u.ref = s.id group by s.code order by sum(s.price_paise * s.qty) desc`, [from, to, outletId])
+  const dishes = rows.map((r) => ({ code: r.code, name: r.name, qty: r.qty, salesPaise: Number(r.sales), costPaise: Number(r.cost), hasRecipe: r.has_recipe,
+    costPercent: Number(r.sales) ? Math.round((Number(r.cost) / Number(r.sales)) * 1000) / 10 : 0, marginPaise: Number(r.sales) - Number(r.cost) }))
+  // Menu engineering: popularity against 70% of the average share, margin against the average margin per portion.
+  const withRecipe = dishes.filter((d) => d.hasRecipe && d.qty)
+  const totalQty = withRecipe.reduce((a, d) => a + d.qty, 0)
+  const avgMargin = totalQty ? withRecipe.reduce((a, d) => a + d.marginPaise, 0) / totalQty : 0
+  const popular = withRecipe.length ? (totalQty / withRecipe.length) * 0.7 : 0
+  for (const d of dishes as (typeof dishes[number] & { class?: string })[]) {
+    if (!d.hasRecipe || !d.qty) continue
+    const hiPop = d.qty >= popular, hiMargin = d.marginPaise / d.qty >= avgMargin
+    d.class = hiPop && hiMargin ? 'star' : hiPop ? 'plowhorse' : hiMargin ? 'puzzle' : 'dog'
+  }
+  const [mv] = await t.query<{ wastage: string; adjust: string }>(
+    `select coalesce(-sum(cost_paise) filter (where kind = 'wastage'), 0) as wastage, coalesce(-sum(cost_paise) filter (where kind = 'count_adjust'), 0) as adjust
+       from kitchen_stock_move where business_date between $1 and $2`, [from, to])
+  const sales = dishes.reduce((a, d) => a + d.salesPaise, 0), theoretical = dishes.reduce((a, d) => a + d.costPaise, 0)
+  const wastage = Number(mv.wastage), countLoss = Number(mv.adjust)
+  return {
+    from, to, dishes,
+    totals: {
+      salesPaise: sales, theoreticalCostPaise: theoretical, theoreticalPercent: sales ? Math.round((theoretical / sales) * 1000) / 10 : 0,
+      wastagePaise: wastage, countLossPaise: countLoss, actualCostPaise: theoretical + wastage + countLoss,
+      actualPercent: sales ? Math.round(((theoretical + wastage + countLoss) / sales) * 1000) / 10 : 0,
+      dishesWithoutRecipe: dishes.filter((d) => !d.hasRecipe).map((d) => d.code),
+    },
+  }
 }
 
 /** Sample ingredients and recipes for the placeholder menu, so food cost works before the real recipes are entered. */

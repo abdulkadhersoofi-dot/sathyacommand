@@ -42,7 +42,7 @@ async function applyCount(t: Db, countId: string, who: Caller, now: Date) {
     const diff = Number(l.counted_qty) - (await stockOf(t, i, c.store_id))
     if (Math.abs(diff) < 0.0005) continue
     await moveStock(t, { item: i, storeId: c.store_id, kind: 'count_adjust', qty: diff, value: Math.round(diff * Number(l.avg_cost_paise)), ref: c.number, note: 'Physical count', userId: who.userId, at: now, day: c.business_date })
-    if (diff < 0) await takeFromBatches(t, i.id, c.store_id, -diff)
+    if (diff < 0 && (await storeLedger(t, c.store_id)) === 'own') await takeFromBatches(t, i.id, c.store_id, -diff)
   }
   await t.query(`update stock_count set status = 'applied', decided_by = coalesce(decided_by, $2), decided_at = coalesce(decided_at, $3) where id = $1`, [countId, who.userId, now])
 }
@@ -187,7 +187,9 @@ export function stockOpsRoutes(app: FastifyInstance, ctx: Ctx) {
     const b = (req.body ?? {}) as { storeId?: string; note?: string; lines?: { itemId: string; counted: number }[] }
     if (!b.lines?.length) throw new HttpError(400, 'Enter what was counted.')
     return db.tx(async (t) => {
-      await ownStore(t, b.storeId)
+      // Any store can be counted here, a department's book too: the closing count for the month close.
+      if (!b.storeId) throw new HttpError(400, 'Choose the store.')
+      if (!(await storeLedger(t, b.storeId))) throw new HttpError(404, 'No such store.')
       const day = await businessDate(t)
       const lines: CountLine[] = []
       for (const l of b.lines!) {

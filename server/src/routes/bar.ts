@@ -41,7 +41,7 @@ async function bookMl(t: Db, brandId: string) {
 }
 
 /** Cost of a millilitre from the latest TASMAC purchase of the brand (0 when never bought). */
-async function costPerMl(t: Db, brandId: string, bottleMl: number) {
+export async function costPerMl(t: Db, brandId: string, bottleMl: number) {
   const [p] = await t.query<{ cost: string }>(
     `select (l->>'costPaise') as cost from tasmac_purchase p, jsonb_array_elements(p.lines) l where l->>'brandId' = $1 order by p.received_at desc limit 1`, [brandId])
   return p ? Number(p.cost) / bottleMl : 0

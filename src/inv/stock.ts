@@ -145,7 +145,7 @@ export class CountsView {
 
   /** A count sheet for one store: every item, typed or found by scanning its label. */
   private async count() {
-    const stores = (await this.h.stores()).filter((s) => s.active && s.ledger === 'own')
+    const stores = (await this.h.stores()).filter((s) => s.active)
     this.h.modal.open('Count a store', `<div class="form-grid"><label class="span2">Store<select name="store">${stores.map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('')}</select></label></div>`, 'Start counting', async (f) => {
       const storeId = val(f, 'store')
       const rows = (await this.h.api.get<{ items: Row[] }>(`/api/stock?storeId=${storeId}`)).items
