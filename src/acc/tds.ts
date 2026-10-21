@@ -1,4 +1,4 @@
-import { esc, tonePill } from '../ui/dom'
+import { esc, tonePill, showDate } from '../ui/dom'
 import { val } from '../ui/form-modal'
 import { money, type Host } from './books'
 
@@ -42,23 +42,23 @@ export class TdsView {
         ${manage ? '<button type="button" class="btn" data-td="deductor">TAN & responsible person…</button>' : ''}</div>
 
       <div class="sec-title">Coming up</div>
-      ${this.cal.length ? `<div class="acc-scroll"><table class="acc-table"><tbody>${this.cal.map((c) => `<tr><td class="mono">${esc(c.due)}</td><td>${esc(c.what)}</td><td class="n">${c.amountPaise ? money(c.amountPaise) : ''}</td><td>${tonePill(...(STATUS[c.status] ?? [c.status, '--muted']))}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">Nothing due in the next weeks.</div>'}
+      ${this.cal.length ? `<div class="acc-scroll"><table class="acc-table"><tbody>${this.cal.map((c) => `<tr><td class="mono">${esc(showDate(c.due))}</td><td>${esc(c.what)}</td><td class="n">${c.amountPaise ? money(c.amountPaise) : ''}</td><td>${tonePill(...(STATUS[c.status] ?? [c.status, '--muted']))}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">Nothing due in the next weeks.</div>'}
 
       <div class="sec-title">TDS to deposit, month by month</div>
       <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Deducted in</th><th class="n">Deducted</th><th class="n">Deposited</th><th>Due</th><th>Status</th><th>Challans</th><th></th></tr></thead><tbody>
-        ${this.months.map((m) => `<tr><td>${esc(m.month)} <small class="muted">${m.entries} payment${m.entries > 1 ? 's' : ''}</small></td><td class="n">${money(m.deductedPaise)}</td><td class="n">${money(m.depositedPaise)}</td><td>${esc(m.due)}</td>
+        ${this.months.map((m) => `<tr><td>${esc(m.month)} <small class="muted">${m.entries} payment${m.entries > 1 ? 's' : ''}</small></td><td class="n">${money(m.deductedPaise)}</td><td class="n">${money(m.depositedPaise)}</td><td>${esc(showDate(m.due))}</td>
           <td>${tonePill(...(STATUS[m.status] ?? [m.status, '--muted']))}${m.interestNowPaise ? ` <small class="fd-warn">interest ${money(m.interestNowPaise)} so far</small>` : ''}</td>
-          <td><small>${m.challans.map((c) => `${esc(c.bsr_code)}/${esc(c.paid_on)}/${esc(c.challan_no)}`).join(', ')}</small></td>
+          <td><small>${m.challans.map((c) => `${esc(c.bsr_code)}/${esc(showDate(c.paid_on))}/${esc(c.challan_no)}`).join(', ')}</small></td>
           <td>${m.openPaise && manage ? `<button type="button" class="btn small primary" data-pay="${esc(m.month)}">Deposited…</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">No tax deducted this year.</td></tr>'}
       </tbody></table></div>
 
-      <div class="sec-title">Quarterly statement 26Q: ${esc(s.fy)} Q${s.quarter} <span>due ${esc(s.due)}</span></div>
+      <div class="sec-title">Quarterly statement 26Q: ${esc(s.fy)} Q${s.quarter} <span>due ${esc(showDate(s.due))}</span></div>
       <div class="ws-toolbar">${s.filed ? tonePill(`Filed ${s.filed.filed_on} · token ${s.filed.token_no}`, '--st-vacant') : tonePill('Not filed', '--marigold')}
         ${s.late.daysLate ? `<span class="small fd-warn">${s.late.daysLate} days late: fee ${money(s.late.feePaise)}</span>` : ''}
         <button type="button" class="btn" data-td="csv">Statement data (CSV)</button>${manage && !s.filed ? '<button type="button" class="btn primary" data-td="file">Filed…</button>' : ''}</div>
       ${s.problems.length ? `<div class="banner-note">${s.problems.map(esc).join('<br>')}</div>` : ''}
       <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Deductee</th><th>PAN</th><th>Section</th><th>Date</th><th class="n">Paid</th><th class="n">Rate</th><th class="n">TDS</th><th>Challan</th><th></th></tr></thead><tbody>
-        ${s.deductees.map((d) => `<tr><td>${esc(d.name)}</td><td class="mono">${esc(d.pan)}</td><td>${esc(d.sectionCode)}${d.reason ? ` <small class="muted">${d.reason === 'A' ? `lower (${esc(d.certificate ?? '')})` : 'no PAN'}</small>` : ''}</td><td>${esc(d.paidOn)}</td>
+        ${s.deductees.map((d) => `<tr><td>${esc(d.name)}</td><td class="mono">${esc(d.pan)}</td><td>${esc(d.sectionCode)}${d.reason ? ` <small class="muted">${d.reason === 'A' ? `lower (${esc(d.certificate ?? '')})` : 'no PAN'}</small>` : ''}</td><td>${esc(showDate(d.paidOn))}</td>
           <td class="n">${money(d.amountPaise)}</td><td class="n">${d.rate}%</td><td class="n">${money(d.tdsPaise)}</td><td><small>${esc(d.challan ?? 'not deposited')}</small></td>
           <td><button type="button" class="btn small" data-stmt="${esc(d.name)}">Statement</button></td></tr>`).join('') || '<tr><td colspan="9" class="empty">Nothing deducted this quarter.</td></tr>'}
       </tbody><tfoot><tr><td colspan="4">${s.totals.deductees} deductees</td><td class="n">${money(s.totals.amountPaise)}</td><td></td><td class="n">${money(s.totals.tdsPaise)}</td><td colspan="2"></td></tr></tfoot></table></div>
@@ -70,7 +70,7 @@ export class TdsView {
       <div class="sec-title">Advance income tax ${esc(this.fy)}</div>
       ${manage ? '<div class="ws-toolbar"><button type="button" class="btn" data-td="estimate">Estimate for the year…</button><button type="button" class="btn" data-td="advance">Advance tax paid…</button></div>' : ''}
       <div class="acc-scroll"><table class="acc-table"><thead><tr><th>By</th><th class="n">Share</th><th class="n">Required</th><th class="n">Paid by then</th><th class="n">Short</th></tr></thead><tbody>
-        ${a.instalments.map((i) => `<tr><td>${esc(i.due)}</td><td class="n">${i.percent}%</td><td class="n">${money(i.requiredPaise)}</td><td class="n">${money(i.paidByThenPaise)}</td><td class="n ${i.shortfallPaise ? 'fd-warn' : ''}">${money(i.shortfallPaise)}</td></tr>`).join('')}
+        ${a.instalments.map((i) => `<tr><td>${esc(showDate(i.due))}</td><td class="n">${i.percent}%</td><td class="n">${money(i.requiredPaise)}</td><td class="n">${money(i.paidByThenPaise)}</td><td class="n ${i.shortfallPaise ? 'fd-warn' : ''}">${money(i.shortfallPaise)}</td></tr>`).join('')}
       </tbody><tfoot><tr><td colspan="2">Estimated tax ${money(a.estimatePaise)}</td><td colspan="3" class="n">Paid ${money(a.paidPaise)}</td></tr></tfoot></table></div>`
   }
 
@@ -85,7 +85,7 @@ export class TdsView {
     const month = el.closest<HTMLElement>('[data-pay]')?.dataset.pay
     if (month) {
       const m = this.months.find((x) => x.month === month)!
-      this.h.modal.open(`TDS for ${month} deposited`, `<p class="muted small">${money(m.openPaise)} deducted, due ${esc(m.due)}. Interest for paying late (1.5% a month or part, from each deduction) is worked out from the date paid.</p>
+      this.h.modal.open(`TDS for ${month} deposited`, `<p class="muted small">${money(m.openPaise)} deducted, due ${esc(showDate(m.due))}. Interest for paying late (1.5% a month or part, from each deduction) is worked out from the date paid.</p>
         <div class="form-grid"><label>BSR code<input name="bsr" maxlength="7" inputmode="numeric"></label><label>Challan serial<input name="no" maxlength="5" inputmode="numeric"></label>
         <label>Paid on<input name="on" type="date" value="${esc(this.h.to)}"></label></div>`, 'Record', async (f) => {
         const r = await this.h.api.post<{ totalPaise: number; interestPaise: number }>('/api/tds/challans', { month, bsrCode: val(f, 'bsr'), challanNo: val(f, 'no'), paidOn: val(f, 'on') })

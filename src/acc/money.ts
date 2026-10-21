@@ -1,4 +1,4 @@
-import { esc, toast, tonePill } from '../ui/dom'
+import { esc, toast, tonePill, showDate } from '../ui/dom'
 import { val } from '../ui/form-modal'
 import { drcr, money, type Host } from './books'
 
@@ -51,12 +51,12 @@ export class ReceivablesView {
           ${this.buckets.map((b, i) => `<span><small>${esc(b)} days</small><b class="mono">${money(s.ageing[i] ?? 0)}</b></span>`).join('')}</div></div>
       <div class="sec-title">Unpaid</div>
       ${s.open.length ? `<div class="acc-scroll"><table class="acc-table"><thead><tr><th>Date</th><th>Bill</th><th class="n">Billed</th><th class="n">Unpaid</th><th>Due</th></tr></thead><tbody>
-        ${s.open.map((i) => `<tr><td class="mono">${esc(i.date)}</td><td>${esc(i.narration)}</td><td class="n">${money(i.amountPaise)}</td><td class="n"><b>${money(i.openPaise)}</b></td>
-          <td>${esc(i.dueDate)} ${i.overdue ? tonePill(`${i.daysOld} days old`, '--st-departing') : ''}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">Nothing unpaid.</div>'}
+        ${s.open.map((i) => `<tr><td class="mono">${esc(showDate(i.date))}</td><td>${esc(i.narration)}</td><td class="n">${money(i.amountPaise)}</td><td class="n"><b>${money(i.openPaise)}</b></td>
+          <td>${esc(showDate(i.dueDate))} ${i.overdue ? tonePill(`${i.daysOld} days old`, '--st-departing') : ''}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">Nothing unpaid.</div>'}
       <div class="sec-title">Statement</div>
       <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Date</th><th>Voucher</th><th>Particulars</th><th class="n">Charged</th><th class="n">Received</th><th class="n">Balance</th></tr></thead><tbody>
         <tr class="acc-grp"><td colspan="5">Opening balance</td><td class="n">${drcr(s.openingPaise)}</td></tr>
-        ${s.lines.map((l) => `<tr><td class="mono">${esc(l.date)}</td><td class="mono">${esc(l.voucher)}</td><td>${esc(l.narration)}</td><td class="n">${l.debitPaise ? money(l.debitPaise) : ''}</td><td class="n">${l.creditPaise ? money(l.creditPaise) : ''}</td><td class="n">${drcr(l.balancePaise)}</td></tr>`).join('')}
+        ${s.lines.map((l) => `<tr><td class="mono">${esc(showDate(l.date))}</td><td class="mono">${esc(l.voucher)}</td><td>${esc(l.narration)}</td><td class="n">${l.debitPaise ? money(l.debitPaise) : ''}</td><td class="n">${l.creditPaise ? money(l.creditPaise) : ''}</td><td class="n">${drcr(l.balancePaise)}</td></tr>`).join('')}
       </tbody><tfoot><tr><td colspan="5">Closing balance</td><td class="n">${drcr(s.closingPaise)}</td></tr></tfoot></table></div>`
   }
 
@@ -153,11 +153,11 @@ export class BanksView {
           <span><small>Statement${r.statementDate ? ` on ${esc(r.statementDate)}` : ''}</small><b class="mono">${r.statementPaise == null ? '—' : money(r.statementPaise)}</b></span>
           <span><small>In the books, not the bank</small><b class="mono">${r.inBooksNotBank.length}</b></span><span><small>In the bank, not the books</small><b class="mono">${r.inBankNotBooks.length}</b></span>
           <span><small>Difference</small><b class="mono ${r.differencePaise ? 'fd-warn' : ''}">${r.differencePaise == null ? '—' : money(r.differencePaise)}</b></span></div>
-          ${r.inBooksNotBank.length ? `<div class="rc-sub">Not yet through the bank: ${r.inBooksNotBank.slice(0, 6).map((x) => `${esc(x.date)} ${esc(x.number)} ${money(x.amt)}`).join(' · ')}${r.inBooksNotBank.length > 6 ? ' …' : ''}</div>` : ''}` : ''}</div>` : '<div class="empty">No bank account yet.</div>'}
+          ${r.inBooksNotBank.length ? `<div class="rc-sub">Not yet through the bank: ${r.inBooksNotBank.slice(0, 6).map((x) => `${esc(showDate(x.date))} ${esc(x.number)} ${money(x.amt)}`).join(' · ')}${r.inBooksNotBank.length > 6 ? ' …' : ''}</div>` : ''}` : ''}</div>` : '<div class="empty">No bank account yet.</div>'}
       <p class="muted small">Import the statement from the bank's website as CSV. Lines with one book entry of the same amount (or bearing its UTR) match by themselves; post the rest from here: card and UPI settlements (the fee and its GST taken out), money from a company, charges, interest.</p>
       ${this.lines.map((l) => {
         const amt = Number(l.amount_paise)
-        return `<div class="row-card bank-line"><div class="rc-title"><span class="mono">${esc(l.date)}</span> ${esc(l.description)}${l.reference ? ` <small class="muted">${esc(l.reference)}</small>` : ''}</div>
+        return `<div class="row-card bank-line"><div class="rc-title"><span class="mono">${esc(showDate(l.date))}</span> ${esc(l.description)}${l.reference ? ` <small class="muted">${esc(l.reference)}</small>` : ''}</div>
           <div class="rc-sub">${l.status === 'matched' ? `Matched to ${esc(l.voucher_number ?? '')}${l.note ? ` (${esc(l.note.replace('_', ' '))})` : ''}` : l.status === 'ignored' ? `Left out: ${esc(l.note ?? '')}` : 'Not in the books yet'}</div>
           <div class="rc-right"><b class="mono ${amt < 0 ? 'fd-warn' : ''}">${amt > 0 ? '+' : '−'}${money(Math.abs(amt))}</b>
             ${l.status === 'open' && manage ? `<span><button type="button" class="btn small" data-bl="match" data-id="${esc(l.id)}">Match…</button><button type="button" class="btn small primary" data-bl="post" data-id="${esc(l.id)}">Post…</button><button type="button" class="btn small" data-bl="ignore" data-id="${esc(l.id)}">Leave out…</button></span>` : ''}
@@ -195,7 +195,7 @@ export class BanksView {
     }
     if (b.dataset.bl === 'match') {
       const c = await this.h.api.get<{ voucher_id: string; line: number; number: string; date: string; narration: string }[]>(`/api/bank/lines/${id}/candidates`)
-      this.h.modal.open(`Match ${money(amt)}`, c.length ? `<div class="form-grid"><label class="span2">Book entry<select name="v">${c.map((x) => `<option value="${esc(x.voucher_id)}|${x.line}">${esc(x.date)} · ${esc(x.number)} · ${esc(x.narration)}</option>`).join('')}</select></label></div>`
+      this.h.modal.open(`Match ${money(amt)}`, c.length ? `<div class="form-grid"><label class="span2">Book entry<select name="v">${c.map((x) => `<option value="${esc(x.voucher_id)}|${x.line}">${esc(showDate(x.date))} · ${esc(x.number)} · ${esc(x.narration)}</option>`).join('')}</select></label></div>`
         : '<p>No unmatched book entry of this amount near this date. Post it instead.</p>', 'Match', async (f) => {
         const [voucherId, ln] = val(f, 'v').split('|')
         await this.h.api.post(`/api/bank/lines/${id}/match`, { voucherId, line: Number(ln) }); return done('Matched')
@@ -251,7 +251,7 @@ export class CashView {
     return `<div class="ws-toolbar">${manage ? '<button type="button" class="btn primary" data-cs="deposit">Bank the cash…</button><button type="button" class="btn" data-cs="topup">Top up petty cash…</button><button type="button" class="btn" data-cs="expense">Pay from petty cash…</button>' : ''}</div>
       <div class="row-card mc-card"><div class="mc-figs"><span><small>Cash in hand</small><b class="mono">${money(d.cashPaise)}</b></span><span><small>Petty cash</small><b class="mono">${money(d.pettyPaise)}</b></span></div>
         <div class="rc-sub">${esc(d.note)}</div></div>
-      ${d.txns.map((x) => `<div class="m-row"><span class="mono">${esc(x.date)}</span><b>${esc(CASH_KIND[x.kind] ?? x.kind)}${x.description ? `: ${esc(x.description)}` : ''}</b>
+      ${d.txns.map((x) => `<div class="m-row"><span class="mono">${esc(showDate(x.date))}</span><b>${esc(CASH_KIND[x.kind] ?? x.kind)}${x.description ? `: ${esc(x.description)}` : ''}</b>
         <span>${money(Number(x.amount_paise))}${x.payee ? ` · ${esc(x.payee)}` : ''}${x.account ? ` · ${esc(x.account)}` : ''} · ${esc(x.number)} · ${esc(x.by_name)}</span></div>`).join('') || '<div class="empty">Nothing yet.</div>'}`
   }
   async click(el: HTMLElement) {

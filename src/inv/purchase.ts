@@ -1,4 +1,4 @@
-import { esc, toast, tonePill } from '../ui/dom'
+import { esc, toast, tonePill, showDate } from '../ui/dom'
 import { checked, val } from '../ui/form-modal'
 import type { WorkspaceHost } from '../ui/workspace'
 import { rupees, type Item, type Store } from './items'
@@ -127,7 +127,7 @@ export class PosView {
     return `<div class="ws-toolbar">${this.h.can('purchase.order') ? '<button type="button" class="btn primary" data-po="new">New purchase order</button>' : ''}
         <div class="chips">${chip('open', 'Open')}${chip('received', 'Received')}${chip('cancelled', 'Cancelled')}${chip('all', 'All')}</div></div>
       ${this.list.map((p) => `<div class="row-card" data-ticket="${esc(p.id)}"><div class="rc-title">${esc(p.number)} · ${esc(p.vendor)}${p.market_list ? ' · market list' : ''}</div>
-        <div class="rc-sub">${p.lines} item${p.lines === 1 ? '' : 's'} for ${esc(p.store)} · ${esc(p.order_date)}${p.expected_date ? ` · due ${esc(p.expected_date)}` : ''} · by ${esc(p.created_by)}${p.approved_by ? ` · approved by ${esc(p.approved_by)}` : ''}</div>
+        <div class="rc-sub">${p.lines} item${p.lines === 1 ? '' : 's'} for ${esc(p.store)} · ${esc(showDate(p.order_date))}${p.expected_date ? ` · due ${esc(showDate(p.expected_date))}` : ''} · by ${esc(p.created_by)}${p.approved_by ? ` · approved by ${esc(p.approved_by)}` : ''}</div>
         <div class="rc-right"><b class="mono">${rupees(Number(p.total_paise))}</b>${tonePill(...(PO_STATE[p.status] ?? [p.status, '--muted']))}</div></div>`).join('') || '<div class="empty">No purchase orders.</div>'}`
   }
 

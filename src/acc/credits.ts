@@ -1,4 +1,4 @@
-import { esc, toast, tonePill } from '../ui/dom'
+import { esc, toast, tonePill, showDate } from '../ui/dom'
 import { val } from '../ui/form-modal'
 import { money, type Host } from './books'
 
@@ -35,7 +35,7 @@ export class OtaView {
       ${this.open.length ? `<div class="acc-scroll"><table class="acc-table"><thead><tr><th>Booking ID</th><th>Guest</th><th>Stay</th><th class="n">Paid to the OTA</th><th class="n">Paid out</th><th class="n">To come</th></tr></thead><tbody>
         ${this.open.map((b) => `<tr><td class="mono">${esc(b.ota_ref ?? b.reservation_id)}</td><td>${esc(b.guest)}</td><td>${esc(b.arrival)} → ${esc(b.departure)}</td><td class="n">${money(b.collected)}</td><td class="n">${b.paid_out ? money(b.paid_out) : ''}</td><td class="n"><b>${money(b.open)}</b></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">Every booking is paid out.</div>'}
       <div class="sec-title">Payouts</div>
-      ${this.payouts.map((p) => `<div class="row-card acc-voucher"><div class="rc-title"><span class="mono">${esc(p.number)}</span> · ${esc(p.date)} · ${p.lines.length} booking${p.lines.length > 1 ? 's' : ''}${p.reference ? ` · ${esc(p.reference)}` : ''}</div>
+      ${this.payouts.map((p) => `<div class="row-card acc-voucher"><div class="rc-title"><span class="mono">${esc(p.number)}</span> · ${esc(showDate(p.date))} · ${p.lines.length} booking${p.lines.length > 1 ? 's' : ''}${p.reference ? ` · ${esc(p.reference)}` : ''}</div>
         <div class="mc-figs"><span><small>Bookings</small><b class="mono">${money(n(p.gross_paise))}</b></span><span><small>Commission</small><b class="mono">${money(n(p.commission_paise) + n(p.other_paise))}</b></span>
           <span><small>GST on it</small><b class="mono">${money(n(p.commission_gst_paise))}</b></span><span><small>GST TCS</small><b class="mono">${money(n(p.gst_tcs_paise))}</b></span>
           <span><small>TDS 194-O</small><b class="mono">${money(n(p.tds_paise))}</b></span><span><small>Received</small><b class="mono">${money(n(p.net_paise))}</b></span></div>
@@ -100,8 +100,8 @@ export class CreditsView {
         ${d.rows.map((r) => `<tr><td>Q${r.quarter}</td><td>${esc(r.party)}${r.tan ? ` <small class="muted">${esc(r.tan)}</small>` : ''} <small class="muted">${r.kind.toUpperCase()}</small></td><td>${esc(r.sections.join(', '))}</td>
           <td class="n">${money(r.expectedPaise)}</td><td class="n">${money(r.in26asPaise)}</td><td>${tonePill(...(STATUS[r.status] ?? [r.status, '--muted']))}${r.followUp ? ' <b class="fd-warn">follow up</b>' : ''}</td></tr>`).join('') || '<tr><td colspan="6" class="empty">No credits this year.</td></tr>'}
       </tbody></table></div>
-      ${d.notInBooks.length ? `<div class="sec-title">In 26AS, not in our books</div><div class="acc-scroll"><table class="acc-table"><tbody>${d.notInBooks.map((l) => `<tr><td class="mono">${esc(l.date)}</td><td>${esc(l.deductor)}</td><td>${esc(l.tan ?? '')}</td><td>${esc(l.section ?? '')}</td><td class="n">${money(l.tax_paise)}</td></tr>`).join('')}</tbody></table></div>` : ''}
-      ${d.gstTcs.length ? `<div class="sec-title">GST TCS by OTAs: accept in the GST portal</div><div class="acc-scroll"><table class="acc-table"><tbody>${d.gstTcs.map((g) => `<tr><td class="mono">${esc(g.date)}</td><td>${esc(g.party)}</td><td>${esc(g.ref)}</td><td class="n">${money(g.tax)}</td></tr>`).join('')}</tbody></table></div>` : ''}
+      ${d.notInBooks.length ? `<div class="sec-title">In 26AS, not in our books</div><div class="acc-scroll"><table class="acc-table"><tbody>${d.notInBooks.map((l) => `<tr><td class="mono">${esc(showDate(l.date))}</td><td>${esc(l.deductor)}</td><td>${esc(l.tan ?? '')}</td><td>${esc(l.section ?? '')}</td><td class="n">${money(l.tax_paise)}</td></tr>`).join('')}</tbody></table></div>` : ''}
+      ${d.gstTcs.length ? `<div class="sec-title">GST TCS by OTAs: accept in the GST portal</div><div class="acc-scroll"><table class="acc-table"><tbody>${d.gstTcs.map((g) => `<tr><td class="mono">${esc(showDate(g.date))}</td><td>${esc(g.party)}</td><td>${esc(g.ref)}</td><td class="n">${money(g.tax)}</td></tr>`).join('')}</tbody></table></div>` : ''}
       ${d.imports.length ? `<p class="muted small">Imported: ${d.imports.map((i) => `${esc(i.file_name ?? 'file')} (${i.lines} lines, ${esc(i.imported_by_name)})`).join(' · ')}</p>` : ''}`
   }
   async change(el: HTMLElement) {

@@ -1,4 +1,4 @@
-import { esc, toast, tonePill } from '../ui/dom'
+import { esc, toast, tonePill, showDate } from '../ui/dom'
 import { val } from '../ui/form-modal'
 import { money, type Host } from './books'
 
@@ -31,7 +31,7 @@ export class VatView {
       </tbody><tfoot><tr><td colspan="2">Total</td><td class="n">${money(d.totals.salesPaise)}</td><td class="n">${money(d.totals.outputVatPaise)}</td></tr></tfoot></table></div>
       <div class="sec-title">Bought from TASMAC</div>
       <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Invoice</th><th>Date</th><th>Permit</th><th class="n">Value</th><th class="n">VAT</th><th class="n">TCS</th></tr></thead><tbody>
-        ${d.purchases.map((p) => `<tr><td class="mono">${esc(p.invoice)}</td><td>${esc(p.date)}</td><td>${esc(p.permit ?? '')}</td><td class="n">${money(p.value)}</td><td class="n">${money(p.vat)}</td><td class="n">${money(p.tcs)}</td></tr>`).join('') || '<tr><td colspan="6" class="empty">None this month.</td></tr>'}
+        ${d.purchases.map((p) => `<tr><td class="mono">${esc(p.invoice)}</td><td>${esc(showDate(p.date))}</td><td>${esc(p.permit ?? '')}</td><td class="n">${money(p.value)}</td><td class="n">${money(p.vat)}</td><td class="n">${money(p.tcs)}</td></tr>`).join('') || '<tr><td colspan="6" class="empty">None this month.</td></tr>'}
       </tbody></table></div>
       <div class="row-card mc-card"><div class="mc-figs"><span><small>VAT on sales</small><b class="mono">${money(d.totals.outputVatPaise)}</b></span><span><small>VAT paid to TASMAC</small><b class="mono">${money(d.totals.inputVatPaise)}</b></span>
         <span><small>To pay</small><b class="mono">${money(d.totals.payablePaise)}</b></span></div>
@@ -67,7 +67,7 @@ export class AssetsView {
       <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Asset</th><th>Class</th><th>In use from</th><th class="n">Cost</th><th class="n">Depreciation</th><th class="n">Book value</th><th></th></tr></thead><tbody>
         ${d.assets.map((a) => `<tr class="${a.disposed_on ? 'retired' : ''}"><td><span class="mono">${esc(a.code)}</span> ${esc(a.name)}${a.dept ? ` <small class="muted">${esc(d.departments[a.dept] ?? a.dept)}</small>` : ''}</td>
           <td>${esc(d.classes[a.category]?.label ?? a.category)} <small class="muted">${Number(a.life_years)} yrs</small></td><td>${esc(a.put_to_use)}</td><td class="n">${money(a.cost_paise)}</td><td class="n">${money(a.accumulatedPaise)}</td>
-          <td class="n">${a.disposed_on ? `sold ${esc(a.disposed_on)}` : money(a.bookValuePaise)}</td><td>${manage && !a.disposed_on ? `<button type="button" class="btn small" data-dispose="${esc(a.id)}">Sold / scrapped…</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">No assets yet.</td></tr>'}
+          <td class="n">${a.disposed_on ? `sold ${esc(showDate(a.disposed_on))}` : money(a.bookValuePaise)}</td><td>${manage && !a.disposed_on ? `<button type="button" class="btn small" data-dispose="${esc(a.id)}">Sold / scrapped…</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">No assets yet.</td></tr>'}
       </tbody></table></div>
       ${d.runs.length ? `<p class="small muted">Depreciation posted: ${d.runs.slice(0, 6).map((r) => `${esc(r.month)} ${money(Number(r.amount_paise))}`).join(' · ')}</p>` : ''}
       <div class="sec-title">Income-tax depreciation ${esc(it.fy)}</div>

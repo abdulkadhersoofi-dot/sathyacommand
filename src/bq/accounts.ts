@@ -1,4 +1,4 @@
-import { esc, tonePill } from '../ui/dom'
+import { esc, tonePill, showDate } from '../ui/dom'
 import { val } from '../ui/form-modal'
 import { money } from '../acc/books'
 import { STATUS_LABEL } from './calendar'
@@ -44,7 +44,7 @@ export class AccountsView {
       <p class="muted small">This year (from ${esc(this.from)}): room nights and room revenue booked for each account, and its events billed.</p>
       <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Account</th><th>Handled by</th><th class="n">Room nights</th><th class="n">Rooms</th><th class="n">Events</th><th>Next follow-up</th></tr></thead><tbody>
         ${rows.map((r) => `<tr class="${r.active ? '' : 'retired'}"><td><button type="button" class="linkish" data-acopen="${esc(r.id)}"><b>${esc(r.name)}</b></button> <small class="muted">${esc(KIND[r.kind] ?? r.kind)}${r.city ? `, ${esc(r.city)}` : ''}${r.rates ? ' · contracted rate' : ''}</small></td>
-          <td>${esc(r.owner ?? '—')}</td><td class="n">${r.nights}</td><td class="n">${money(r.roomRevenuePaise)}</td><td class="n">${money(r.eventRevenuePaise)}</td><td>${r.next_due ? esc(r.next_due) : '<span class="muted">—</span>'}</td></tr>`).join('') || '<tr><td colspan="6" class="empty">No accounts yet.</td></tr>'}
+          <td>${esc(r.owner ?? '—')}</td><td class="n">${r.nights}</td><td class="n">${money(r.roomRevenuePaise)}</td><td class="n">${money(r.eventRevenuePaise)}</td><td>${r.next_due ? esc(showDate(r.next_due)) : '<span class="muted">—</span>'}</td></tr>`).join('') || '<tr><td colspan="6" class="empty">No accounts yet.</td></tr>'}
       </tbody></table></div>`
   }
 

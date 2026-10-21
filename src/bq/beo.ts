@@ -1,4 +1,4 @@
-import { esc, tonePill } from '../ui/dom'
+import { esc, tonePill, showDate } from '../ui/dom'
 import { STYLE_LABEL } from './calendar'
 import type { BqHost } from './workspace'
 
@@ -23,7 +23,7 @@ export class BeoView {
   }
 
   private sheet(f: BeoFn) {
-    const when = `<b>${esc(f.name)}</b> · ${esc(f.venue)} · ${esc(f.date)} <span class="mono">${esc(f.from)}–${esc(f.to)}</span> · ${f.pax} guests`
+    const when = `<b>${esc(f.name)}</b> · ${esc(f.venue)} · ${esc(showDate(f.date))} <span class="mono">${esc(f.from)}–${esc(f.to)}</span> · ${f.pax} guests`
     const extras = f.extras.length ? `<div class="small">Also: ${f.extras.map((x) => `${esc(x.description)}${x.qty !== 1 ? ` × ${x.qty}` : ''}`).join(', ')}</div>` : ''
     switch (this.dept) {
       case 'kitchen': return `<div>${when}</div>${f.menu ? `<div><b>${f.plates} plates</b> of ${esc(f.menu.name)}${f.menu.veg === true ? ' (veg)' : f.menu.veg === false ? ' (non-veg)' : ''} <small class="muted">guarantee + 5%</small></div><div class="small">${esc(f.menu.items.join(' · '))}</div>` : '<div class="muted small">No menu with this function.</div>'}`

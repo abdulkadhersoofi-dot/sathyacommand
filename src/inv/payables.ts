@@ -1,4 +1,4 @@
-import { esc, toast, tonePill } from '../ui/dom'
+import { esc, toast, tonePill, showDate } from '../ui/dom'
 import { checked, val } from '../ui/form-modal'
 import { takePhoto, uploadPhoto } from '../ui/photo'
 import type { WorkspaceHost } from '../ui/workspace'
@@ -60,7 +60,7 @@ export class ReceiptsView {
       <div class="sec-title">Goods received <span>${this.list.length}</span></div>
       ${this.list.map((g) => `<div class="row-card"><div class="rc-title">${esc(g.number)} · ${esc(g.vendor)}${g.po_number ? ` · ${esc(g.po_number)}` : ' · <span class="fd-warn">no PO</span>'}</div>
         <div class="rc-sub">${g.lines.map((l) => `${esc(l.item)} ${q3(l.qty_accepted)} ${esc(l.purchase_unit)}${n(l.qty_accepted) < n(l.qty_received) ? ` <span class="fd-warn">(${q3(n(l.qty_received) - n(l.qty_accepted))} rejected: ${esc(l.reject_reason ?? '')})</span>` : ''}`).join(' · ')}</div>
-        <div class="rc-sub">${esc(g.store)} · ${esc(g.business_date)} · ${esc(g.received_by)}${g.challan_no ? ` · challan ${esc(g.challan_no)}` : ''}${g.note ? ` · ${esc(g.note)}` : ''}</div>
+        <div class="rc-sub">${esc(g.store)} · ${esc(showDate(g.business_date))} · ${esc(g.received_by)}${g.challan_no ? ` · challan ${esc(g.challan_no)}` : ''}${g.note ? ` · ${esc(g.note)}` : ''}</div>
         <div class="rc-right"><b class="mono">${rupees(n(g.value_paise))}</b></div></div>`).join('') || '<div class="empty">Nothing received yet.</div>'}`
   }
 
@@ -115,10 +115,10 @@ export class BillsView {
   html() {
     const chip = (s: string, l: string) => `<button type="button" class="chip" data-bs="${s}" aria-pressed="${this.status === s}">${l}</button>`
     return `<div class="ws-toolbar">${this.h.can('purchase.bill') ? '<button type="button" class="btn primary" data-bl="new">Enter a bill</button>' : ''}<div class="chips">${chip('open', 'Open')}${chip('paid', 'Paid')}${chip('all', 'All')}</div></div>
-      ${this.list.map((b) => `<div class="row-card${b.msmeLate || (b.msme_due_date && b.daysToDue <= 10 && b.status !== 'paid') ? ' late' : ''}"><div class="rc-title">${esc(b.vendor)} · bill ${esc(b.bill_no)} · ${esc(b.bill_date)}</div>
+      ${this.list.map((b) => `<div class="row-card${b.msmeLate || (b.msme_due_date && b.daysToDue <= 10 && b.status !== 'paid') ? ' late' : ''}"><div class="rc-title">${esc(b.vendor)} · bill ${esc(b.bill_no)} · ${esc(showDate(b.bill_date))}</div>
         <div class="rc-sub">${b.po_number ? esc(b.po_number) : 'no PO'}${b.grns ? ` · ${esc(b.grns)}` : ''} · taxable ${rupees(n(b.taxable_paise))} + GST ${rupees(n(b.cgst_paise) + n(b.sgst_paise) + n(b.igst_paise))}${n(b.itc_paise) ? ` (ITC ${rupees(n(b.itc_paise))})` : ''}</div>
         ${b.differences.length ? `<div class="rc-sub fd-warn">${b.differences.map(esc).join(' · ')}</div>` : ''}
-        <div class="rc-sub">${b.msme_due_date ? `<b>MSME: pay by ${esc(b.msme_due_date)}</b>${b.msmeLate ? ' <span class="fd-warn">late: the expense is not deductible this year</span>' : b.status !== 'paid' ? ` (${b.daysToDue} days)` : ''}` : `Due ${esc(b.due_date)}`} · entered by ${esc(b.entered_by_name)}${b.approved_by_name ? ` · passed by ${esc(b.approved_by_name)}` : ''}</div>
+        <div class="rc-sub">${b.msme_due_date ? `<b>MSME: pay by ${esc(showDate(b.msme_due_date))}</b>${b.msmeLate ? ' <span class="fd-warn">late: the expense is not deductible this year</span>' : b.status !== 'paid' ? ` (${b.daysToDue} days)` : ''}` : `Due ${esc(showDate(b.due_date))}`} · entered by ${esc(b.entered_by_name)}${b.approved_by_name ? ` · passed by ${esc(b.approved_by_name)}` : ''}</div>
         <div class="rc-right"><b class="mono">${rupees(n(b.total_paise))}</b>${tonePill(...(MATCH[b.match] ?? [b.match, '--muted']))}${tonePill(...(BILL_STATE[b.status] ?? [b.status, '--muted']))}
           ${b.status === 'entered' && (this.h.can('purchase.approve') || (b.match === 'matched' && this.h.can('purchase.bill') && b.entered_by !== this.h.me.id)) ? `<button type="button" class="btn small primary" data-bl="pass:${esc(b.id)}">Pass…</button>` : ''}
           ${['entered', 'approved'].includes(b.status) && n(b.total_paise) === n(b.balance_paise) && this.h.can('purchase.bill') ? `<button type="button" class="btn small" data-bl="cancel:${esc(b.id)}">Cancel…</button>` : ''}</div></div>`).join('') || '<div class="empty">No bills.</div>'}`
@@ -162,8 +162,8 @@ export class BillsView {
       const events = this.h.can('events.view', 'events.manage') ? (await this.h.api.get<{ id: string; number: string; title: string; status: string; date: string | null }[]>('/api/banquets/events').catch(() => []))
         .filter((e) => e.status !== 'lost') : []
       this.h.modal.open('Enter a bill', `<div class="form-grid"><label>Bill number<input name="no" maxlength="30"></label><label>Bill date<input name="date" type="date"></label>
-        ${events.length ? `<label class="span2">For a banquet event (optional)<select name="event"><option value="">—</option>${events.map((e) => `<option value="${esc(e.id)}">${esc(e.number)} ${esc(e.title)}${e.date ? ` · ${esc(e.date)}` : ''}</option>`).join('')}</select></label>` : ''}</div>
-        ${grns.length ? `<fieldset class="grn-pick"><legend>Goods receipts it covers</legend>${grns.map((g) => `<label class="check"><input type="checkbox" name="g_${esc(g.id)}" checked> ${esc(g.number)}${g.po_number ? ` (${esc(g.po_number)})` : ''} · ${esc(g.business_date)}</label>`).join('')}</fieldset>` : '<p class="muted small">No goods received from this vendor waiting for a bill: enter service lines (AMC, repairs, contract work).</p>'}
+        ${events.length ? `<label class="span2">For a banquet event (optional)<select name="event"><option value="">—</option>${events.map((e) => `<option value="${esc(e.id)}">${esc(e.number)} ${esc(e.title)}${e.date ? ` · ${esc(showDate(e.date))}` : ''}</option>`).join('')}</select></label>` : ''}</div>
+        ${grns.length ? `<fieldset class="grn-pick"><legend>Goods receipts it covers</legend>${grns.map((g) => `<label class="check"><input type="checkbox" name="g_${esc(g.id)}" checked> ${esc(g.number)}${g.po_number ? ` (${esc(g.po_number)})` : ''} · ${esc(showDate(g.business_date))}</label>`).join('')}</fieldset>` : '<p class="muted small">No goods received from this vendor waiting for a bill: enter service lines (AMC, repairs, contract work).</p>'}
         <p class="muted small">Enter the lines as they are on the bill: quantity in the purchase unit and the rate before GST. Differences from the PO and the goods received are flagged.</p>
         <div class="line-editor bill-lines">${Array.from({ length: rows }, (_, k) => `<div class="le-row bill-row"><select name="i_${k}" aria-label="Item">${opts.replace(`value="${esc(lines[k]?.itemId ?? '-')}"`, `value="${esc(lines[k]?.itemId ?? '-')}" selected`)}</select>
           <input name="d_${k}" maxlength="80" placeholder="or service description"><input name="q_${k}" type="number" min="0" step="any" placeholder="Qty" value="${lines[k] ? lines[k].qty : ''}">
@@ -211,11 +211,11 @@ export class PaymentsView {
     const pay = this.h.can('purchase.pay')
     return `<div class="sec-title">To pay <span>${rupees(this.bills.reduce((a, b) => a + n(b.balance_paise), 0))}</span></div>
       ${[...byVendor.values()].map((bs) => `<div class="row-card${bs.some((b) => b.msme_due_date && b.daysToDue <= 10) ? ' late' : ''}"><div class="rc-title">${esc(bs[0].vendor)}${bs[0].msme !== 'none' ? ` ${tonePill(`MSME ${bs[0].msme}`, '--marigold')}` : ''}</div>
-        <div class="rc-sub">${bs.map((b) => `${esc(b.bill_no)} ${rupees(n(b.balance_paise))} · ${b.msme_due_date ? `<b>by ${esc(b.msme_due_date)}</b>` : `due ${esc(b.due_date)}`}`).join(' · ')}</div>
+        <div class="rc-sub">${bs.map((b) => `${esc(b.bill_no)} ${rupees(n(b.balance_paise))} · ${b.msme_due_date ? `<b>by ${esc(showDate(b.msme_due_date))}</b>` : `due ${esc(showDate(b.due_date))}`}`).join(' · ')}</div>
         <div class="rc-right"><b class="mono">${rupees(bs.reduce((a, b) => a + n(b.balance_paise), 0))}</b>${pay ? `<button type="button" class="btn small primary" data-py="new:${esc(bs[0].vendor_id)}">Pay…</button>` : ''}</div></div>`).join('') || '<div class="empty">Nothing passed for payment.</div>'}
       <div class="sec-title">Payments</div>
       ${this.payments.slice(0, 50).map((p) => `<div class="row-card"><div class="rc-title">${esc(p.number)} · ${esc(p.vendor)}</div>
-        <div class="rc-sub">${esc(p.bills ?? '')} · ${esc(p.pay_date)} · ${esc(p.mode)}${p.reference ? ` ${esc(p.reference)}` : ''}${n(p.tds_paise) ? ` · TDS ${esc(p.tds_section ?? '')} ${rupees(n(p.tds_paise))}` : ''}</div>
+        <div class="rc-sub">${esc(p.bills ?? '')} · ${esc(showDate(p.pay_date))} · ${esc(p.mode)}${p.reference ? ` ${esc(p.reference)}` : ''}${n(p.tds_paise) ? ` · TDS ${esc(p.tds_section ?? '')} ${rupees(n(p.tds_paise))}` : ''}</div>
         <div class="rc-right"><b class="mono">${rupees(n(p.net_paise))}</b>${tonePill(...(PAY[p.status] ?? [p.status, '--muted']))}${pay && p.status === 'approved' ? `<button type="button" class="btn small primary" data-py="paid:${esc(p.id)}:${esc(p.mode)}">Mark paid…</button>` : ''}${pay && ['approved', 'pending_approval'].includes(p.status) ? `<button type="button" class="btn small" data-py="cancel:${esc(p.id)}">Cancel</button>` : ''}</div></div>`).join('') || '<div class="empty">No payments yet.</div>'}
       ${this.tds?.summary.length ? `<div class="sec-title">TDS deducted, ${esc(this.tds.fy)} <span>deposit by the 7th of the next month</span></div>${this.tds.summary.map((s) => `<div class="m-row ping-row"><b>${esc(s.section)}</b><span>Quarter ${s.quarter} · ${s.entries} deduction${s.entries > 1 ? 's' : ''}</span><span class="mono">${rupees(n(s.tds_paise))}</span></div>`).join('')}` : ''}`
   }

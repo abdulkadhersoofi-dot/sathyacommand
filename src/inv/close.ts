@@ -1,4 +1,4 @@
-import { esc, tonePill } from '../ui/dom'
+import { esc, tonePill, showDate } from '../ui/dom'
 import { val } from '../ui/form-modal'
 import type { WorkspaceHost } from '../ui/workspace'
 import { rupees } from './items'
@@ -51,7 +51,7 @@ export class MonthCloseView {
       </div>
       <div class="rc-sub">Variance ${tonePill(`${f.variancePercent.toFixed(2)}% of ${rupees(f.basePaise)}`, varTone)} limit ${s.limitPercent}%
         ${this.h.can('stock.approve') ? `<button type="button" class="btn small" data-mc="limit" data-id="${esc(s.storeId)}">Change limit</button>` : ''}</div>
-      <div class="rc-sub">${s.count ? `Closing count ${esc(s.count.ref)} on ${esc(s.count.date)}` : s.countNeeded ? `<span class="fd-warn">No closing count yet</span>: count the store between ${esc(o.countFrom)} and ${esc(o.to)}.` : 'Nothing held or moved this month: no count needed.'}</div>
+      <div class="rc-sub">${s.count ? `Closing count ${esc(s.count.ref)} on ${esc(showDate(s.count.date))}` : s.countNeeded ? `<span class="fd-warn">No closing count yet</span>: count the store between ${esc(o.countFrom)} and ${esc(o.to)}.` : 'Nothing held or moved this month: no count needed.'}</div>
       ${s.food ? `<div class="rc-sub">Food cost on sales of ${rupees(s.food.salesPaise)}: theoretical ${rupees(s.food.theoreticalCostPaise)} (${s.food.theoreticalPercent}%) · actual ${rupees(s.food.actualCostPaise)} (${s.food.actualPercent}%) with wastage ${rupees(s.food.wastagePaise)} and count loss ${rupees(s.food.countLossPaise)}${s.food.dishesWithoutRecipe.length ? ` · ${s.food.dishesWithoutRecipe.length} dishes have no recipe` : ''}</div>` : ''}
       ${c ? `<div class="rc-sub">Prepared by ${esc(c.prepared_by_name)}${c.decided_by_name ? ` · ${c.status === 'rejected' ? 'sent back' : 'signed off'} by ${esc(c.decided_by_name)}` : ''}${c.note ? ` · “${esc(c.note)}”` : ''}</div>` : ''}
       ${canClose ? `<div class="rc-right"><button type="button" class="btn primary" data-mc="close" data-id="${esc(s.storeId)}">Close ${esc(o.month)}…</button></div>` : ''}

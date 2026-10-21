@@ -1,4 +1,4 @@
-import { esc, tonePill } from '../ui/dom'
+import { esc, tonePill, showDate } from '../ui/dom'
 import { val } from '../ui/form-modal'
 import { chips, rs, type Ws } from './common'
 
@@ -70,12 +70,12 @@ export class BarView {
     if (this.sub === 'purchases') {
       return bar + (this.manager ? '<div class="ws-toolbar"><button type="button" class="btn primary" data-b="purchase">Enter TASMAC invoice</button></div>' : '')
         + (this.purchases.map((p) => `<div class="row-card"><div class="rc-title">${esc(p.supplier)} · ${esc(p.invoice_no)}</div>
-          <div class="rc-sub">${esc(p.invoice_date)} · ${p.lines.map((l) => `${l.bottles} × ${esc(l.name)}`).join(', ')} · received by ${esc(p.received_by)}${p.permit_no ? ` · permit ${esc(p.permit_no)}` : ''}${Number(p.tcs_paise) ? ` · TCS ${rs(Number(p.tcs_paise))}` : ''}</div>
+          <div class="rc-sub">${esc(showDate(p.invoice_date))} · ${p.lines.map((l) => `${l.bottles} × ${esc(l.name)}`).join(', ')} · received by ${esc(p.received_by)}${p.permit_no ? ` · permit ${esc(p.permit_no)}` : ''}${Number(p.tcs_paise) ? ` · TCS ${rs(Number(p.tcs_paise))}` : ''}</div>
           <div class="rc-right"><span class="mono">${rs(p.total_paise)}</span></div></div>`).join('') || '<div class="empty">No purchases entered.</div>')
     }
     if (this.sub === 'counts') {
       return bar + (this.manager ? '<div class="ws-toolbar"><button type="button" class="btn primary" data-b="count">Enter a physical count</button></div><p class="muted small">Count full bottles and measure the open bottle. The GM approves before the book stock changes; a variance above 3% is flagged to the MD.</p>' : '')
-        + this.counts.map((c) => `<div class="row-card"><div class="rc-title">${esc(c.business_date)} · variance ${Number(c.variance_percent)}%</div>
+        + this.counts.map((c) => `<div class="row-card"><div class="rc-title">${esc(showDate(c.business_date))} · variance ${Number(c.variance_percent)}%</div>
           <div class="rc-sub">${c.lines.map((l) => `${esc(l.name)} ${l.varianceMl > 0 ? '+' : ''}${l.varianceMl} ml`).join(' · ')} · ${esc(c.counted_by)}</div>
           <div class="rc-right">${tonePill(c.status === 'approved' ? 'Approved' : c.status === 'rejected' ? 'Rejected' : 'Waiting for GM', c.status === 'approved' ? '--st-vacant' : c.status === 'rejected' ? '--st-ooo' : '--marigold')}</div></div>`).join('')
     }
@@ -91,7 +91,7 @@ export class BarView {
         <div class="sec-title">Peg measures and scales <span>legal metrology stamping</span></div>
         ${this.ws.can('bar.settings', 'licences.edit') ? '<div class="ws-toolbar"><button type="button" class="btn" data-b="measure">Add measure</button></div>' : ''}
         ${this.measures.filter((m) => m.active).map((m) => `<div class="row-card${m.due_on && m.due_on <= today ? ' late' : ''}"><div class="rc-title">${esc(m.name)}</div>
-          <div class="rc-sub">${esc([m.capacity, m.location, m.stamp_no && `stamp ${m.stamp_no}`].filter(Boolean).join(' · '))}${m.stamped_on ? ` · stamped ${esc(m.stamped_on)}` : ''}</div>
+          <div class="rc-sub">${esc([m.capacity, m.location, m.stamp_no && `stamp ${m.stamp_no}`].filter(Boolean).join(' · '))}${m.stamped_on ? ` · stamped ${esc(showDate(m.stamped_on))}` : ''}</div>
           <div class="rc-right">${m.due_on ? tonePill(`due ${m.due_on}`, m.due_on <= today ? '--st-departing' : '--muted') : tonePill('no date', '--marigold')}${this.ws.can('bar.settings', 'licences.edit') ? `<button type="button" class="btn small" data-measure="${esc(m.id)}">Restamped…</button>` : ''}</div></div>`).join('') || '<div class="empty">No measures registered.</div>'}`
     }
     return bar + (this.manager ? '<div class="ws-toolbar"><button type="button" class="btn primary" data-b="add-brand">Add brand</button></div>' : '')

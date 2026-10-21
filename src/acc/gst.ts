@@ -1,4 +1,4 @@
-import { esc, toast, tonePill } from '../ui/dom'
+import { esc, toast, tonePill, showDate } from '../ui/dom'
 import { val } from '../ui/form-modal'
 import { money, type Host } from './books'
 
@@ -61,7 +61,7 @@ export class GstView {
         ${g1.atadj.length ? row('Advances of earlier months adjusted (11B)', sum(g1.atadj)) : ''}
         ${g1.nonGst ? `<tr><td>Non-GST supplies <small class="muted">liquor, under TN VAT</small></td><td class="n">${money(g1.nonGst)}</td><td colspan="3"></td></tr>` : ''}
       </tbody></table></div>
-      ${g1.b2b.length ? `<details><summary class="small">B2B invoices</summary><div class="acc-scroll"><table class="acc-table"><tbody>${g1.b2b.map((x) => `<tr><td class="mono">${esc(x.number)}</td><td>${esc(x.date)}</td><td>${esc(x.name)} <small class="muted">${esc(x.gstin)}</small></td><td class="n">${money(x.value)}</td><td>${x.einvoiced ? tonePill('IRN', '--st-vacant') : ''}</td></tr>`).join('')}</tbody></table></div></details>` : ''}
+      ${g1.b2b.length ? `<details><summary class="small">B2B invoices</summary><div class="acc-scroll"><table class="acc-table"><tbody>${g1.b2b.map((x) => `<tr><td class="mono">${esc(x.number)}</td><td>${esc(showDate(x.date))}</td><td>${esc(x.name)} <small class="muted">${esc(x.gstin)}</small></td><td class="n">${money(x.value)}</td><td>${x.einvoiced ? tonePill('IRN', '--st-vacant') : ''}</td></tr>`).join('')}</tbody></table></div></details>` : ''}
       <details><summary class="small">HSN / SAC summary and documents issued</summary><div class="acc-scroll"><table class="acc-table"><thead><tr><th>SAC</th><th>Description</th><th class="n">Rate</th><th class="n">Taxable</th><th class="n">CGST</th><th class="n">SGST</th></tr></thead><tbody>
         ${[...g1.hsnB2b.map((x) => ({ ...x, k: 'B2B' })), ...g1.hsnB2c.map((x) => ({ ...x, k: 'B2C' }))].map((x) => `<tr><td class="mono">${esc(x.sac)} <small class="muted">${x.k}</small></td><td>${esc(x.desc)}</td><td class="n">${x.rate}%</td><td class="n">${money(x.taxable)}</td><td class="n">${money(x.cgst)}</td><td class="n">${money(x.sgst)}</td></tr>`).join('')}
         </tbody></table><table class="acc-table"><thead><tr><th>Documents</th><th>From</th><th>To</th><th class="n">Issued</th><th class="n">Cancelled</th></tr></thead><tbody>

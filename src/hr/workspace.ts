@@ -2,7 +2,7 @@ import qrcode from 'qrcode-generator'
 import type { Api } from '../live/api'
 import type { Me } from '../live/signin'
 import type { Outbox } from '../live/outbox'
-import { esc, toast, tonePill } from '../ui/dom'
+import { esc, toast, tonePill, showDate } from '../ui/dom'
 import { val } from '../ui/form-modal'
 import { Workspace, type View, type WorkspaceHost } from '../ui/workspace'
 import { money } from '../acc/books'
@@ -55,7 +55,7 @@ class PeopleView implements View {
         <span class="muted small">${this.rows.filter((r) => r.status !== 'exited').length} on the rolls</span></div>
       <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Code</th><th>Name</th><th>Department</th><th>Designation</th><th>Joined</th><th>UAN / ESIC</th>${this.rows.some((r) => r.grossPaise != null) ? '<th class="n">Monthly pay</th>' : ''}<th></th></tr></thead><tbody>
         ${rows.map((r) => `<tr class="${r.status === 'exited' ? 'retired' : ''}"><td class="mono">${esc(r.code)}</td><td><button type="button" class="linkish" data-emp="${esc(r.id)}">${esc(r.name)}</button>${r.login ? ' <small class="muted">app</small>' : ''}</td>
-          <td>${esc(dep[r.department]?.name ?? r.department)}</td><td>${esc(r.designation)}</td><td>${esc(r.joinedOn)}</td><td class="mono small">${esc(r.uan ?? '—')} / ${esc(r.esicIp ?? '—')}</td>
+          <td>${esc(dep[r.department]?.name ?? r.department)}</td><td>${esc(r.designation)}</td><td>${esc(showDate(r.joinedOn))}</td><td class="mono small">${esc(r.uan ?? '—')} / ${esc(r.esicIp ?? '—')}</td>
           ${this.rows.some((x) => x.grossPaise != null) ? `<td class="n">${r.grossPaise != null ? money(r.grossPaise) : '<span class="fd-warn">not set</span>'}</td>` : ''}<td>${r.status !== 'active' ? tonePill(r.status === 'notice' ? `Leaving ${r.exitOn}` : 'Left', r.status === 'notice' ? '--marigold' : '--muted') : ''}</td></tr>`).join('') || '<tr><td colspan="8" class="empty">No employees yet.</td></tr>'}
       </tbody></table></div>`
   }
@@ -69,7 +69,7 @@ class PeopleView implements View {
         ${this.payroll() ? '<button type="button" class="btn" data-hr="tax">Income tax</button><button type="button" class="btn" data-hr="form16">Form 16</button>' : ''}${this.h.can('payroll.run', 'hr.manage') && d.status !== 'exited' ? '<button type="button" class="btn" data-hr="advance">Salary advance…</button>' : ''}
         ${this.h.can('payroll.run') && d.exit_on && !this.settlements.length ? '<button type="button" class="btn" data-hr="fnf">Full and final…</button>' : ''}
         <button type="button" class="btn" data-hr="idcard">ID card</button>${manage && d.status !== 'exited' ? '<button type="button" class="btn ghost" data-hr="exit">Leaving…</button>' : ''}</div>
-      <div class="bq-head"><div><div class="muted mono small">${esc(d.code)} · ${esc(d.departmentName)}</div><h2>${esc(d.name)}</h2><div class="small">${esc(d.designation)} · ${esc(d.employment_type.replace('_', ' '))} · joined ${esc(d.joined_on)}${d.exit_on ? ` · last day ${esc(d.exit_on)} (${esc(d.exit_reason ?? '')})` : ''}</div></div>
+      <div class="bq-head"><div><div class="muted mono small">${esc(d.code)} · ${esc(d.departmentName)}</div><h2>${esc(d.name)}</h2><div class="small">${esc(d.designation)} · ${esc(d.employment_type.replace('_', ' '))} · joined ${esc(showDate(d.joined_on))}${d.exit_on ? ` · last day ${esc(showDate(d.exit_on))} (${esc(d.exit_reason ?? '')})` : ''}</div></div>
         <div class="rc-right">${d.status !== 'active' ? tonePill(d.status === 'notice' ? 'Serving notice' : 'Left', '--marigold') : ''}${d.user_id ? tonePill('Uses the app', '--st-vacant') : ''}</div></div>
       <div class="bq-two"><div><div class="sec-title">Details</div><dl class="hr-dl">${kv('Mobile', d.mobile)}${kv('Email', d.email)}${kv('Date of birth', d.dob)}${kv('Address', d.address)}${kv('Emergency contact', d.emergency)}
           ${kv('PAN', d.pan)}${kv('Aadhaar', d.aadhaar_last4 ? `•••• •••• ${d.aadhaar_last4}` : null)}${kv('UAN', d.uan)}${kv('ESIC IP', d.esic_ip)}${kv('Bank', [d.bank_name, d.bank_account, d.ifsc].filter(Boolean).join(' · '))}
@@ -81,12 +81,12 @@ class PeopleView implements View {
       <div class="sec-title">Onboarding <span>${done} of ${d.onboarding.length}</span></div>
       <div class="hr-checks">${d.onboarding.map((o) => `<label class="check"><input type="checkbox" data-onb="${esc(o.item)}" ${o.done_at ? 'checked' : ''} ${manage ? '' : 'disabled'}> ${esc(o.item)}${o.by ? ` <small class="muted">${esc(o.by)}</small>` : ''}</label>`).join('')}</div>
       <div class="sec-title">Training</div>
-      <div class="m-table">${d.training.map((t) => `<div class="m-row bq-ins"><span>${esc(t.done_on)}</span><span>${esc(t.title)}${t.valid_until ? ` · valid to ${esc(t.valid_until)}${t.valid_until < d.today ? ' <b class="fd-warn">lapsed</b>' : ''}` : ''}</span></div>`).join('') || '<p class="empty">None recorded.</p>'}</div>
+      <div class="m-table">${d.training.map((t) => `<div class="m-row bq-ins"><span>${esc(showDate(t.done_on))}</span><span>${esc(t.title)}${t.valid_until ? ` · valid to ${esc(showDate(t.valid_until))}${t.valid_until < d.today ? ' <b class="fd-warn">lapsed</b>' : ''}` : ''}</span></div>`).join('') || '<p class="empty">None recorded.</p>'}</div>
       ${this.settlements.map((x) => `<div class="sec-title">Full and final settlement ${tonePill(x.status, PAY_TONE[x.status === 'draft' ? 'submitted' : x.status] ?? '--muted')}</div>
         <div class="m-table">${x.items.map((i) => `<div class="m-row pay-kv"><span>${esc(i.label)}${i.detail ? ` <small class="muted">${esc(i.detail)}</small>` : ''}</span><span class="mono">${money(i.amount_paise)}</span></div>`).join('')}<div class="m-row pay-kv"><b>${x.net_paise >= 0 ? 'Due to them' : 'They owe'}</b><b class="mono">${money(Math.abs(x.net_paise))}</b></div></div>`).join('')}
-      ${this.advances.length ? `<div class="sec-title">Salary advances and loans</div><div class="m-table">${this.advances.map((a) => `<div class="m-row pay-kv"><span>${esc(a.kind)} of ${money(a.amount_paise)}, ${money(a.instalment_paise)} a month · ${esc(a.reason)}${a.issued_on ? ` · paid ${esc(a.issued_on)}` : ''}</span><span>${a.status === 'active' ? `<span class="mono">${money(a.outstandingPaise)}</span> left` : tonePill(a.status, a.status === 'closed' ? '--muted' : '--marigold')}</span></div>`).join('')}</div>` : ''}
+      ${this.advances.length ? `<div class="sec-title">Salary advances and loans</div><div class="m-table">${this.advances.map((a) => `<div class="m-row pay-kv"><span>${esc(a.kind)} of ${money(a.amount_paise)}, ${money(a.instalment_paise)} a month · ${esc(a.reason)}${a.issued_on ? ` · paid ${esc(showDate(a.issued_on))}` : ''}</span><span>${a.status === 'active' ? `<span class="mono">${money(a.outstandingPaise)}</span> left` : tonePill(a.status, a.status === 'closed' ? '--muted' : '--marigold')}</span></div>`).join('')}</div>` : ''}
       <div class="sec-title">Leave taken and asked for</div>
-      <div class="m-table">${d.leave.applications.map((a) => `<div class="m-row bq-ins"><span>${esc(a.from_date)}</span><span>${esc(this.h.cfg.leaveTypes[a.leave_type]?.name ?? a.leave_type)}, ${Number(a.days)} days ${tonePill(a.status, LEAVE_TONE[a.status])}</span></div>`).join('') || '<p class="empty">None.</p>'}</div>`
+      <div class="m-table">${d.leave.applications.map((a) => `<div class="m-row bq-ins"><span>${esc(showDate(a.from_date))}</span><span>${esc(this.h.cfg.leaveTypes[a.leave_type]?.name ?? a.leave_type)}, ${Number(a.days)} days ${tonePill(a.status, LEAVE_TONE[a.status])}</span></div>`).join('') || '<p class="empty">None.</p>'}</div>`
   }
 
   private form(d?: Detail) {
@@ -206,7 +206,7 @@ class LeaveView implements View {
   html() {
     return `<div class="ws-toolbar">${[['pending', 'Waiting'], ['approved', 'Approved'], ['all', 'All']].map(([k, l]) => `<button type="button" class="chip" data-lvs="${k}" aria-pressed="${k === this.status}">${l}</button>`).join('')}</div>
       ${this.rows.map((a) => `<div class="row-card"><div class="rc-title">${esc(a.name)} <small class="muted mono">${esc(a.code)}</small> · ${esc(this.h.cfg.leaveTypes[a.leave_type]?.name ?? a.leave_type)}</div>
-        <div class="rc-sub">${esc(a.from_date)}${a.to_date !== a.from_date ? ` to ${esc(a.to_date)}` : ''}${a.half_day ? ' (half day)' : ''} · ${Number(a.days)} days · ${esc(this.h.cfg.departments[a.department]?.name ?? a.department)}${a.reason ? ` · ${esc(a.reason)}` : ''}${a.decided_by ? ` · ${esc(a.decided_by)}${a.decision_note ? `: ${esc(a.decision_note)}` : ''}` : ''}</div>
+        <div class="rc-sub">${esc(showDate(a.from_date))}${a.to_date !== a.from_date ? ` to ${esc(showDate(a.to_date))}` : ''}${a.half_day ? ' (half day)' : ''} · ${Number(a.days)} days · ${esc(this.h.cfg.departments[a.department]?.name ?? a.department)}${a.reason ? ` · ${esc(a.reason)}` : ''}${a.decided_by ? ` · ${esc(a.decided_by)}${a.decision_note ? `: ${esc(a.decision_note)}` : ''}` : ''}</div>
         <div class="rc-right">${a.status === 'pending' ? `<button type="button" class="btn small primary" data-lvd="${esc(a.id)}|approve">Approve</button><button type="button" class="btn small" data-lvd="${esc(a.id)}|reject">Turn down…</button>` : tonePill(a.status, LEAVE_TONE[a.status])}</div></div>`).join('') || '<p class="empty">Nothing here.</p>'}`
   }
   async click(el: HTMLElement) {
@@ -257,7 +257,7 @@ class TrainingView implements View {
     const today = new Date().toISOString().slice(0, 10)
     return `<p class="muted small">Certificates that have lapsed or run out in the next 60 days (FSSAI food handlers, first aid, fire drills…).</p>
       <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Person</th><th>Department</th><th>Certificate</th><th>Valid until</th></tr></thead><tbody>
-        ${this.rows.map((r) => `<tr><td>${esc(r.name)} <small class="muted mono">${esc(r.code)}</small></td><td>${esc(this.h.cfg.departments[r.department]?.name ?? r.department)}</td><td>${esc(r.title)}</td><td class="${r.valid_until < today ? 'fd-warn' : ''}">${esc(r.valid_until)}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">Nothing running out.</td></tr>'}
+        ${this.rows.map((r) => `<tr><td>${esc(r.name)} <small class="muted mono">${esc(r.code)}</small></td><td>${esc(this.h.cfg.departments[r.department]?.name ?? r.department)}</td><td>${esc(r.title)}</td><td class="${r.valid_until < today ? 'fd-warn' : ''}">${esc(showDate(r.valid_until))}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">Nothing running out.</td></tr>'}
       </tbody></table></div>`
   }
   async click() { return false }

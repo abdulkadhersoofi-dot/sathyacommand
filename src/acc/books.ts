@@ -1,4 +1,4 @@
-import { esc, tonePill } from '../ui/dom'
+import { esc, tonePill, showDate } from '../ui/dom'
 import { val } from '../ui/form-modal'
 import type { WorkspaceHost } from '../ui/workspace'
 
@@ -28,8 +28,8 @@ export function rangeChange(h: Host, el: HTMLElement) {
 
 function voucherCard(v: Voucher) {
   const auto = v.source_type && v.source_type !== 'opening' ? 'posted by the system' : v.created_by ? `by ${esc(v.created_by)}` : ''
-  return `<div class="row-card acc-voucher"><div class="rc-title"><span class="mono">${esc(v.number)}</span> · ${esc(v.date)} · ${esc(v.narration)}</div>
-    <div class="rc-sub">${esc(KIND[v.kind] ?? v.kind)} · ${auto}${v.doc_date ? ` · document dated ${esc(v.doc_date)} (that month was locked)` : ''}${v.reversed_by ? ` · reversed by ${esc(v.reversed_by)}` : ''}</div>
+  return `<div class="row-card acc-voucher"><div class="rc-title"><span class="mono">${esc(v.number)}</span> · ${esc(showDate(v.date))} · ${esc(v.narration)}</div>
+    <div class="rc-sub">${esc(KIND[v.kind] ?? v.kind)} · ${auto}${v.doc_date ? ` · document dated ${esc(showDate(v.doc_date))} (that month was locked)` : ''}${v.reversed_by ? ` · reversed by ${esc(v.reversed_by)}` : ''}</div>
     <div class="acc-scroll"><table class="acc-table"><tbody>${v.lines.map((l) => `<tr><td><button type="button" class="link" data-ledger="${esc(l.account_code)}">${esc(l.account_code)} ${esc(l.account)}</button>${l.party_name ? ` <small class="muted">${esc(l.party_name)}</small>` : ''}${l.ref ? ` <small class="muted">${esc(l.ref)}</small>` : ''}</td>
       <td class="n">${Number(l.debit_paise) ? money(Number(l.debit_paise)) : ''}</td><td class="n">${Number(l.credit_paise) ? money(Number(l.credit_paise)) : ''}</td></tr>`).join('')}</tbody></table></div>
     ${((['journal', 'payment', 'receipt', 'contra'].includes(v.kind) && !v.source_type) || v.source_type === 'opening') && !v.reversed_by ? `<div class="rc-right"><button type="button" class="btn small" data-reverse="${esc(v.id)}">Reverse…</button></div>` : ''}</div>`
@@ -107,7 +107,7 @@ export class LedgerView {
         ${d.parties.length ? `<select data-party aria-label="Party"><option value="">Everyone</option>${d.parties.map((p) => `<option value="${esc(p.id)}"${p.id === this.party ? ' selected' : ''}>${esc(p.name)} (${drcr(p.balancePaise)})</option>`).join('')}</select>` : ''}`)}
       <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Date</th><th>Voucher</th><th>Particulars</th><th class="n">Debit</th><th class="n">Credit</th><th class="n">Balance</th></tr></thead><tbody>
         <tr class="acc-grp"><td colspan="5">Opening balance</td><td class="n">${drcr(d.openingPaise)}</td></tr>
-        ${d.rows.map((r) => `<tr><td class="mono">${esc(r.date)}</td><td class="mono">${esc(r.number)}</td><td>${esc(r.narration)}${r.party_name ? ` <small class="muted">${esc(r.party_name)}</small>` : ''}</td>
+        ${d.rows.map((r) => `<tr><td class="mono">${esc(showDate(r.date))}</td><td class="mono">${esc(r.number)}</td><td>${esc(r.narration)}${r.party_name ? ` <small class="muted">${esc(r.party_name)}</small>` : ''}</td>
           <td class="n">${Number(r.debit_paise) ? money(Number(r.debit_paise)) : ''}</td><td class="n">${Number(r.credit_paise) ? money(Number(r.credit_paise)) : ''}</td><td class="n">${drcr(r.balancePaise)}</td></tr>`).join('')}
       </tbody><tfoot><tr><td colspan="5">Closing balance</td><td class="n">${drcr(d.closingPaise)}</td></tr></tfoot></table></div>`
   }

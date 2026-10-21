@@ -1,4 +1,4 @@
-import { esc, toast, tonePill } from '../ui/dom'
+import { esc, toast, tonePill, showDate } from '../ui/dom'
 import { checked, val } from '../ui/form-modal'
 import type { WorkspaceHost } from '../ui/workspace'
 import { currentFix } from '../staff/tracker'
@@ -105,7 +105,7 @@ export class PlansView {
     return `<div class="ws-toolbar">${this.h.can('eng.manage') ? '<button type="button" class="btn primary" data-pl="add">Add a schedule</button>' : ''}
         <span class="muted small">A ticket is raised on the due day; finishing it sets the next date.</span></div>
       ${active.map((p) => `<div class="row-card${left(p.next_due) < 0 ? ' late' : ''}" data-plan="${esc(p.id)}"><div class="rc-title">${esc(p.title)} · ${esc(p.asset)}</div>
-        <div class="rc-sub">Every ${p.every_days} days · next ${esc(p.next_due)} (${dueText(p.next_due)})${p.last_done ? ` · last done ${esc(p.last_done)}` : ''} · ${p.checklist.length} checks</div></div>`).join('') || '<div class="empty">No maintenance schedules yet.</div>'}
+        <div class="rc-sub">Every ${p.every_days} days · next ${esc(showDate(p.next_due))} (${dueText(p.next_due)})${p.last_done ? ` · last done ${esc(p.last_done)}` : ''} · ${p.checklist.length} checks</div></div>`).join('') || '<div class="empty">No maintenance schedules yet.</div>'}
       ${this.list.some((p) => !p.active) ? `<div class="sec-title">Stopped</div>${this.list.filter((p) => !p.active).map((p) => `<div class="row-card retired" data-plan="${esc(p.id)}"><div class="rc-title">${esc(p.title)} · ${esc(p.asset)}</div></div>`).join('')}` : ''}`
   }
 

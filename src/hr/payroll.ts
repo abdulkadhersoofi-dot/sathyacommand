@@ -1,4 +1,4 @@
-import { esc, toast, tonePill } from '../ui/dom'
+import { esc, toast, tonePill, showDate } from '../ui/dom'
 import { val } from '../ui/form-modal'
 import type { View, WorkspaceHost } from '../ui/workspace'
 import { money } from '../acc/books'
@@ -82,7 +82,7 @@ export class PayrollView implements View {
         <div class="rc-right">${a.status === 'pending' ? (h.can('payroll.approve') ? `<button type="button" class="btn small primary" data-adv="${esc(a.id)}|approve">Approve</button><button type="button" class="btn small" data-adv="${esc(a.id)}|reject">Turn down</button>` : tonePill('With the GM', '--marigold'))
           : h.can('payroll.pay') ? `<button type="button" class="btn small primary" data-adv="${esc(a.id)}|issue">Paid…</button>` : tonePill('To be paid by accounts', '--marigold')}</div></div>`).join('')}
       ${fnf.map((x) => `<div class="row-card"><div class="rc-title">Full and final · ${esc(x.name)} <small class="muted mono">${esc(x.code)}</small> · ${money(x.net_paise)}</div>
-        <div class="rc-sub">last day ${esc(x.last_day)} · ${x.items.map((i) => `${esc(i.label)} ${money(i.amount_paise)}`).join(' · ')}</div>
+        <div class="rc-sub">last day ${esc(showDate(x.last_day))} · ${x.items.map((i) => `${esc(i.label)} ${money(i.amount_paise)}`).join(' · ')}</div>
         <div class="rc-right">${x.status === 'draft' ? (h.can('payroll.approve') ? `<button type="button" class="btn small primary" data-fnf="${esc(x.id)}|approve">Approve</button>` : tonePill('With the GM', '--marigold')) + (h.can('payroll.run') ? `<button type="button" class="btn small ghost" data-fnf="${esc(x.id)}|cancel">Cancel</button>` : '')
           : x.net_paise > 0 && h.can('payroll.pay') ? `<button type="button" class="btn small primary" data-fnf="${esc(x.id)}|pay">Paid…</button>` : tonePill(x.net_paise > 0 ? 'To be paid' : 'They owe the resort', '--marigold')}</div></div>`).join('')}`
   }
@@ -122,7 +122,7 @@ export class PayrollView implements View {
       ${r.missing.length ? `<p class="fd-warn">No pay structure, so not in this payroll: ${r.missing.map((m) => `${esc(m.name)} (${esc(m.code)})`).join(', ')}.</p>` : ''}
       ${r.pendingLeave && r.status === 'draft' ? `<p class="fd-warn">${r.pendingLeave} leave application${r.pendingLeave > 1 ? 's' : ''} in this month still waiting for approval: decide ${r.pendingLeave > 1 ? 'them' : 'it'} and work the payroll out again.</p>` : ''}
       <div class="kpis pay-kpis">${kpi('People', String(t.people))}${kpi('Gross pay', money(t.gross))}${kpi('Deductions', money(deductions))}${kpi('Net pay', money(t.net))}${kpi('Employer\'s cost on top', money(employer))}</div>
-      ${r.dues.length ? `<div class="sec-title">Statutory dues</div><div class="pay-dues">${r.dues.map((d) => `<div class="row-card"><div class="rc-title">${esc(d.name)} · <span class="mono">${money(d.amount)}</span></div><div class="rc-sub">due ${esc(d.due)}${d.paid && d.paid < d.amount ? ` · ${money(d.paid)} paid` : ''}</div>
+      ${r.dues.length ? `<div class="sec-title">Statutory dues</div><div class="pay-dues">${r.dues.map((d) => `<div class="row-card"><div class="rc-title">${esc(d.name)} · <span class="mono">${money(d.amount)}</span></div><div class="rc-sub">due ${esc(showDate(d.due))}${d.paid && d.paid < d.amount ? ` · ${money(d.paid)} paid` : ''}</div>
         <div class="rc-right">${['approved', 'paid'].includes(r.status) ? d.paid >= d.amount ? tonePill('Paid', '--st-vacant') : d.due < r.today ? tonePill('Overdue', '--st-departing') : tonePill('To pay', '--muted') : ''}${['approved', 'paid'].includes(r.status) && h.can('payroll.pay') && d.paid < d.amount ? `<button type="button" class="btn small" data-due="${d.kind}">Paid…</button>` : ''}</div></div>`).join('')}</div>` : ''}
       <div class="sec-title">People ${warned ? `<span class="fd-warn">${warned} to look at</span>` : ''}</div>
       <div class="acc-scroll"><table class="acc-table pay-table"><thead><tr><th>Code</th><th>Name</th><th>Department</th><th class="n">Paid days</th><th class="n">Overtime</th><th class="n">Gross</th><th class="n">PF</th><th class="n">ESI</th><th class="n">Prof. tax</th><th class="n">LWF</th><th class="n">Net pay</th></tr></thead><tbody>

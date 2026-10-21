@@ -4,6 +4,11 @@ import { STATUS_LABEL } from '../scene/palette'
 
 export const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T
 
+/** A date as people read it in India: 30 Oct 2026 (anything that is not a YYYY-MM-DD date is left as it is). */
+export const showDate = (v: unknown) => {
+  const s = String(v ?? '')
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(`${s}T00:00:00Z`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : s
+}
 export const esc = (s: unknown) =>
   String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!))
 

@@ -1,4 +1,4 @@
-import { esc, toast, tonePill } from '../ui/dom'
+import { esc, toast, tonePill, showDate } from '../ui/dom'
 import { val } from '../ui/form-modal'
 import { scanQr } from '../ui/qr-scan'
 import type { WorkspaceHost } from '../ui/workspace'
@@ -127,7 +127,7 @@ export class CountsView {
     const n = (v: string) => Number(v)
     return `<div class="ws-toolbar">${this.h.can('stores.count') ? '<button type="button" class="btn primary" data-ct="count">Count a store</button>' : ''}${this.h.can('stores.breakage') ? '<button type="button" class="btn" data-ct="break">Record breakage</button>' : ''}</div>
       <div class="sec-title">Counts</div>
-      ${this.counts.map((c) => `<div class="row-card"><div class="rc-title">${esc(c.number)} · ${esc(c.store)} · ${esc(c.business_date)}</div>
+      ${this.counts.map((c) => `<div class="row-card"><div class="rc-title">${esc(c.number)} · ${esc(c.store)} · ${esc(showDate(c.business_date))}</div>
         <div class="rc-sub">${c.lines.filter((l) => n(l.variance_paise)).slice(0, 6).map((l) => `${esc(l.item)} ${n(l.variance_paise) < 0 ? 'short' : 'over'} ${((n(l.counted_qty) - n(l.book_qty)) / n(l.purchase_factor)).toLocaleString('en-IN', { maximumFractionDigits: 2 })} ${esc(l.purchase_unit)} (${rupees(n(l.variance_paise))})`).join(' · ') || 'No differences'}</div>
         <div class="rc-sub">Counted by ${esc(c.counted_by_name)}${c.decided_by_name ? ` · approved by ${esc(c.decided_by_name)}` : ''} · ${n(c.book_value_paise) ? `${((Math.abs(n(c.variance_value_paise)) / n(c.book_value_paise)) * 100).toFixed(2)}% of ${rupees(n(c.book_value_paise))}` : ''}</div>
         <div class="rc-right"><b class="mono ${n(c.variance_value_paise) < 0 ? 'fd-warn' : ''}">${rupees(n(c.variance_value_paise))}</b>${tonePill(...(STATE[c.status] ?? [c.status, '--muted']))}</div></div>`).join('') || '<div class="empty">No counts yet.</div>'}

@@ -1,4 +1,4 @@
-import { esc, toast, tonePill } from '../ui/dom'
+import { esc, toast, tonePill, showDate } from '../ui/dom'
 import { checked, val } from '../ui/form-modal'
 import { money } from '../acc/books'
 import { STATUS_LABEL, STATUS_TONE, STYLE_LABEL, type Venue } from './calendar'
@@ -105,7 +105,7 @@ export class EventsView {
       manage && live ? btn('lost', 'Lost') : '', manage && (live || d.status === 'definite') ? btn('cancel', 'Cancel event') : '',
     ].join('')
     const fnRows = d.functions.map((f) => `<tr><td><b>${esc(f.name)}</b>${f.clashes.length ? `<div class="${f.clashes.some((c) => c.firm) ? 'fd-warn' : 'muted'} small">${f.clashes.map((c) => `${c.firm ? 'Clashes with' : 'Also pencilled'}: ${esc(c.title)} (${esc(STATUS_LABEL[c.status])})`).join('<br>')}</div>` : ''}</td>
-        <td>${esc(f.venue)}</td><td>${esc(f.date)} <span class="mono">${esc(f.from)}–${esc(f.to)}</span></td><td>${esc(STYLE_LABEL[f.style] ?? f.style)}${f.capacity ? ` <small class="muted">(seats ${f.capacity})</small>` : ''}</td>
+        <td>${esc(f.venue)}</td><td>${esc(showDate(f.date))} <span class="mono">${esc(f.from)}–${esc(f.to)}</span></td><td>${esc(STYLE_LABEL[f.style] ?? f.style)}${f.capacity ? ` <small class="muted">(seats ${f.capacity})</small>` : ''}</td>
         <td class="n">${f.expectedPax}${f.guaranteedPax ? ` / <b>${f.guaranteedPax}</b>` : ''}${f.actualPax != null ? ` / served ${f.actualPax}` : ''}</td><td>${esc(f.menu ?? '—')}</td><td class="n">${money(f.rentalPaise)}</td>
         <td>${manage && editable ? `<button type="button" class="btn small" data-fn="${esc(f.id)}">Edit</button>${live ? `<button type="button" class="btn small ghost" data-fndel="${esc(f.id)}">Remove</button>` : ''}` : ''}</td></tr>`).join('')
     const itemRows = d.items.map((i) => `<tr><td>${esc(i.description)}${i.functionId ? ` <small class="muted">${esc(d.functions.find((f) => f.id === i.functionId)?.name ?? '')}</small>` : ''}</td><td class="n">${i.qty}</td><td class="n">${money(i.ratePaise)}</td>
@@ -115,7 +115,7 @@ export class EventsView {
       <div class="bq-head"><div><div class="muted mono small">${esc(d.number)} · ${esc(KINDS.find((k) => k[0] === d.kind)?.[1] ?? d.kind)}</div><h2>${esc(d.title)}</h2>
         <div class="small">${esc(d.client.name)}${d.client.company ? `, ${esc(d.client.company)}` : ''}${d.client.mobile ? ` · <a href="tel:${esc(d.client.mobile)}">${esc(d.client.mobile)}</a>` : ''}${d.client.email ? ` · ${esc(d.client.email)}` : ''}${d.client.gstin ? ` · GSTIN <span class="mono">${esc(d.client.gstin)}</span>` : ''}</div>
         ${d.account ? `<div class="small">Account: <b>${esc(d.account.name)}</b></div>` : ''}
-        <div class="muted small">${esc(SOURCES.find((s) => s[0] === d.source)?.[1] ?? d.source)}${d.owner ? ` · handled by ${esc(d.owner)}` : ''}${d.siteVisitOn ? ` · site visit ${esc(d.siteVisitOn)}` : ''}${d.contractSignedOn ? ` · contract signed ${esc(d.contractSignedOn)}` : ''}</div></div>
+        <div class="muted small">${esc(SOURCES.find((s) => s[0] === d.source)?.[1] ?? d.source)}${d.owner ? ` · handled by ${esc(d.owner)}` : ''}${d.siteVisitOn ? ` · site visit ${esc(showDate(d.siteVisitOn))}` : ''}${d.contractSignedOn ? ` · contract signed ${esc(showDate(d.contractSignedOn))}` : ''}</div></div>
         <div class="rc-right">${pill(d.status)}${d.status === 'hold' && d.holdUntil ? `<small>held until ${esc(d.holdUntil)}</small>` : ''}</div></div>
       ${d.lostReason ? `<p class="fd-warn">Lost: ${esc(d.lostReason)}${d.lostTo ? ` (to ${esc(d.lostTo)})` : ''}</p>` : ''}${d.cancelReason ? `<p class="fd-warn">Cancelled: ${esc(d.cancelReason)}</p>` : ''}
       ${d.feedback ? `<p>Feedback: <b>${'★'.repeat(d.feedback.score)}${'☆'.repeat(5 - d.feedback.score)}</b> ${esc(d.feedback.note ?? '')}</p>` : ''}
@@ -136,9 +136,9 @@ export class EventsView {
           <small class="muted">valid to ${esc(q.validUntil)}</small><span class="rc-right"><button type="button" class="btn small" data-qprint="${esc(q.id)}">Print</button>${manage && q.status === 'issued' ? `<button type="button" class="btn small primary" data-qaccept="${esc(q.id)}">Client accepted</button>` : ''}</span></div>`).join('')}</div>` : ''}
 
       ${d.milestones.length || d.payments.length ? `<div class="sec-title">Advances and payments <span class="mono">received ${money(d.paidPaise)}</span></div>
-        ${d.milestones.length ? `<div class="m-table">${d.milestones.map((m) => `<div class="m-row bq-ms"><span>${esc(m.label)}</span><span>${esc(m.dueOn)}</span><span class="mono">${money(m.amountPaise)}</span><span>${tonePill({ paid: 'Paid', part: 'Part paid', due: 'Due', overdue: 'Overdue' }[m.status] ?? m.status, MS_TONE[m.status])}</span></div>`).join('')}</div>` : ''}
+        ${d.milestones.length ? `<div class="m-table">${d.milestones.map((m) => `<div class="m-row bq-ms"><span>${esc(m.label)}</span><span>${esc(showDate(m.dueOn))}</span><span class="mono">${money(m.amountPaise)}</span><span>${tonePill({ paid: 'Paid', part: 'Part paid', due: 'Due', overdue: 'Overdue' }[m.status] ?? m.status, MS_TONE[m.status])}</span></div>`).join('')}</div>` : ''}
         <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Date</th><th>Kind</th><th>How</th><th>Reference</th><th>Voucher</th><th class="n">Amount</th></tr></thead><tbody>
-          ${d.payments.map((p) => `<tr><td>${esc(p.business_date)}</td><td>${esc({ advance: 'Advance', settlement: 'Balance', refund: 'Refund' }[p.kind] ?? p.kind)}</td><td>${esc(p.method.toUpperCase())}</td><td class="mono">${esc(p.reference ?? '')}</td><td class="mono">${esc(p.voucher ?? '')}</td><td class="n">${money(p.amount_paise)}</td></tr>`).join('') || '<tr><td colspan="6" class="empty">Nothing received yet.</td></tr>'}
+          ${d.payments.map((p) => `<tr><td>${esc(showDate(p.business_date))}</td><td>${esc({ advance: 'Advance', settlement: 'Balance', refund: 'Refund' }[p.kind] ?? p.kind)}</td><td>${esc(p.method.toUpperCase())}</td><td class="mono">${esc(p.reference ?? '')}</td><td class="mono">${esc(p.voucher ?? '')}</td><td class="n">${money(p.amount_paise)}</td></tr>`).join('') || '<tr><td colspan="6" class="empty">Nothing received yet.</td></tr>'}
         </tbody></table></div>` : ''}
       ${d.invoice ? `<div class="row-card mc-card"><div class="mc-figs"><span><small>Bill ${esc(d.invoice.number)}</small><b class="mono">${money(d.invoice.totalPaise)}</b></span><span><small>Received</small><b class="mono">${money(d.paidPaise)}</b></span>
         <span><small>${d.invoice.balancePaise >= 0 ? 'Balance due' : 'Paid over'}</small><b class="mono ${d.invoice.balancePaise > 0 ? 'fd-warn' : ''}">${money(Math.abs(d.invoice.balancePaise))}</b></span></div></div>` : ''}
@@ -160,7 +160,7 @@ export class EventsView {
         : `<p class="muted small">${d.status === 'definite' ? 'Not sent yet.' : 'Sent to the kitchen, service, housekeeping, engineering, security and front office once the contract is signed.'}</p>`}
       ${Object.entries(d.instructions).some(([, v]) => v) ? `<div class="m-table">${Object.entries(d.instructions).filter(([, v]) => v).map(([k, v]) => `<div class="m-row bq-ins"><b>${esc(d.beo.depts[k]?.name ?? k)}</b><span>${esc(v)}</span></div>`).join('')}</div>` : ''}
 
-      ${d.documents.length ? `<div class="sec-title">GST documents</div><div class="m-table">${d.documents.map((x) => `<div class="m-row bq-doc"><span class="mono">${esc(x.number)}</span><span>${esc(DOC[x.type] ?? x.type)}</span><span>${esc(x.date)}</span><span class="mono">${money(x.totalPaise)}</span><span class="rc-right"><button type="button" class="btn small" data-doc="${esc(x.id)}">Print</button></span></div>`).join('')}</div>` : ''}`
+      ${d.documents.length ? `<div class="sec-title">GST documents</div><div class="m-table">${d.documents.map((x) => `<div class="m-row bq-doc"><span class="mono">${esc(x.number)}</span><span>${esc(DOC[x.type] ?? x.type)}</span><span>${esc(showDate(x.date))}</span><span class="mono">${money(x.totalPaise)}</span><span class="rc-right"><button type="button" class="btn small" data-doc="${esc(x.id)}">Print</button></span></div>`).join('')}</div>` : ''}`
   }
 
   private venueOpts(sel?: string) { return this.venues.map((v) => `<option value="${esc(v.id)}" ${v.id === sel ? 'selected' : ''}>${esc(v.name)}${v.capacity ? ` (up to ${v.capacity})` : ''}</option>`).join('') }
