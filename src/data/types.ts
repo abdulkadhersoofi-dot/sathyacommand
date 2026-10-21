@@ -42,6 +42,11 @@ export interface Reservation {
   roomTypeId?: string
   serverSpaceId?: string | null
   company?: string | null
+  /** Filled in by the guest before arrival (Phase 7). */
+  onlineCheckin?: boolean
+  /** A website booking waiting for its deposit until then. */
+  payBy?: string | null
+  otaRef?: string | null
 }
 
 export type OrderStatus = 'placed' | 'cooking' | 'ready' | 'served'

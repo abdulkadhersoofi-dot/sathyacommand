@@ -68,6 +68,16 @@ Both are built and switched off in `server/seed/roles-and-approvals.yaml`:
 - `mobile_otp: true` turns on sign-in by SMS code (needs a DLT-registered SMS provider, and mobile numbers on the logins).
 - `password_second_factor: true` makes the MD, GM, accounts and HR also enter an authenticator-app code after the password.
 
+### The booking page, payments and a channel manager (optional)
+
+The booking page is at `https://<your service>/book`; guests check in online from the link they get after booking. Without any of the settings below it works with guests paying at the resort. Add these on the service's **Environment** page when the resort is ready:
+
+| Setting | What it does |
+|---|---|
+| `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` | Website bookings take a deposit (the first night with GST) by Razorpay payment link; an unpaid booking lapses after two hours. In Razorpay's dashboard, add a webhook to `https://<your service>/public/payments/webhook` for the event `payment_link.paid`, with the same webhook secret. Try it in Razorpay's test mode first |
+| `CHANNEL_KEY` | A long random key shared with the channel manager. It reads availability and rates from `/channel/ari` and sends OTA bookings to `/channel/bookings`, both with the header `X-Channel-Key`. The channel manager's own format is mapped to these by its integration team |
+| `PUBLIC_URL` | The address guests should see in their links, if it is not the service's own (e.g. `https://book.sathyaresorts.in`) |
+
 ## Before real guests
 
 - Choose a GST Suvidha Provider for e-invoicing (IRNs come from a sandbox until then).

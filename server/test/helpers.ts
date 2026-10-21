@@ -6,7 +6,7 @@ import { totpCode } from '../src/totp'
 
 // A fresh in-memory resort with a signed-in MD, for API tests.
 
-export async function testResort(today = '2026-11-01', opts: { taxDetails?: boolean; einvoice?: import('../src/einvoice').EInvoiceProvider; printAgentKey?: string } = {}) {
+export async function testResort(today = '2026-11-01', opts: { taxDetails?: boolean; einvoice?: import('../src/einvoice').EInvoiceProvider; printAgentKey?: string; payments?: import('../src/channels').PaymentProvider; channelKey?: string } = {}) {
   const db: Db = await openPglite()
   await migrate(db)
   await seed(db, { today, mdMobile: '+919840000001' })
@@ -16,7 +16,7 @@ export async function testResort(today = '2026-11-01', opts: { taxDetails?: bool
                       address = 'Sathya Resorts Road', city = 'Coimbatore', pin = '641001'`)
   }
   let clock = new Date(`${today}T09:00:00+05:30`).getTime()
-  const app = buildApp(db, { now: () => new Date(clock), sms: { async sendOtp() {} }, einvoice: opts.einvoice, printAgentKey: opts.printAgentKey })
+  const app = buildApp(db, { now: () => new Date(clock), sms: { async sendOtp() {} }, einvoice: opts.einvoice, printAgentKey: opts.printAgentKey, payments: opts.payments, channelKey: opts.channelKey })
 
   const post = (url: string, token: string, payload?: unknown) =>
     app.inject({ method: 'POST', url, headers: { authorization: `Bearer ${token}` }, payload: payload as object })

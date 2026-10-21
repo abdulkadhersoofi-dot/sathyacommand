@@ -49,7 +49,8 @@ export class FrontDesk {
     <div class="fd-date">Business date <b>${fmtDay(today)}</b></div>`
     const card = (r: Reservation, actions: string) => `<div class="row-card" ${r.spaceId ? `data-focus="${esc(r.spaceId)}"` : ''}>
       <div class="rc-title">${r.vip ? '<span class="vip">VIP</span> ' : ''}${esc(r.guest)}</div>
-      <div class="rc-sub">${r.roomNo ? `Room ${esc(r.roomNo)}` : 'No room yet'} · ${r.pax} pax${r.company ? ` · ${esc(r.company)}` : ''}${r.balance ? ` · <b>due ${rs(r.balance * 100)}</b>` : ''}</div>
+      <div class="rc-sub">${r.roomNo ? `Room ${esc(r.roomNo)}` : 'No room yet'} · ${r.pax} pax${r.company ? ` · ${esc(r.company)}` : ''}${r.balance ? ` · <b>due ${rs(r.balance * 100)}</b>` : ''}
+        ${r.onlineCheckin ? ' · <span class="fd-tag ok">Checked in online</span>' : ''}${r.payBy ? ` · <span class="fd-tag warn">Deposit due by ${new Date(r.payBy).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>` : ''}${r.otaRef ? ` · <span class="fd-tag">${esc(r.source.replace('_', '.'))} ${esc(r.otaRef)}</span>` : ''}</div>
       <div class="rc-right">${actions}</div></div>`
     const btn = (act: string, id: string, label: string, primary = false) => `<button class="btn small${primary ? ' primary' : ''}" data-fd="${act}" data-res="${esc(id)}" type="button">${label}</button>`
     return toolbar + `
@@ -159,14 +160,19 @@ export class FrontDesk {
     const options = rooms.filter((m) => m.room_type_id === r.roomTypeId && !busy.has(m.id))
     const others = rooms.filter((m) => m.room_type_id !== r.roomTypeId && !busy.has(m.id))
     const current = r.serverSpaceId
+    // What the guest filled in before arrival (online check-in): shown, and the ID type chosen for the desk.
+    const oc = r.onlineCheckin ? (await this.api.get<{ onlineCheckin: { eta: string | null; id_type: string | null; id_last4: string | null; address: string | null; purpose: string | null; preferences: string | null; company: string | null; gstin: string | null } | null }>(`/api/reservations/${id}`)).onlineCheckin : null
+    const idMap: Record<string, string> = { aadhaar: 'aadhaar', passport: 'passport', driving_licence: 'dl', voter_id: 'voter' }
     this.open(`Check in ${r.guest}`, `
       <p class="muted">${fmtDay(r.arrival)} → ${fmtDay(r.departure)} · ${r.pax} guest${r.pax > 1 ? 's' : ''}</p>
+      ${oc ? `<div class="fd-online"><b>Checked in online</b>${oc.eta ? ` · arriving ${esc(oc.eta)}` : ''}${oc.id_type ? ` · ${esc(oc.id_type.replace('_', ' '))}${oc.id_last4 ? ` ending ${esc(oc.id_last4)}` : ''}` : ''}${oc.purpose ? ` · ${esc(oc.purpose)}` : ''}
+        ${oc.address ? `<div class="small">${esc(oc.address)}</div>` : ''}${oc.preferences ? `<div class="small">Wants: ${esc(oc.preferences)}</div>` : ''}${oc.company ? `<div class="small">Bill to ${esc(oc.company)}${oc.gstin ? ` (${esc(oc.gstin)})` : ''}</div>` : ''}</div>` : ''}
       <div class="form-grid">
         <label class="span2">Room<select name="room">
           ${options.map((m) => `<option value="${esc(m.id)}" ${m.id === current ? 'selected' : ''}>${esc(m.room_no)} · ${esc(m.room_type)}${m.building ? ` · ${esc(m.building)}` : ''}</option>`).join('')}
           ${others.length ? `<optgroup label="Upgrade / other type">${others.map((m) => `<option value="${esc(m.id)}" data-upgrade>${esc(m.room_no)} · ${esc(m.room_type)}</option>`).join('')}</optgroup>` : ''}
         </select></label>
-        <label>ID type<select name="idType"><option value="aadhaar">Aadhaar</option><option value="passport">Passport</option><option value="dl">Driving licence</option><option value="voter">Voter ID</option></select></label>
+        <label>ID type<select name="idType">${[['aadhaar', 'Aadhaar'], ['passport', 'Passport'], ['dl', 'Driving licence'], ['voter', 'Voter ID']].map(([v, l]) => `<option value="${v}" ${idMap[oc?.id_type ?? ''] === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
         <label>ID number<input name="idNumber" autocomplete="off" required></label>
       </div>
       <p class="muted small">Only the last 4 characters of the ID number are stored.</p>`, 'Check in', async (f) => {

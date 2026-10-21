@@ -5,6 +5,7 @@ import type { TaxConfig } from '@sathya/tax'
 import type { Actor } from '@sathya/audit'
 import type { Db } from './db'
 import type { EInvoiceProvider } from './einvoice'
+import type { PaymentProvider } from './channels'
 
 // Everything a route needs, passed in once so tests can swap the clock and the SMS sender.
 
@@ -33,6 +34,10 @@ export interface Ctx {
   einvoice?: EInvoiceProvider
   /** Shared secret of the print agent on the edge box (PRINT_AGENT_KEY). */
   printAgentKey?: string
+  /** Payment links for guests (Razorpay keys in the environment); none: guests pay at the resort. */
+  payments?: PaymentProvider
+  /** Shared key the channel manager signs its calls with (CHANNEL_KEY); none: no channel manager. */
+  channelKey?: string
 }
 
 export interface Caller extends Actor {

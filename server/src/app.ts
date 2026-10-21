@@ -43,6 +43,8 @@ import { tdsRoutes } from './routes/tds'
 import { vatAssetRoutes } from './routes/vat-assets'
 import { banquetRoutes } from './routes/banquets'
 import { salesRoutes } from './routes/sales'
+import { publicRoutes } from './routes/public'
+import { channelRoutes } from './routes/channels'
 
 export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boolean; appDir?: string } = {}) {
   const ctx: Ctx = {
@@ -53,8 +55,11 @@ export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boo
     now: opts.now ?? (() => new Date()),
     einvoice: opts.einvoice,
     printAgentKey: opts.printAgentKey,
+    payments: opts.payments,
+    channelKey: opts.channelKey,
   }
-  const app = Fastify({ logger: opts.logger ?? false })
+  // Behind Render's proxy: the guest's own address, for the booking page's limits.
+  const app = Fastify({ logger: opts.logger ?? false, trustProxy: true })
 
   app.setErrorHandler((err, _req, reply) => {
     if (err instanceof HttpError) return reply.status(err.status).send({ error: err.message, ...err.extra })
@@ -102,6 +107,8 @@ export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boo
   vatAssetRoutes(app, ctx)
   banquetRoutes(app, ctx)
   salesRoutes(app, ctx)
+  publicRoutes(app, ctx)
+  channelRoutes(app, ctx)
 
   // Serve the built 3D app and front desk screens from the same address as the API.
   if (opts.appDir && existsSync(opts.appDir)) app.register(fastifyStatic, { root: opts.appDir, index: 'index.html' })

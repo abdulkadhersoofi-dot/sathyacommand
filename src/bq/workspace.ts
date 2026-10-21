@@ -9,12 +9,13 @@ import { VenuesView } from './venues'
 import { SalesView } from './sales'
 import { AccountsView } from './accounts'
 import { BlocksView } from './blocks'
+import { ChannelsView } from './channels'
 
 // Banquets & sales: the venue calendar, events from enquiry to the final bill, the sales pipeline and
 // follow-ups, company accounts, room blocks, the event orders each department works from, and the venues
 // and packages that are sold.
 
-type Tab = 'calendar' | 'events' | 'sales' | 'accounts' | 'blocks' | 'beo' | 'venues'
+type Tab = 'calendar' | 'events' | 'sales' | 'accounts' | 'blocks' | 'channels' | 'beo' | 'venues'
 export type BqHost = WorkspaceHost & { openEvent(id: string): void; newEnquiry(venueId?: string, date?: string): void; newBlock(eventId: string, title: string): void; openBlock(id: string): void }
 
 export class BanquetsWorkspace extends Workspace<Tab> implements BqHost {
@@ -26,11 +27,11 @@ export class BanquetsWorkspace extends Workspace<Tab> implements BqHost {
     super(api, me, outbox, 'Banquets & sales', onClose)
     this.events = new EventsView(this)
     this.blocks = new BlocksView(this)
-    this.views = { calendar: new CalendarView(this), events: this.events, sales: new SalesView(this), accounts: new AccountsView(this), blocks: this.blocks, beo: new BeoView(this), venues: new VenuesView(this) }
+    this.views = { calendar: new CalendarView(this), events: this.events, sales: new SalesView(this), accounts: new AccountsView(this), blocks: this.blocks, channels: new ChannelsView(this), beo: new BeoView(this), venues: new VenuesView(this) }
     this.tab = this.tabs()[0][0]
   }
 
-  static allowed(me: Me) { return ['*', 'events.view', 'events.manage', 'events.payment', 'events.bill', 'venues.manage', 'beo.view', 'sales.manage', 'rates.contract'].some((p) => me.permissions.includes(p)) }
+  static allowed(me: Me) { return ['*', 'events.view', 'events.manage', 'events.payment', 'events.bill', 'venues.manage', 'beo.view', 'sales.manage', 'rates.contract', 'revenue.manage', 'front_desk'].some((p) => me.permissions.includes(p)) }
 
   tabs(): [Tab, string][] {
     const t: [Tab, string][] = []
@@ -40,6 +41,7 @@ export class BanquetsWorkspace extends Workspace<Tab> implements BqHost {
     if (sales) t.push(['sales', 'Sales'])
     if (this.can('sales.manage', 'rates.contract')) t.push(['accounts', 'Accounts'])
     if (sales) t.push(['blocks', 'Room blocks'])
+    if (this.can('revenue.manage', 'front_desk')) t.push(['channels', 'Rates & channels'])
     if (this.can('beo.view', 'events.manage', 'events.view')) t.push(['beo', 'Event orders'])
     if (!events && this.can('beo.view')) t.unshift(['calendar', 'Venue calendar'])
     if (this.can('venues.manage', 'events.manage')) t.push(['venues', 'Venues & packages'])

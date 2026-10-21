@@ -1,0 +1,55 @@
+/* Guest pages (booking, online check-in): their own look, not the staff app's. */
+:root {
+  --g-bg: #f6f3ec; --g-surface: #ffffff; --g-fg: #1d1a16; --g-muted: #6b645a; --g-line: #e2dccf;
+  --g-accent: #0d7672; --g-accent-fg: #ffffff; --g-warn: #b5462f; --g-ok: #2c8a57; --g-soft: #eef6f4;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --g-bg: #10171a; --g-surface: #172126; --g-fg: #ece7dd; --g-muted: #a39c90; --g-line: #2a363b;
+    --g-accent: #3cc2b6; --g-accent-fg: #062320; --g-warn: #f08a6e; --g-ok: #6cd39a; --g-soft: #16302e;
+  }
+}
+:root[data-theme="dark"] {
+  --g-bg: #10171a; --g-surface: #172126; --g-fg: #ece7dd; --g-muted: #a39c90; --g-line: #2a363b;
+  --g-accent: #3cc2b6; --g-accent-fg: #062320; --g-warn: #f08a6e; --g-ok: #6cd39a; --g-soft: #16302e;
+}
+html.guest-page, body.g-page { height: auto; overflow: auto; }
+body.g-page { margin: 0; background: var(--g-bg); color: var(--g-fg); font: 400 15px/1.5 Manrope, system-ui, sans-serif; }
+.g-wrap { max-width: 760px; margin: 0 auto; padding: 20px 16px 48px; }
+.g-head { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+.g-mark { width: 38px; height: 38px; border-radius: 10px; background: linear-gradient(135deg, #e8a317, #0d7672); flex: none; }
+.g-head h1 { font: 700 20px/1.2 Unbounded, Manrope, sans-serif; margin: 0; }
+.g-head p { margin: 2px 0 0; color: var(--g-muted); font-size: 13px; }
+.g-card { background: var(--g-surface); border: 1px solid var(--g-line); border-radius: 14px; padding: 16px; margin: 12px 0; }
+.g-card h2 { font-size: 17px; margin: 0 0 10px; }
+.g-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; }
+.g-grid .full { grid-column: 1 / -1; }
+.g-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; font-weight: 700; color: var(--g-muted); min-width: 0; }
+.g-grid input, .g-grid select, .g-grid textarea { font: 500 15px Manrope, system-ui, sans-serif; color: var(--g-fg); background: var(--g-bg); border: 1px solid var(--g-line); border-radius: 10px; padding: 10px 12px; min-width: 0; }
+.g-grid input:focus, .g-grid select:focus, .g-grid textarea:focus { outline: 2px solid var(--g-accent); outline-offset: 0; }
+.g-check { flex-direction: row !important; align-items: flex-start; gap: 8px !important; color: var(--g-fg) !important; font-weight: 500 !important; }
+.g-btn { font: 700 15px Manrope, system-ui, sans-serif; border-radius: 10px; padding: 12px 18px; border: 1px solid var(--g-line); background: var(--g-surface); color: var(--g-fg); cursor: pointer; }
+.g-btn.primary { background: var(--g-accent); border-color: var(--g-accent); color: var(--g-accent-fg); }
+.g-btn:disabled { opacity: .5; cursor: progress; }
+.g-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.g-room { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; }
+.g-room h3 { margin: 0; font-size: 16px; }
+.g-room .g-sub { color: var(--g-muted); font-size: 13px; }
+.g-plans { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 6px; }
+.g-plan { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--g-line); border-radius: 10px; cursor: pointer; background: var(--g-bg); text-align: left; font: inherit; color: inherit; width: 100%; }
+.g-plan:hover, .g-plan[aria-pressed="true"] { border-color: var(--g-accent); background: var(--g-soft); }
+.g-plan b { font-variant-numeric: tabular-nums; }
+.g-off { opacity: .6; }
+.g-note { color: var(--g-muted); font-size: 13px; }
+.g-error { color: var(--g-warn); font-weight: 600; margin-top: 8px; }
+.g-ok { color: var(--g-ok); font-weight: 700; }
+.g-sum { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 14px; font-size: 14px; }
+.g-sum dt { color: var(--g-muted); }
+.g-sum dd { margin: 0; font-weight: 600; }
+.g-hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+.mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+@media (max-width: 560px) { .g-grid { grid-template-columns: minmax(0, 1fr); } }
+body.g-page { min-height: 100vh; }
+.g-page a { color: var(--g-accent); font-weight: 600; }
+.g-page a.g-btn { text-decoration: none; display: inline-block; }
+.g-page a.g-btn.primary { color: var(--g-accent-fg); }

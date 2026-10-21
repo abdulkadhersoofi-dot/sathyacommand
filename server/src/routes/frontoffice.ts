@@ -70,6 +70,8 @@ export interface BookingInput {
   debtorId?: string
   /** A room block (a wedding or a group): one of its rooms, at the block's rate (Phase 7). */
   blockId?: string
+  /** The price of each night as an OTA sold it, from the channel manager (Phase 7). */
+  nightAmounts?: number[]
 }
 
 /**
@@ -127,8 +129,9 @@ export async function bookStay(ctx: Ctx, t: Db, who: Caller, b: BookingInput) {
     const full = (await freeByNight(t, b.roomTypeId!, nights)).filter((n) => n.free <= 0)
     if (full.length) throw new HttpError(409, `No ${b.roomTypeId} rooms left on ${full.map((n) => n.night).join(', ')}.`, { fullNights: full.map((n) => n.night) })
   }
-  const amounts: number[] = []
-  for (const n of nights) {
+  if (b.nightAmounts && (b.nightAmounts.length !== nights.length || b.nightAmounts.some((a) => !(Number.isInteger(a) && a > 0)))) throw new HttpError(400, 'One price per night, in paise.')
+  const amounts: number[] = b.nightAmounts ? [...b.nightAmounts] : []
+  for (const n of b.nightAmounts ? [] : nights) {
     const a = blockRate ?? (b.debtorId ? await contractRate(t, b.debtorId, b.plan!, b.roomTypeId!, n) : null) ?? await rateFor(t, b.plan!, b.roomTypeId!, n)
     if (a == null) throw new HttpError(422, `No ${b.plan} rate for ${b.roomTypeId} on ${n}.`)
     amounts.push(a)
@@ -211,7 +214,9 @@ export function frontOfficeRoutes(app: FastifyInstance, ctx: Ctx) {
     const lines = await db.query(
       `select l.* from folio_line l join folio f on f.id = l.folio_id where f.reservation_id = $1 order by l.posted_at, l.id`, [id])
     const [formC] = await db.query('select due_at, submitted_at, reference from form_c where reservation_id = $1', [id])
-    return { ...r, guest, nights, folios, lines, balance: await reservationBalance(db, id), formC: formC ?? null }
+    const [online] = await db.query('select eta, nationality, id_type, id_last4, address, purpose, preferences, company, gstin, submitted_at from online_checkin where reservation_id = $1', [id])
+    const paymentLinks = await db.query('select url, amount_paise, status, created_at, paid_at from payment_link where reservation_id = $1 order by created_at', [id])
+    return { ...r, guest, nights, folios, lines, balance: await reservationBalance(db, id), formC: formC ?? null, onlineCheckin: online ?? null, paymentLinks }
   })
 
   app.post('/api/reservations/:id/assign-room', async (req) => {

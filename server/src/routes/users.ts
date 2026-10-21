@@ -48,7 +48,7 @@ export function userRoutes(app: FastifyInstance, ctx: Ctx) {
       `select u.id, u.name, u.email, u.mobile, u.active, u.locked_reason, u.totp_enabled, u.access_until,
               u.password_hash is not null as has_password, u.must_change_password, u.locked_until,
               coalesce(array_agg(ur.role_id) filter (where ur.role_id is not null), '{}') as roles
-         from app_user u left join user_role ur on ur.user_id = u.id group by u.id order by u.name`)
+         from app_user u left join user_role ur on ur.user_id = u.id where u.id <> 'system' group by u.id order by u.name`)
     const full = who.permissions.has('*')
     return rows.map((r) => ({ ...r, mobile: r.mobile && !full ? r.mobile.slice(0, 5) + '•••••' + r.mobile.slice(-3) : r.mobile }))
   })
