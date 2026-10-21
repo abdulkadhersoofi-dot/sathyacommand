@@ -5,7 +5,7 @@ import type { WorkspaceHost } from '../ui/workspace'
 // The books: day book, trial balance, ledgers (with the parties in them), profit and loss by department,
 // balance sheet, journal entries and their reversal, the chart of accounts and month locks.
 
-export type Host = WorkspaceHost & { from: string; to: string; openLedger(code: string, party?: string): void }
+export type Host = WorkspaceHost & { from: string; to: string; openLedger(code: string, party?: string): void; go?(tab: string): void }
 interface Account { code: string; name: string; type: string; grp: string; dept: string | null; system: boolean; active: boolean; openingPaise: number; debitPaise: number; creditPaise: number; closingPaise: number }
 interface VLine { line: number; account_code: string; account: string; dept: string | null; debit_paise: string; credit_paise: string; party_name: string | null; ref: string | null }
 interface Voucher { id: string; number: string; kind: string; date: string; doc_date: string | null; narration: string; source_type: string | null; total_paise: string; created_by: string | null; reversed_by: string | null; reverses: string | null; lines: VLine[] }
@@ -14,7 +14,7 @@ interface Voucher { id: string; number: string; kind: string; date: string; doc_
 export const money = (paise: number) => `${paise < 0 ? '−' : ''}₹${(Math.abs(paise) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 /** A balance as Dr / Cr. */
 export const drcr = (paise: number) => (paise ? `${money(Math.abs(paise))} ${paise > 0 ? 'Dr' : 'Cr'}` : '—')
-const KIND: Record<string, string> = { sales: 'Sales', receipt: 'Receipt', purchase: 'Purchase', payment: 'Payment', stock: 'Stock', journal: 'Journal', reversal: 'Reversal' }
+const KIND: Record<string, string> = { sales: 'Sales', receipt: 'Receipt', purchase: 'Purchase', payment: 'Payment', contra: 'Cash ↔ bank', stock: 'Stock', journal: 'Journal', reversal: 'Reversal' }
 
 export const rangeBar = (h: Host, extra = '') => `<div class="ws-toolbar"><label class="inline">From <input type="date" data-range="from" value="${esc(h.from)}"></label>
   <label class="inline">To <input type="date" data-range="to" value="${esc(h.to)}"></label>${extra}</div>`
@@ -27,16 +27,16 @@ export function rangeChange(h: Host, el: HTMLElement) {
 }
 
 function voucherCard(v: Voucher) {
-  const auto = v.source_type ? 'posted by the system' : v.created_by ? `by ${esc(v.created_by)}` : ''
+  const auto = v.source_type && v.source_type !== 'opening' ? 'posted by the system' : v.created_by ? `by ${esc(v.created_by)}` : ''
   return `<div class="row-card acc-voucher"><div class="rc-title"><span class="mono">${esc(v.number)}</span> · ${esc(v.date)} · ${esc(v.narration)}</div>
     <div class="rc-sub">${esc(KIND[v.kind] ?? v.kind)} · ${auto}${v.doc_date ? ` · document dated ${esc(v.doc_date)} (that month was locked)` : ''}${v.reversed_by ? ` · reversed by ${esc(v.reversed_by)}` : ''}</div>
     <div class="acc-scroll"><table class="acc-table"><tbody>${v.lines.map((l) => `<tr><td><button type="button" class="link" data-ledger="${esc(l.account_code)}">${esc(l.account_code)} ${esc(l.account)}</button>${l.party_name ? ` <small class="muted">${esc(l.party_name)}</small>` : ''}${l.ref ? ` <small class="muted">${esc(l.ref)}</small>` : ''}</td>
       <td class="n">${Number(l.debit_paise) ? money(Number(l.debit_paise)) : ''}</td><td class="n">${Number(l.credit_paise) ? money(Number(l.credit_paise)) : ''}</td></tr>`).join('')}</tbody></table></div>
-    ${v.kind === 'journal' && !v.source_type && !v.reversed_by ? `<div class="rc-right"><button type="button" class="btn small" data-reverse="${esc(v.id)}">Reverse…</button></div>` : ''}</div>`
+    ${((['journal', 'payment', 'receipt', 'contra'].includes(v.kind) && !v.source_type) || v.source_type === 'opening') && !v.reversed_by ? `<div class="rc-right"><button type="button" class="btn small" data-reverse="${esc(v.id)}">Reverse…</button></div>` : ''}</div>`
 }
 
 async function reverse(h: Host, id: string, done: () => Promise<void>) {
-  h.modal.open('Reverse the journal', `<p class="muted small">A reversal posts the same lines the other way round, dated today. The original stays in the books.</p>
+  h.modal.open('Reverse the entry', `<p class="muted small">A reversal posts the same lines the other way round, dated today. The original stays in the books.</p>
     <div class="form-grid"><label class="span2">Why<input name="reason" maxlength="200" required></label></div>`, 'Reverse', async (f) => {
     const r = await h.api.post<{ number: string }>(`/api/accounts/vouchers/${id}/reverse`, { reason: val(f, 'reason') })
     await done(); h.render()
@@ -76,6 +76,8 @@ export class TrialBalanceView {
     const d = this.d!, ok = d.totals.closingDebitPaise === d.totals.closingCreditPaise
     let grp = ''
     return `${rangeBar(this.h, `<span class="small">${tonePill(ok ? 'Balanced' : 'Does not balance', ok ? '--st-vacant' : '--st-departing')}</span>${this.h.can('accounts.view') ? '<button type="button" class="btn" data-tally>Tally file (XML)</button>' : ''}`)}
+      ${d.rows.length ? '' : `<div class="empty acc-empty"><b>Nothing in the books for these days yet.</b> Guest and restaurant takings post when each day closes; purchases, payroll and payments post as they are made.
+        Start with the <button type="button" class="linkish" data-goto="journal">opening balances</button> in Entries.</div>`}
       <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Account</th><th class="n">Opening</th><th class="n">Debit</th><th class="n">Credit</th><th class="n">Closing</th></tr></thead><tbody>
       ${d.rows.map((r) => `${r.grp !== grp ? `<tr class="acc-grp"><td colspan="5">${esc((grp = r.grp))}</td></tr>` : ''}<tr data-ledger="${esc(r.code)}" class="acc-click"><td><span class="mono">${esc(r.code)}</span> ${esc(r.name)}</td>
         <td class="n">${drcr(r.openingPaise)}</td><td class="n">${r.debitPaise ? money(r.debitPaise) : ''}</td><td class="n">${r.creditPaise ? money(r.creditPaise) : ''}</td><td class="n"><b>${drcr(r.closingPaise)}</b></td></tr>`).join('')}
@@ -84,6 +86,7 @@ export class TrialBalanceView {
   async change(el: HTMLElement) { if (!rangeChange(this.h, el)) return false; await this.load(); return true }
   async click(el: HTMLElement) {
     if (el.closest('[data-tally]')) { await (await import('./extra')).downloadTally(this.h); return false }
+    if (el.closest('[data-goto]')) { this.h.go?.('journal'); return false }
     const c = el.closest<HTMLElement>('[data-ledger]')?.dataset.ledger; if (c) this.h.openLedger(c); return false
   }
 }
@@ -166,19 +169,23 @@ export class BalanceSheetView {
   async click(el: HTMLElement) { const c = el.closest<HTMLElement>('[data-ledger]')?.dataset.ledger; if (c) this.h.openLedger(c); return false }
 }
 
+/** Entries made by hand: payments, receipts, cash to bank, journals and the opening balances. */
 export class JournalView {
   private list: Voucher[] = []
   private chart: Account[] = []
+  private depts: Record<string, string> = {}
   constructor(private h: Host) {}
   async load() {
-    this.chart = (await this.h.cached<{ accounts: Account[] }>('/api/accounts/chart')).accounts.filter((a) => a.active)
-    this.list = (await this.h.cached<Voucher[]>(`/api/accounts/daybook?from=${this.h.from}&to=${this.h.to}&kind=journal`)).filter((v) => !v.source_type)
-      .concat(await this.h.cached<Voucher[]>(`/api/accounts/daybook?from=${this.h.from}&to=${this.h.to}&kind=reversal`))
+    const c = await this.h.cached<{ accounts: Account[]; departments: Record<string, string> }>('/api/accounts/chart')
+    this.chart = c.accounts.filter((a) => a.active); this.depts = c.departments
+    this.list = (await this.h.cached<Voucher[]>(`/api/accounts/daybook?from=${this.h.from}&to=${this.h.to}`)).filter((v) => !v.source_type || v.source_type === 'opening')
   }
   html() {
-    return `${rangeBar(this.h, this.h.can('accounts.post') ? '<button type="button" class="btn primary" data-jv>New journal entry</button>' : '')}
-      <p class="muted small">Entries by hand: opening balances, capital, provisions, corrections. A wrong entry is reversed, never edited or deleted.</p>
-      ${this.list.map(voucherCard).join('') || '<div class="empty">No journal entries in these days.</div>'}`
+    const can = this.h.can('accounts.post')
+    return `${rangeBar(this.h, can ? `<button type="button" class="btn primary" data-entry="payment">Payment</button><button type="button" class="btn primary" data-entry="receipt">Receipt</button>
+        <button type="button" class="btn" data-entry="contra">Cash ↔ bank</button><button type="button" class="btn" data-jv>Journal entry</button><button type="button" class="btn" data-entry="opening">Opening balances</button>` : '')}
+      <p class="muted small"><b>Payment</b>: an expense or bill paid from cash or the bank. <b>Receipt</b>: money received that is not a guest's or a company's bill (those are taken at the desk and in Receivables). <b>Cash ↔ bank</b>: cash deposited or withdrawn. <b>Opening balances</b>: what the resort held and owed on the day the books start. Guest bills, restaurant bills, purchases and payroll post by themselves. A wrong entry is reversed, never edited or deleted.</p>
+      ${this.list.map(voucherCard).join('') || '<div class="empty">No entries by hand in these days. Use the buttons above to record a payment, a receipt or the opening balances.</div>'}`
   }
   async change(el: HTMLElement) { if (!rangeChange(this.h, el)) return false; await this.load(); return true }
   async click(el: HTMLElement) {
@@ -187,7 +194,45 @@ export class JournalView {
     const code = el.closest<HTMLElement>('[data-ledger]')?.dataset.ledger
     if (code) this.h.openLedger(code)
     if (el.closest('[data-jv]')) this.entry()
+    const kind = el.closest<HTMLElement>('[data-entry]')?.dataset.entry
+    if (kind === 'opening') this.opening()
+    else if (kind) this.simple(kind as 'payment' | 'receipt' | 'contra')
     return false
+  }
+  private options(filter: (a: Account) => boolean, sel = '') {
+    let grp = ''
+    return [...this.chart].filter(filter).sort((a, b) => a.grp.localeCompare(b.grp) || a.code.localeCompare(b.code))
+      .map((a) => `${a.grp !== grp ? `${grp ? '</optgroup>' : ''}<optgroup label="${esc((grp = a.grp))}">` : ''}<option value="${esc(a.code)}" ${a.code === sel ? 'selected' : ''}>${esc(a.name)} (${esc(a.code)})</option>`).join('') + (grp ? '</optgroup>' : '')
+  }
+  private simple(kind: 'payment' | 'receipt' | 'contra') {
+    const money = (a: Account) => a.grp === 'Cash and bank' && !['1210', '1220'].includes(a.code)
+    const title = { payment: 'Payment', receipt: 'Receipt', contra: 'Cash ↔ bank' }[kind]
+    const other = kind === 'contra' ? `<label>To<select name="to">${this.options(money, '1200')}</select></label>`
+      : `<label class="span2">${kind === 'payment' ? 'For (expense, or what was paid off)' : 'For (income, or what was settled)'}<select name="account"><option value="">Choose…</option>${this.options((a) => !money(a) && (kind === 'payment' ? a.type !== 'income' : a.type !== 'expense'))}</select></label>
+        ${kind === 'payment' ? `<label>Department<select name="dept"><option value="">As the account</option>${Object.entries(this.depts).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('')}</select></label>` : ''}
+        <label>${kind === 'payment' ? 'Paid to' : 'Received from'}<input name="party" maxlength="120"></label>`
+    this.h.modal.open(title, `<div class="form-grid">
+        <label>Date<input name="date" type="date" value="${esc(this.h.to)}"></label><label>Amount (₹)<input name="amount" type="number" min="0.01" step="0.01" required></label>
+        <label>${kind === 'receipt' ? 'Into' : 'From'}<select name="money">${this.options(money, kind === 'contra' ? '1100' : '1200')}</select></label>${other}
+        <label>Reference (cheque, UTR, bill no.)<input name="ref" maxlength="60"></label><label class="span2">What for<input name="narration" maxlength="200" required placeholder="${kind === 'payment' ? 'Generator service, October' : kind === 'receipt' ? 'Scrap sold' : 'Cash deposited in the bank'}"></label></div>`, 'Post', async (f) => {
+      const r = await this.h.api.post<{ number: string }>('/api/accounts/entries', { kind, date: val(f, 'date'), amount: Number(val(f, 'amount')), money: val(f, 'money'), account: val(f, 'account'), to: val(f, 'to'),
+        dept: val(f, 'dept') || undefined, partyName: val(f, 'party'), reference: val(f, 'ref'), narration: val(f, 'narration') })
+      await this.load(); this.h.render()
+      return `Posted ${r.number}`
+    })
+  }
+  private opening() {
+    const rows = [...this.chart].filter((a) => ['asset', 'liability', 'equity'].includes(a.type) && a.code !== '3200').sort((a, b) => a.code.localeCompare(b.code))
+    this.h.modal.open('Opening balances', `<p class="muted small">What each account held on the day the books start (usually 1 April, or the day the resort moved to this system), from the last balance sheet or Tally. Assets on the debit side, what is owed on the credit side. What does not balance goes to the owners' opening balance (3200).</p>
+      <div class="form-grid"><label>As on<input name="date" type="date" value="${esc(this.h.from)}"></label></div>
+      <div class="acc-scroll opening-grid"><table class="acc-table"><thead><tr><th>Account</th><th class="n">Debit (₹)</th><th class="n">Credit (₹)</th></tr></thead><tbody>
+        ${rows.map((a) => `<tr><td><span class="mono">${esc(a.code)}</span> ${esc(a.name)}</td><td class="n"><input name="d-${esc(a.code)}" type="number" min="0" step="0.01"></td><td class="n"><input name="c-${esc(a.code)}" type="number" min="0" step="0.01"></td></tr>`).join('')}
+      </tbody></table></div>`, 'Post the opening balances', async (f) => {
+      const lines = rows.map((a) => ({ code: a.code, debit: Number(val(f, `d-${a.code}`) || 0), credit: Number(val(f, `c-${a.code}`) || 0) })).filter((l) => l.debit || l.credit)
+      const r = await this.h.api.post<{ number: string }>('/api/accounts/opening', { date: val(f, 'date'), lines })
+      await this.load(); this.h.render()
+      return `Posted ${r.number}`
+    })
   }
   private entry() {
     const opts = this.chart.map((a) => `<option value="${esc(a.code)}">${esc(a.code)} ${esc(a.name)}</option>`).join('')

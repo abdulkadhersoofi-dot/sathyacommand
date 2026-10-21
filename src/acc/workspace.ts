@@ -40,7 +40,7 @@ export class AccountsWorkspace extends Workspace<Tab> {
   tabs(): [Tab, string][] {
     const t: [Tab, string][] = []
     const books = this.can('accounts.view', 'accounts.post', 'accounts.lock')
-    if (books) t.push(['tb', 'Trial balance'], ['daybook', 'Day book'], ['ledger', 'Ledgers'], ['pnl', 'Profit & loss'], ['bs', 'Balance sheet'])
+    if (books) t.push(['journal', 'Entries'], ['tb', 'Trial balance'], ['daybook', 'Day book'], ['ledger', 'Ledgers'], ['pnl', 'Profit & loss'], ['bs', 'Balance sheet'])
     if (this.can('receivables.view', 'receivables.manage')) t.push(['receivables', 'Receivables'], ['ota', 'OTAs'])
     if (this.can('bank.reconcile', 'accounts.view')) t.push(['banks', 'Banks'])
     if (this.can('cash.manage', 'accounts.view')) t.push(['cash', 'Cash'])
@@ -50,9 +50,11 @@ export class AccountsWorkspace extends Workspace<Tab> {
     if (this.can('assets.manage', 'accounts.view')) t.push(['assets', 'Fixed assets'])
     if (this.can('budget.manage', 'accounts.view')) t.push(['budget', 'Budgets'])
     if (this.can('accounts.view', 'receivables.view')) t.push(['credits', 'Tax credits'])
-    if (books) t.push(['journal', 'Journal'], ['chart', 'Chart of accounts'], ['periods', 'Locked months'])
+    if (books) t.push(['chart', 'Chart of accounts'], ['periods', 'Locked months'])
     return t
   }
+
+  go(tab: string) { void this.show(tab as Tab) }
 
   openLedger(code: string, party = '') {
     this.ledger.code = code; this.ledger.party = party

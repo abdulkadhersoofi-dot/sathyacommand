@@ -931,3 +931,7 @@ button.link { background: none; border: 0; padding: 0; color: var(--accent); fon
   .m-table > .m-row.hr-hol:not(.m-row-fc) { grid-template-columns: 96px minmax(0, 1fr) auto; }
   .m-table > .m-row.hr-hol:not(.m-row-fc) > :nth-child(5) { display: block; }
 }
+.acc-empty { margin: 10px 0; padding: 12px 14px; border: 1px dashed var(--line); border-radius: 10px; line-height: 1.5; }
+.opening-grid { max-height: 52vh; }
+.opening-grid input { width: 120px; text-align: right; font: 500 13px var(--f-mono); background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 5px 7px; }
+.opening-grid thead th { position: sticky; top: 0; background: var(--surface); z-index: 1; }

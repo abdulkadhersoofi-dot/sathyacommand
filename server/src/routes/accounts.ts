@@ -11,6 +11,7 @@ import { requireCaller } from './auth'
 // The books: chart of accounts, day book, ledgers, trial balance, profit and loss by department, balance
 // sheet, journal vouchers entered by accounts (put right only by reversal), and month locks.
 
+const str = (v: unknown, max = 200) => { const x = String(v ?? '').trim(); return x ? x.slice(0, max) : null }
 const DATE = /^\d{4}-\d{2}-\d{2}$/
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/
 const TYPES = ['asset', 'liability', 'equity', 'income', 'expense'] as const
@@ -233,6 +234,82 @@ export function accountsRoutes(app: FastifyInstance, ctx: Ctx) {
     })
   })
 
+  // ---------- everyday entries: a payment, a receipt, money between cash and bank ----------
+  /** Cash and bank accounts money is paid from or into. */
+  const moneyAccounts = async (t: Db) => (await t.query<{ code: string }>(`select code from account where active and grp = 'Cash and bank' and code not in ('1210', '1220')`)).map((a) => a.code)
+  app.post('/api/accounts/entries', async (req, reply) => {
+    const who = await need(req, 'accounts.post')
+    const b = (req.body ?? {}) as { kind?: string; date?: string; money?: string; account?: string; to?: string; amount?: number; dept?: string; partyName?: string; reference?: string; narration?: string }
+    if (!['payment', 'receipt', 'contra'].includes(b.kind ?? '')) throw new HttpError(400, 'A payment, a receipt or money between cash and bank.')
+    const amount = rupees(Number(b.amount))
+    if (!(amount > 0)) throw new HttpError(400, 'The amount.')
+    const narration = (b.narration ?? '').trim()
+    if (!narration) throw new HttpError(400, b.kind === 'payment' ? 'What was paid for?' : b.kind === 'receipt' ? 'What was the money for?' : 'Say what it was (cash deposited, withdrawn…).')
+    if (b.dept && !DEPTS[b.dept]) throw new HttpError(400, 'No such department.')
+    await fresh()
+    return db.tx(async (t) => {
+      const today = await businessDate(t)
+      const date = b.date || today
+      if (!DATE.test(date) || date > today) throw new HttpError(400, 'The date: today or earlier.')
+      const money = await moneyAccounts(t)
+      if (!money.includes(b.money ?? '')) throw new HttpError(400, b.kind === 'receipt' ? 'Which cash or bank account it came into.' : 'Which cash or bank account it was paid from.')
+      const other = b.kind === 'contra' ? b.to : b.account
+      const [acct] = await t.query<{ code: string; active: boolean }>('select code, active from account where code = $1', [other ?? ''])
+      if (!acct?.active) throw new HttpError(400, b.kind === 'contra' ? 'Which cash or bank account it went to.' : b.kind === 'payment' ? 'Which account it is for (the expense or what was paid off).' : 'Which account it is for (the income or what was settled).')
+      if (b.kind === 'contra' && (!money.includes(acct.code) || acct.code === b.money)) throw new HttpError(400, 'Money between cash and bank goes from one cash or bank account to another.')
+      const party = str(b.partyName, 120)
+      const ref = str(b.reference, 60)
+      const lines: PostLine[] = b.kind === 'receipt'
+        ? [{ code: b.money!, amount, ref }, { code: acct.code, amount: -amount, dept: b.dept || null, ref }]
+        : [{ code: acct.code, amount, dept: b.kind === 'payment' ? b.dept || null : null, ref }, { code: b.money!, amount: -amount, ref }]
+      const v = await wrap(() => postVoucher(t, { kind: b.kind as 'payment' | 'receipt' | 'contra', date, narration: party ? `${narration} (${party})` : narration, lines, userId: who.userId, now: now(), manual: true }))
+      if (!v) throw new HttpError(400, 'Nothing to post.')
+      await appendAudit(t, { actor: who, action: `voucher.${b.kind}`, entity: { type: 'voucher', id: v.id }, amount, after: { number: v.number, date, narration, account: acct.code, money: b.money } }, now())
+      return reply.status(201).send(v)
+    })
+  })
+
+  // ---------- opening balances: what each account held on the day the books start ----------
+  /** Each posting of a date's opening balances is its own source: the date, then date#2 after a reversal… */
+  const openingId = async (t: Db, date: string) => {
+    const [{ n }] = await t.query<{ n: number }>(`select count(*)::int as n from voucher where source_type = 'opening' and (source_id = $1 or source_id like $2)`, [date, `${date}#%`])
+    return n ? `${date}#${n + 1}` : date
+  }
+  app.get('/api/accounts/opening', async (req) => {
+    await need(req, ...VIEW)
+    return db.query(`select v.id, v.number, v.date::text, v.total_paise, v.narration, (select r.number from voucher r where r.reverses = v.id) as reversed_by from voucher v where v.source_type = 'opening' order by v.date`)
+  })
+  app.post('/api/accounts/opening', async (req, reply) => {
+    const who = await need(req, 'accounts.post')
+    const b = (req.body ?? {}) as { date?: string; lines?: { code: string; debit?: number; credit?: number }[] }
+    if (!DATE.test(b.date ?? '')) throw new HttpError(400, 'The date the books start from.')
+    const lines: PostLine[] = []
+    for (const l of b.lines ?? []) {
+      const dr = Number(l.debit ?? 0), cr = Number(l.credit ?? 0)
+      if (!(dr >= 0 && cr >= 0)) throw new HttpError(400, `Account ${l.code}: amounts of 0 or more.`)
+      if (dr && cr) throw new HttpError(400, `Account ${l.code}: a debit or a credit, not both.`)
+      if (dr || cr) lines.push({ code: l.code, amount: rupees(dr) - rupees(cr), ref: 'opening' })
+    }
+    if (!lines.length) throw new HttpError(400, 'Enter at least one balance.')
+    return db.tx(async (t) => {
+      const types = new Map((await t.query<{ code: string; type: string }>('select code, type from account where code = any($1)', [lines.map((l) => l.code)])).map((a) => [a.code, a.type]))
+      for (const l of lines) {
+        if (!types.has(l.code)) throw new HttpError(400, `No account ${l.code}.`)
+        if (['income', 'expense'].includes(types.get(l.code)!)) throw new HttpError(400, `${l.code} is an income or expense account: opening balances are for what the resort owns and owes.`)
+      }
+      const [done] = await t.query<{ number: string }>(`select v.number from voucher v where v.source_type = 'opening' and v.source_id = $1 and not exists (select 1 from voucher r where r.reverses = v.id)`, [b.date])
+      if (done) throw new HttpError(409, `Opening balances for ${b.date} are already posted (${done.number}): reverse that entry to enter them again.`)
+      // What does not balance is the owners' opening balance (capital and reserves brought forward).
+      const diff = lines.reduce((a, l) => a + l.amount, 0)
+      if (diff) lines.push({ code: '3200', amount: -diff, ref: 'opening' })
+      const sourceId = await openingId(t, b.date!)
+      const v = await wrap(() => postVoucher(t, { kind: 'journal', date: b.date!, narration: `Opening balances as on ${b.date}`, lines, source: { type: 'opening', id: sourceId }, userId: who.userId, now: now(), manual: true }))
+      if (!v) throw new HttpError(400, 'Nothing to post.')
+      await appendAudit(t, { actor: who, action: 'voucher.opening', entity: { type: 'voucher', id: v.id }, after: { number: v.number, date: b.date, accounts: lines.length } }, now())
+      return reply.status(201).send(v)
+    })
+  })
+
   app.post('/api/accounts/vouchers/:id/reverse', async (req, reply) => {
     const who = await need(req, 'accounts.post')
     const reason = (req.body as { reason?: string } | null)?.reason?.trim()
@@ -240,7 +317,8 @@ export function accountsRoutes(app: FastifyInstance, ctx: Ctx) {
     return db.tx(async (t) => {
       const [v] = await t.query<{ id: string; number: string; kind: string; source_type: string | null }>('select id, number, kind, source_type from voucher where id = $1', [(req.params as { id: string }).id])
       if (!v) throw new HttpError(404, 'No such voucher.')
-      if (v.kind !== 'journal' || v.source_type) throw new HttpError(409, 'Only journal entries made by hand are reversed here: correct the bill, payment or document it came from.')
+      const byHand = (['journal', 'payment', 'receipt', 'contra'].includes(v.kind) && !v.source_type) || v.source_type === 'opening'
+      if (!byHand) throw new HttpError(409, 'Only entries made by hand are reversed here: correct the bill, payment or document it came from.')
       const [done] = await t.query('select number from voucher where reverses = $1', [v.id])
       if (done) throw new HttpError(409, `Already reversed by ${(done as { number: string }).number}.`)
       const ls = await t.query<{ account_code: string; dept: string | null; debit_paise: string; credit_paise: string; party_type: Party['type'] | null; party_id: string | null; party_name: string | null; ref: string | null }>('select * from voucher_line where voucher_id = $1', [v.id])
