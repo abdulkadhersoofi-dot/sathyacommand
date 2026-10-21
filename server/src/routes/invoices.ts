@@ -1,9 +1,8 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify'
-import { formatInr, rupees, validateGstin } from '@sathya/tax'
+import { formatInr, rupees } from '@sathya/tax'
 import { appendAudit } from '../audit-store'
 import { can, HttpError, type Ctx } from '../context'
 import { buildIrnPayload, irnBlockers, type DocForIrn, type Party } from '../einvoice'
-import { PROPERTY } from '../fo-core'
 import { issueCreditNote, stateName, type DocLine } from '../invoicing'
 import { requireCaller } from './auth'
 
@@ -41,35 +40,6 @@ export function invoiceRoutes(app: FastifyInstance, ctx: Ctx) {
     if (!d) throw new HttpError(404, 'No such document.')
     return d
   }
-
-  app.patch('/api/property', async (req) => {
-    const who = await requireCaller(ctx, req)
-    if (!who.permissions.has('*')) throw new HttpError(403, 'Only the MD can change the company\'s tax details.')
-    const b = req.body as { legalName?: string; gstin?: string; address?: string; city?: string; pin?: string; invoicePrefix?: string }
-    const [before] = await db.query<Record<string, unknown>>('select legal_name, gstin, address, city, pin, invoice_prefix from property where id = $1', [PROPERTY])
-    const next = { ...before }
-    if (b.legalName !== undefined) next.legal_name = b.legalName.trim()
-    if (b.gstin !== undefined) {
-      const v = validateGstin(b.gstin)
-      if (!v.ok) throw new HttpError(400, v.reason)
-      if (v.stateCode !== '33') throw new HttpError(400, 'The resort is in Tamil Nadu, so its GSTIN must start with 33.')
-      next.gstin = v.gstin
-    }
-    if (b.address !== undefined) next.address = b.address.trim()
-    if (b.city !== undefined) next.city = b.city.trim()
-    if (b.pin !== undefined) {
-      if (!/^\d{6}$/.test(b.pin)) throw new HttpError(400, 'PIN code must be 6 digits.')
-      next.pin = b.pin
-    }
-    if (b.invoicePrefix !== undefined) {
-      if (!/^[A-Z0-9]{1,5}$/.test(b.invoicePrefix)) throw new HttpError(400, 'Invoice prefix: up to 5 capital letters or digits.')
-      next.invoice_prefix = b.invoicePrefix
-    }
-    await db.query('update property set legal_name = $2, gstin = $3, address = $4, city = $5, pin = $6, invoice_prefix = $7 where id = $1',
-      [PROPERTY, next.legal_name, next.gstin, next.address, next.city, next.pin, next.invoice_prefix])
-    await appendAudit(db, { actor: who, action: 'property.tax_details', entity: { type: 'property', id: PROPERTY }, before, after: next }, ctx.now())
-    return next
-  })
 
   app.get('/api/tax-documents', async (req) => {
     await viewer(req)

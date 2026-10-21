@@ -48,7 +48,12 @@ import { channelRoutes } from './routes/channels'
 import { guestRoutes } from './routes/guest'
 import { hrRoutes } from './routes/hr'
 import { payrollRoutes } from './routes/payroll'
+import { profileRoutes } from './routes/profile'
 import { payrollPeopleRoutes } from './routes/payroll-people'
+
+declare module 'fastify' {
+  interface FastifyInstance { hms: Ctx }
+}
 
 export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boolean; appDir?: string } = {}) {
   const ctx: Ctx = {
@@ -117,18 +122,13 @@ export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boo
   guestRoutes(app, ctx)
   hrRoutes(app, ctx)
   payrollRoutes(app, ctx)
+  profileRoutes(app, ctx)
   payrollPeopleRoutes(app, ctx)
 
   // Serve the built 3D app and front desk screens from the same address as the API.
   if (opts.appDir && existsSync(opts.appDir)) app.register(fastifyStatic, { root: opts.appDir, index: 'index.html' })
 
   app.get('/health', async () => ({ ok: true, db: db.engine }))
-
-  app.get('/api/property', async (req) => {
-    await requireCaller(ctx, req)
-    const [p] = await db.query('select id, name, legal_name, entity_type, gstin, state_code from property limit 1')
-    return p
-  })
 
   app.get('/api/spaces', async (req) => {
     await requireCaller(ctx, req)
@@ -223,5 +223,6 @@ export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boo
     return verifyStoredChain(db)
   })
 
+  app.decorate('hms', ctx)
   return app
 }

@@ -35,7 +35,7 @@ export async function supplier(t: Db): Promise<Party & { prefix: string }> {
   const [p] = await t.query<{ legal_name: string | null; name: string; gstin: string | null; address: string | null; city: string | null; pin: string | null; state_code: string; invoice_prefix: string }>(
     'select legal_name, name, gstin, address, city, pin, state_code, invoice_prefix from property where id = $1', [PROPERTY])
   if (!p.gstin || !p.legal_name) {
-    throw new HttpError(409, 'Set the company\'s legal name and GSTIN (Property settings) before issuing tax invoices.')
+    throw new HttpError(409, 'The resort\'s legal name and GSTIN are not set yet: the MD adds them in Settings → Resort profile.')
   }
   return { name: p.legal_name, gstin: p.gstin, address: p.address, city: p.city, pin: p.pin, stateCode: p.state_code, prefix: p.invoice_prefix }
 }

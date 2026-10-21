@@ -12,6 +12,7 @@ import { issueReceiptVoucher, issueRefundVoucher, issueStayInvoice } from '../in
 import { validateGstin } from '@sathya/tax'
 import { checkCredit, debtorFor, OTAS, otaDebtorFor, SOURCES } from '../receivables'
 import { requireCaller } from './auth'
+import { closesAt, istOf } from './nightaudit'
 import { onCheckIn, onCheckOut, onRoomMove } from '../hk-core'
 import { blockPickup, contractRate, sweepBlocks } from '../sales'
 
@@ -171,7 +172,9 @@ export function frontOfficeRoutes(app: FastifyInstance, ctx: Ctx) {
 
   app.get('/api/business-date', async (req) => {
     await requireCaller(ctx, req)
-    return { businessDate: await businessDate(db) }
+    const [p] = await db.query<{ d: string; auto_close: boolean; day_close_at: string }>('select business_date::text as d, auto_close, day_close_at from property limit 1')
+    // The calendar date in India beside the hotel's business day, and when the day closes by itself.
+    return { businessDate: p.d, calendarDate: istOf(ctx.now()).date, autoClose: p.auto_close, dayCloseAt: p.day_close_at, closesAt: closesAt(p.d, p.day_close_at).toISOString() }
   })
 
   app.post('/api/availability', async (req) => {

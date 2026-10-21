@@ -275,6 +275,7 @@ export class FrontDesk {
       const s = await this.api.post<{ roomsSold: number; occupancy: number; roomRevenue: number; roomGst: number; noShows: string[]; formCOverdue: string[]; eInvoicesDueWithin5Days: unknown[]; nextBusinessDate: string
         fnb?: { bills: number; foodSales: number; foodGst: number; liquorSales: number; liquorVat: number; openOrders: number[] } }>('/api/night-audit')
       setToday(s.nextBusinessDate)
+      window.dispatchEvent(new CustomEvent('sathya:day-closed'))
       await this.store.setDate(s.nextBusinessDate)
       await this.store.reload()
       this.open('Day closed', `<dl class="kv">

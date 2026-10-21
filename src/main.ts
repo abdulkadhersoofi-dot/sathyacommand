@@ -7,6 +7,7 @@ import { FrontDesk } from './ui/frontdesk'
 import { FnbWorkspace } from './fnb/workspace'
 import { HkWorkspace } from './hk/workspace'
 import { StaffWorkspace } from './staff/workspace'
+import { SettingsWorkspace, type SetupStep } from './settings/workspace'
 import { EngWorkspace } from './eng/workspace'
 import { SecurityWorkspace } from './sec/workspace'
 import { InventoryWorkspace } from './inv/workspace'
@@ -35,11 +36,15 @@ import { kpisHtml, layersHtml, legendHtml, timelineHtml } from './ui/dock'
 const base = (import.meta.env.VITE_GATEWAY_URL as string | undefined) ?? ''
 const liveMode = await serverAvailable(base)
 let api: Api | null = null
+/** The hotel's business day beside the calendar date in India, and when the day closes by itself. */
+interface DayInfo { businessDate: string; calendarDate: string; autoClose: boolean; dayCloseAt: string; closesAt: string }
+let dayInfo: DayInfo | null = null
 let me: Me | null = null
 if (liveMode) {
   api = new Api(base)
   me = await signIn(api)
-  setToday((await api.get<{ businessDate: string }>('/api/business-date')).businessDate)
+  dayInfo = await api.get<DayInfo>('/api/business-date')
+  setToday(dayInfo.businessDate)
 }
 // The resort drawing: the published Twin Studio version when live, the traced default otherwise.
 const fetchLayout = async () => api ? (await api.get<{ layout: SiteLayout }>('/api/site')).layout : defaultLayout()
@@ -53,6 +58,7 @@ let fd: FrontDesk | null = null
 let fnb: FnbWorkspace | null = null
 let hkWs: HkWorkspace | null = null
 let staffWs: StaffWorkspace | null = null
+let settingsWs: SettingsWorkspace | null = null
 let engWs: EngWorkspace | null = null
 let secWs: SecurityWorkspace | null = null
 let invWs: InventoryWorkspace | null = null
@@ -163,7 +169,11 @@ function renderChrome() {
   $('#tl-track').innerHTML = timelineHtml(store)
   const chip = $('#date-chip')
   const diff = Math.round((+new Date(store.date + 'T12:00') - +new Date(todayKey() + 'T12:00')) / 864e5)
-  chip.textContent = diff === 0 ? `Today · ${fmtDay(store.date)}` : `${fmtDay(store.date)} · ${diff > 0 ? `in ${diff} day${diff > 1 ? 's' : ''}` : `${-diff} day${diff < -1 ? 's' : ''} ago`}`
+  // Before the day is closed (after midnight, or a day left open), the hotel day is behind the calendar: say so.
+  const behind = dayInfo && dayInfo.calendarDate !== todayKey()
+  chip.textContent = diff === 0 ? (behind ? `Hotel day · ${fmtDay(store.date)}` : `Today · ${fmtDay(store.date)}`) : `${fmtDay(store.date)} · ${diff > 0 ? `in ${diff} day${diff > 1 ? 's' : ''}` : `${-diff} day${diff < -1 ? 's' : ''} ago`}`
+  chip.title = behind ? `Today is ${fmtDay(dayInfo!.calendarDate)}; the hotel day of ${fmtDay(todayKey())} is not closed yet` : 'Back to today'
+  dayBar()
   chip.toggleAttribute('data-past', diff < 0)
   chip.toggleAttribute('data-future', diff > 0)
   $('#tl-track').setAttribute('aria-valuetext', fmtDay(store.date))
@@ -342,7 +352,7 @@ async function checkEmergency() {
   world.setPins('assembly', pts.filter((p) => p.x != null).map((p) => ({ id: p.id, x: Number(p.x), z: Number(p.z), shape: 'marker', colour: 0x35a46b, label: `Assembly: ${p.name}`, pulse: true })))
 }
 
-function hideWorkspaces() { for (const w of [fnb, hkWs, staffWs, engWs, secWs, invWs, accWs, bqWs, guestWs, hrWs]) if (w?.open) w.hide() }
+function hideWorkspaces() { for (const w of [fnb, hkWs, staffWs, engWs, secWs, invWs, accWs, bqWs, guestWs, hrWs, settingsWs]) if (w?.open) w.hide() }
 
 // ---------- interactions ----------
 document.addEventListener('click', async (e) => {
@@ -672,8 +682,85 @@ if (api && me && liveAdapter) {
     hBtn.hidden = false
     hBtn.addEventListener('click', () => { if (hrWs!.open) hrWs!.hide(); else { hideWorkspaces(); void hrWs!.show() } })
   }
+  // Settings: the resort profile and the getting-started checklist (MD).
+  if (SettingsWorkspace.allowed(me)) {
+    settingsWs = new SettingsWorkspace(api, me, outbox, () => renderSide())
+    const sBtn = $('#btn-settings')
+    sBtn.hidden = false
+    sBtn.addEventListener('click', () => { if (settingsWs!.open) settingsWs!.hide(); else { hideWorkspaces(); void settingsWs!.show() } })
+    void setupBanner()
+    window.addEventListener('sathya:setup-changed', () => void setupBanner())
+  }
   addModulesMenu()
   setTab('arrivals')
+}
+
+/** The notices under the top bar (a day left open, setup still to do), stacked. */
+function noticeHost() {
+  let host = document.getElementById('notices')
+  if (!host) { host = document.createElement('div'); host.id = 'notices'; host.className = 'notices'; document.getElementById('app')!.appendChild(host) }
+  host.style.top = `${(document.querySelector<HTMLElement>('.topbar')?.offsetHeight ?? 56) + 10}px`
+  return host
+}
+
+/** A day left open past its close time: say so, with Close the day for those who may. */
+function dayBar() {
+  let el = document.getElementById('day-bar')
+  const overdue = dayInfo && dayInfo.calendarDate > todayKey() && Date.now() > Date.parse(dayInfo.closesAt) + 5 * 60_000
+  if (!overdue || !me) { el?.remove(); return }
+  if (!el) {
+    el = document.createElement('div')
+    el.id = 'day-bar'
+    el.className = 'setup-banner day-bar'
+    el.setAttribute('role', 'alert')
+    noticeHost().prepend(el)
+    el.addEventListener('click', (e) => { if ((e.target as HTMLElement).closest('[data-close-day]')) { hideWorkspaces(); void fd?.nightAudit() } })
+  }
+  const days = Math.round((+new Date(dayInfo!.calendarDate + 'T12:00') - +new Date(todayKey() + 'T12:00')) / 864e5)
+  el.innerHTML = `<span><b>${fmtDay(todayKey())} is not closed yet</b>${days > 1 ? ` (${days} days behind)` : ''}. ${dayInfo!.autoClose ? 'It should have closed by itself: close it now.' : 'Closing it posts the room charges and the day\'s takings, and moves the date on.'}</span>
+    ${me.permissions.includes('*') || me.permissions.includes('night_audit') ? '<button type="button" class="btn small primary" data-close-day>Close the day</button>' : '<span class="muted small">Ask the night auditor or a manager to close it.</span>'}`
+}
+
+/** The date moves on when the day is closed, here or on another device, or by itself at night. */
+async function checkDay() {
+  if (!api) return
+  try {
+    const next = await api.get<DayInfo>('/api/business-date')
+    const moved = dayInfo && next.businessDate !== dayInfo.businessDate
+    const wasToday = store.date === todayKey()
+    dayInfo = next
+    setToday(next.businessDate)
+    if (moved) { if (wasToday) await store.setDate(next.businessDate); await store.reload() }
+    renderChrome()
+  } catch { /* offline: try again next time */ }
+}
+setInterval(() => { if (!document.hidden) void checkDay() }, 60_000)
+window.addEventListener('sathya:day-closed', () => void checkDay())
+document.addEventListener('visibilitychange', () => { if (!document.hidden) void checkDay() })
+
+/** Until the basics are set up, the MD sees what is left, one tap from Settings. */
+async function setupBanner() {
+  if (!api) return
+  let el = document.getElementById('setup-banner')
+  try {
+    const s = await api.get<{ steps: SetupStep[]; done: boolean }>('/api/setup-status')
+    const left = s.steps.filter((x) => !x.done)
+    if (!left.length || sessionStorage.getItem('sathya.setup-dismissed')) { el?.remove(); return }
+    if (!el) {
+      el = document.createElement('div')
+      el.id = 'setup-banner'
+      el.className = 'setup-banner'
+      el.setAttribute('role', 'status')
+      noticeHost().appendChild(el)
+      el.addEventListener('click', (e) => {
+        const t = e.target as HTMLElement
+        if (t.closest('[data-setup-x]')) { try { sessionStorage.setItem('sathya.setup-dismissed', '1') } catch { /* private mode */ } el!.remove(); return }
+        if (t.closest('[data-setup-open]')) { hideWorkspaces(); void settingsWs?.show('start') }
+      })
+    }
+    el.innerHTML = `<span><b>Finish setting up:</b> ${left.length} of ${s.steps.length} left · next: ${left[0].title}</span>
+      <button type="button" class="btn small primary" data-setup-open>Set up</button><button type="button" class="btn small ghost" data-setup-x aria-label="Hide for now">✕</button>`
+  } catch { /* the checklist is a convenience: never block the app */ }
 }
 
 /** One labelled menu of every module this person can open: the top-bar icons alone are easy to miss. */

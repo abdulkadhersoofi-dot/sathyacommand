@@ -400,7 +400,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; }
 .form-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: var(--muted); min-width: 0; }
 .form-grid .span2 { grid-column: 1 / -1; }
-.fd-card .form-grid input, .fd-card .form-grid select {
+.fd-card .form-grid input, .fd-card .form-grid select, .ws .form-grid input:not([type=checkbox]):not([type=radio]), .ws .form-grid select {
   font: 500 14px var(--f-body); letter-spacing: normal; text-align: left; color: var(--fg); background: var(--surface-2);
   border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-width: 0;
 }
@@ -520,7 +520,7 @@ button.row-card { width: 100%; text-align: left; font: inherit; background: var(
 .form-grid label.check { flex-direction: row; align-items: center; gap: 8px; color: var(--fg); font-weight: 600; }
 .form-grid fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px 8px; display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0; }
 .form-grid fieldset legend { font-size: 12px; font-weight: 700; color: var(--muted); padding: 0 4px; }
-.fd-card .form-grid textarea { font: 500 13px var(--f-mono); color: var(--fg); background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; resize: vertical; min-width: 0; }
+.fd-card .form-grid textarea, .ws .form-grid textarea { font: 500 13px var(--f-mono); color: var(--fg); background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; resize: vertical; min-width: 0; }
 
 @media (max-width: 900px) {
   .ord, .kds-wrap { grid-template-columns: minmax(0, 1fr); }
@@ -693,7 +693,7 @@ button.row-card { width: 100%; text-align: left; font: inherit; background: var(
 
 /* The top bar holds five workspaces: drop the toggle labels first, then the workspace labels. */
 @media (max-width: 1700px) { #btn-night span, #btn-eco span { display: none; } }
-@media (max-width: 1560px) { #btn-staff span, #btn-sec span, #btn-eng span, #btn-hk span, #btn-fnb span, #btn-inv span, #btn-acc span, #btn-bq span, #btn-guests span, #btn-hr span { display: none; } }
+@media (max-width: 1560px) { #btn-staff span, #btn-sec span, #btn-eng span, #btn-hk span, #btn-fnb span, #btn-inv span, #btn-acc span, #btn-bq span, #btn-guests span, #btn-hr span, #btn-settings span { display: none; } }
 /* On a tablet the date and clock move to a second row, as on a phone, so every workspace button fits. */
 @media (min-width: 821px) and (max-width: 1180px) {
   .topbar { flex-wrap: wrap; gap: 8px 10px; }
@@ -906,6 +906,13 @@ button.link { background: none; border: 0; padding: 0; color: var(--accent); fon
 .hr-checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px 14px; font-size: 13px; }
 .hr-checks .check { display: flex; gap: 8px; align-items: center; }
 @media (max-width: 640px) { .hr-dl { grid-template-columns: 110px minmax(0, 1fr); } }
+.notices { position: absolute; z-index: 6; top: 66px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; width: max-content; max-width: min(760px, calc(100% - 32px)); pointer-events: none; }
+.setup-banner { pointer-events: auto; display: flex; gap: 10px; align-items: center; padding: 8px 10px 8px 14px; border-radius: 12px; background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--marigold) 60%, var(--line)); box-shadow: var(--shadow); font-size: 13px; }
+.setup-banner.day-bar { border-color: color-mix(in srgb, var(--st-departing) 60%, var(--line)); }
+.setup-banner span { flex: 1; min-width: 0; }
+.setup-step.done { opacity: .7; }
+.settings-form { max-width: 860px; }
 .m-row.hr-hol { grid-template-columns: 110px 100px minmax(0, 1fr) 80px 90px; }
 @media (max-width: 640px) { .m-row.hr-hol { grid-template-columns: 96px minmax(0, 1fr) auto; } .m-row.hr-hol > :nth-child(2), .m-row.hr-hol > :nth-child(4) { display: none; } }
 .m-row.ml-hol { grid-template-columns: 110px minmax(0, 1fr); }

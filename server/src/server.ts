@@ -24,6 +24,7 @@ import { paymentProviderFromEnv, sweepUnpaid } from './channels'
 import { ensureActivities, planMessages, sendDue } from './guest'
 import { ensureHolidays, loadPayrollConfig } from './hr'
 import { businessDate } from './fo-core'
+import { autoCloseDays } from './routes/nightaudit'
 
 // DATABASE_URL set → PostgreSQL (production). Otherwise a local PGlite database in ./data.
 // MD_EMAIL and MD_PASSWORD give the Managing Director's login its email and first password (changed at the first
@@ -52,6 +53,7 @@ const app = buildApp(db, { logger: true, printAgentKey: process.env.PRINT_AGENT_
 app.log.info({ engine: db.engine, migrationsApplied: applied, seeded }, 'database ready')
 // Escalations, planned maintenance, expiry reminders, missed patrols and keys not returned, once a minute.
 setInterval(() => {
+  autoCloseDays(app.hms).then((n) => { if (n) app.log.info({ days: n }, 'business day closed by itself') }).catch((e) => app.log.error(e))
   sweepEngineering(db, new Date()).catch((e) => app.log.error(e))
   sweepSecurity(db, new Date()).catch((e) => app.log.error(e))
   sweepPayables(db, new Date()).catch((e) => app.log.error(e))
