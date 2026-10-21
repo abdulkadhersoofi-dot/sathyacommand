@@ -114,8 +114,8 @@ export function inventoryRoutes(app: FastifyInstance, ctx: Ctx) {
     const q = req.query as { includeArchived?: string }
     return ctx.db.query(
       `select s.id, s.room_no, s.kind, s.name, s.room_type_id, t.name as room_type, s.building, s.floor, s.twin_id,
-              s.placeholder, s.active
-         from space s left join room_type t on t.id = s.room_type_id
+              s.placeholder, s.active, h.status as hk_status
+         from space s left join room_type t on t.id = s.room_type_id left join room_hk h on h.space_id = s.id
         where s.kind = any($1) ${q.includeArchived === 'true' ? '' : 'and s.active'}
         order by s.building nulls last, s.floor nulls last, s.room_no`, [LODGING_KINDS])
   })

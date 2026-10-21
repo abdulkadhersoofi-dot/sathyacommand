@@ -46,16 +46,23 @@ describe('room status follows the front office', () => {
     expect((await room('101')).status).toBe('occupied_clean')
     const bal = (await R.get(`/api/reservations/${ids.A}`, FD)).json()
     expect(bal.balance).toBe(0)
-    await R.post(`/api/reservations/${ids.A}/check-out`, FD)
+    // Leaving the same day is a day use: the night is charged at check-out, so it is paid first.
+    const first = await R.post(`/api/reservations/${ids.A}/check-out`, FD)
+    expect(first.statusCode).toBe(409)
+    await R.post(`/api/folios/${bal.folios[0].id}/payments`, FD, { method: 'card', amount: first.json().balance / 100, reference: 'DAYUSE' })
+    expect((await R.post(`/api/reservations/${ids.A}/check-out`, FD)).statusCode).toBe(200)
     const r = await room('101')
     expect(r).toMatchObject({ status: 'vacant_dirty', task: { kind: 'checkout', status: 'pending' } })
   })
 
-  it('warns at check-in into a room not yet cleaned', async () => {
+  it('stops a check-in into a room not yet cleaned unless the desk says so', async () => {
     const s = await stay('Bala', 'RM-101', 2)
     ids.B = s.id
-    expect(s.checkIn.housekeeping).toMatch(/not been cleaned/)
-    expect((await room('101')).task).toBeNull()
+    expect(s.checkIn).toMatchObject({ notClean: true })
+    const again = (await R.post(`/api/reservations/${ids.B}/check-in`, FD, { spaceId: 'RM-101', idType: 'aadhaar', idNumber: '1234 5678 9012', notClean: true })).json()
+    expect(again.housekeeping).toMatch(/still to be cleaned/)
+    // The cleaning still has to happen, now as an occupied room.
+    expect(await room('101')).toMatchObject({ status: 'occupied_dirty', task: { kind: 'checkout' } })
   })
 })
 

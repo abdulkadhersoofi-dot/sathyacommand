@@ -97,10 +97,14 @@ export function profileRoutes(app: FastifyInstance, ctx: Ctx) {
     const [p] = await db.query<{ legal_name: string | null; gstin: string | null; address: string | null; pin: string | null; tan: string | null }>('select legal_name, gstin, address, pin, tan from property where id = $1', [PROPERTY])
     const steps = [
       { key: 'profile', title: 'Resort profile: legal name, GSTIN and address', why: 'Every tax invoice (check-out, restaurant, banquet) prints them and is refused without them.', done: !!(p?.legal_name && p?.gstin && p?.address && p?.pin), open: 'settings:profile' },
+      { key: 'rates', title: 'Room rates for the season ahead', why: 'Reception can book a room only on nights that have a rate. Check each room type and meal plan.',
+        done: (await one(`select count(*)::int as n from room_type t where t.active and exists (select 1 from space s where s.room_type_id = t.id and s.active)
+                            and not exists (select 1 from rate r join rate_plan p on p.id = r.rate_plan_id where p.code = 'EP' and r.room_type_id = t.id
+                                            and r.valid_to >= (select business_date from property limit 1) + 60)`)) === 0, open: 'settings:rates' },
       { key: 'tan', title: 'TAN and who signs TDS returns', why: 'For TDS on vendor payments and salaries, the 26Q / 24Q and Form 16.', done: !!p?.tan, open: 'settings:profile' },
       { key: 'bank', title: 'The resort\'s bank account', why: 'Payments, receipts and the bank reconciliation use it.', done: (await one(`select count(*)::int as n from bank_account where active and account_no is not null`)) > 0, open: 'btn-acc' },
       { key: 'opening', title: 'Opening balances', why: 'Cash, bank, what is owed to and by the resort on the day the books start.', done: (await one(`select count(*)::int as n from voucher where source_type = 'opening' or narration ilike 'opening%'`)) > 0, open: 'btn-acc' },
-      { key: 'logins', title: 'Logins for the staff', why: 'Each person signs in with their own email and password.', done: (await one(`select count(*)::int as n from app_user where id <> 'system' and active`)) > 1, open: 'btn-staff' },
+      { key: 'logins', title: 'Logins for the staff', why: 'Each person signs in with their own email and password.', done: (await one(`select count(*)::int as n from app_user where id <> 'system' and active`)) > 1, open: 'btn-staff:logins' },
       { key: 'employees', title: 'Employees and their pay', why: 'For leave, payroll, PF and ESI.', done: (await one('select count(*)::int as n from employee')) > 0, open: 'btn-hr' },
     ]
     return { steps, done: steps.every((s) => s.done) }

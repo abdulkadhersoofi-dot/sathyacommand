@@ -24,7 +24,7 @@ describe('the resort profile', () => {
 
   it('refuses a check-out invoice until the legal name and GSTIN are set, saying where to set them', async () => {
     const res = (await R.post('/api/reservations', FD, { guest: { name: 'Anitha' }, roomTypeId: 'deluxe', plan: 'EP', arrival: '2026-11-01', departure: '2026-11-02' })).json()
-    await R.post(`/api/reservations/${res.id}/check-in`, FD, { spaceId: 'RM-105', idType: 'aadhaar', idNumber: '1234' })
+    await R.post(`/api/reservations/${res.id}/check-in`, FD, { spaceId: 'RM-105', idType: 'aadhaar', idNumber: '1234 5678 9012' })
     await R.post('/api/night-audit', R.md)
     const folio = (await R.get(`/api/reservations/${res.id}`, FD)).json().folios[0].id
     await R.post('/api/cashier/open', FD, { openingFloat: 0 })

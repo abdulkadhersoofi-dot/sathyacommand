@@ -119,14 +119,8 @@ export async function closeDay(ctx: Ctx, who: Caller, action = 'night_audit.run'
         where rn.night = $1 and not rn.released and rn.posted_line_id is null and r.status = 'in_house'`, [day])
     let roomRevenue = 0, roomGst = 0
     for (const n of toPost) {
-      const tax = accommodationNight(ctx.tax, { date: day, charged: n.amount_paise, extras: n.extras_paise })
-      const lineId = newId('L')
-      await t.query(
-        `insert into folio_line (id, folio_id, business_date, posted_at, kind, description, sac, gst_rate, taxable_paise, cgst_paise, sgst_paise, amount_paise, posted_by, ref)
-         values ($1, $2, $3, $4, 'room', $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-        [lineId, n.folio_id, day, now(), `Room ${n.room_no ?? ''} · night of ${day}${n.extras_paise ? ' (incl. extra bed)' : ''}`.trim(),
-          ctx.tax.gst.accommodation.sac, tax.rate, tax.taxable, tax.cgst, tax.sgst, tax.total, who.userId, day])
-      await t.query('update room_night set posted_line_id = $3 where reservation_id = $1 and night = $2', [n.reservation_id, day, lineId])
+      const tax = await postNight(ctx, t, n.reservation_id, day, who)
+      if (!tax) continue
       roomRevenue += tax.taxable
       roomGst += tax.cgst + tax.sgst
     }
@@ -173,6 +167,24 @@ export async function closeDay(ctx: Ctx, who: Caller, action = 'night_audit.run'
     await appendAudit(t, { actor: who, action, entity: { type: 'business_date', id: day }, amount: roomRevenue, after: summary }, now())
     return { ...summary, nextBusinessDate: next }
   })
+}
+
+/** Posts one night's room charge to a stay's bill, with GST chosen from that night's value (the night audit, or a day use at check-out). */
+export async function postNight(ctx: Ctx, t: Db, reservationId: string, day: string, who: Caller) {
+  const [n] = await t.query<{ amount_paise: number; extras_paise: number; room_no: string | null; folio_id: string }>(
+    `select rn.amount_paise, rn.extras_paise, s.room_no, (select id from folio f where f.reservation_id = rn.reservation_id order by created_at limit 1) as folio_id
+       from room_night rn join reservation r on r.id = rn.reservation_id left join space s on s.id = coalesce(rn.space_id, r.space_id)
+      where rn.reservation_id = $1 and rn.night = $2 and not rn.released and rn.posted_line_id is null`, [reservationId, day])
+  if (!n) return null
+  const tax = accommodationNight(ctx.tax, { date: day, charged: n.amount_paise, extras: n.extras_paise })
+  const lineId = newId('L')
+  await t.query(
+    `insert into folio_line (id, folio_id, business_date, posted_at, kind, description, sac, gst_rate, taxable_paise, cgst_paise, sgst_paise, amount_paise, posted_by, ref)
+     values ($1, $2, $3, $4, 'room', $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+    [lineId, n.folio_id, day, ctx.now(), `Room ${n.room_no ?? ''} · night of ${new Date(`${day}T00:00:00Z`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })}${n.extras_paise ? ' (incl. extra bed)' : ''}`.trim(),
+      ctx.tax.gst.accommodation.sac, tax.rate, tax.taxable, tax.cgst, tax.sgst, tax.total, who.userId, day])
+  await t.query('update room_night set posted_line_id = $3 where reservation_id = $1 and night = $2', [reservationId, day, lineId])
+  return tax
 }
 
 /** The Indian date and time of an instant: 'YYYY-MM-DD' and 'HH:MM'. */

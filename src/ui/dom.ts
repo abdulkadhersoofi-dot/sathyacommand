@@ -6,7 +6,8 @@ export const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.
 
 /** A date as people read it in India: 30 Oct 2026 (anything that is not a YYYY-MM-DD date is left as it is). */
 export const showDate = (v: unknown) => {
-  const s = String(v ?? '')
+  // A date column can arrive as midnight UTC (2026-10-21T00:00:00.000Z): it is still that day.
+  const s = String(v ?? '').replace(/^(\d{4}-\d{2}-\d{2})T00:00:00(\.000)?Z$/, '$1')
   return /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(`${s}T00:00:00Z`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : s
 }
 export const esc = (s: unknown) =>

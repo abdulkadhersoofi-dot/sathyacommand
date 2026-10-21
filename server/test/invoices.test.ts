@@ -135,7 +135,7 @@ describe('without the company GSTIN', () => {
     const T = await testResort('2026-11-01', { taxDetails: false })
     const fd = await T.staff('Priya', '9840000002', ['reception'])
     const id = (await T.post('/api/reservations', fd, { guest: { name: 'A' }, roomTypeId: 'deluxe', plan: 'EP', arrival: '2026-11-01', departure: '2026-11-02' })).json().id
-    await T.post(`/api/reservations/${id}/check-in`, fd, { spaceId: 'RM-105', idType: 'aadhaar', idNumber: '1234' })
+    await T.post(`/api/reservations/${id}/check-in`, fd, { spaceId: 'RM-105', idType: 'aadhaar', idNumber: '1234 5678 9012' })
     await T.post('/api/night-audit', T.md)
     const folio = (await T.get(`/api/reservations/${id}`, fd)).json().folios[0].id
     await T.post(`/api/folios/${folio}/payments`, fd, { method: 'card', amount: 4410, reference: 'C1' })

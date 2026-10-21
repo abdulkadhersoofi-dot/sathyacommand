@@ -55,7 +55,7 @@ describe('the booking page', () => {
   it('takes the online check-in, keeping only the last four of the ID', async () => {
     const url = `/public/bookings/${BK}/checkin?t=${TOKEN}`
     expect((await pub('POST', url, { eta: '21:30' })).json().error).toMatch(/agree/)
-    expect((await pub('POST', url, { consent: true, nationality: 'GB', idType: 'aadhaar', idNumber: '1234' })).json().error).toMatch(/passport/)
+    expect((await pub('POST', url, { consent: true, nationality: 'GB', idType: 'aadhaar', idNumber: '1234 5678 9012' })).json().error).toMatch(/passport/)
     expect((await pub('POST', url, { consent: true, eta: '21:30', idType: 'aadhaar', idNumber: '4521 8890 1234', address: '12 Race Course Road, Coimbatore', purpose: 'Leisure', preferences: 'Twin beds, high floor' })).json()).toEqual({ ok: true })
     const d = (await R.get(`/api/reservations/${BK}`, FD)).json()
     expect(d.onlineCheckin).toMatchObject({ eta: '21:30', id_type: 'aadhaar', id_last4: '1234', preferences: 'Twin beds, high floor' })

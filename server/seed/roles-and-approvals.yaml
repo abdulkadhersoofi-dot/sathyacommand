@@ -138,7 +138,7 @@ roles:
     permissions: [hk.view, hk.attend, hk.inspect, hk.manage, attendance.view, roster.manage, broadcast.send, purchase.indent, stores.breakage, beo.view, guest.requests, leave.approve]
     limits: { linen_writeoff: 2000 }
   hk_supervisor:
-    permissions: [hk.view, hk.attend, hk.inspect, beo.view, guest.requests]
+    permissions: [hk.view, hk.attend, hk.inspect, hk.manage, beo.view, guest.requests]
     limits: {}
   room_attendant:
     permissions: [hk.attend]

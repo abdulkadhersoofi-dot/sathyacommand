@@ -12,7 +12,7 @@ import { issueReceiptVoucher, issueRefundVoucher, issueStayInvoice } from '../in
 import { validateGstin } from '@sathya/tax'
 import { checkCredit, debtorFor, OTAS, otaDebtorFor, SOURCES } from '../receivables'
 import { requireCaller } from './auth'
-import { closesAt, istOf } from './nightaudit'
+import { closesAt, istOf, postNight } from './nightaudit'
 import { onCheckIn, onCheckOut, onRoomMove } from '../hk-core'
 import { blockPickup, contractRate, sweepBlocks } from '../sales'
 
@@ -62,6 +62,18 @@ async function assignRoom(db: Db, reservationId: string, spaceId: string, roomTy
   return s.room_no
 }
 
+const showDay = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
+const PLAN_NAMES: Record<string, string> = { EP: 'room only (EP)', CP: 'with breakfast (CP)', MAP: 'breakfast and one meal (MAP)', AP: 'all meals (AP)' }
+/** Why a stay cannot be priced, in words the desk can act on. */
+export async function noRateMessage(t: Db, plan: string, roomTypeId: string, night: string) {
+  const [rt] = await t.query<{ name: string }>('select name from room_type where id = $1', [roomTypeId])
+  const [last] = await t.query<{ to: string | null }>(`select max(r.valid_to)::text as to from rate r join rate_plan p on p.id = r.rate_plan_id where p.code = $1 and r.room_type_id = $2`, [plan, roomTypeId])
+  const what = `${rt?.name ?? roomTypeId} ${PLAN_NAMES[plan] ?? plan}`
+  return last?.to && last.to < night
+    ? `Rates for ${what} are set only up to ${showDay(last.to)}. The MD or GM adds the next season in Settings → Rooms & rates.`
+    : `There is no rate for ${what} on ${showDay(night)}. Choose another meal plan, or the MD or GM sets it in Settings → Rooms & rates.`
+}
+
 export interface BookingInput {
   guest?: { name?: string; mobile?: string; email?: string; nationality?: string; company?: string; gstin?: string }
   roomTypeId?: string; plan?: string; arrival?: string; departure?: string; adults?: number; children?: number
@@ -83,13 +95,20 @@ export interface BookingInput {
 export async function bookStay(ctx: Ctx, t: Db, who: Caller, b: BookingInput) {
   const now = () => ctx.now()
   if (!b?.guest?.name?.trim()) throw new HttpError(400, 'Give the guest\'s name.')
-  if (!b.roomTypeId || !b.plan || !DATE.test(b.arrival ?? '') || !DATE.test(b.departure ?? '') || b.departure! <= b.arrival!) {
-    throw new HttpError(400, 'Send roomTypeId, plan, arrival and departure (YYYY-MM-DD), departure after arrival.')
+  if (!b.roomTypeId || !b.plan) throw new HttpError(400, 'Choose the room type and the meal plan.')
+  if (!DATE.test(b.arrival ?? '') || !DATE.test(b.departure ?? '')) throw new HttpError(400, 'Give the arrival date and the number of nights.')
+  if (b.departure! <= b.arrival!) throw new HttpError(400, 'A stay is at least one night.')
+  if (b.adults !== undefined && !(Number.isInteger(b.adults) && b.adults >= 1)) throw new HttpError(400, 'At least one adult.')
+  if (b.children !== undefined && !(Number.isInteger(b.children) && b.children >= 0)) throw new HttpError(400, 'Children: 0 or more.')
+  if (b.guest.mobile) {
+    const digits = b.guest.mobile.replace(/\D/g, '')
+    const indian = (b.guest.nationality ?? 'IN').toUpperCase() === 'IN'
+    if (indian ? !/^(91)?[6-9]\d{9}$/.test(digits) : digits.length < 8) throw new HttpError(400, indian ? 'Mobile: a 10-digit Indian number.' : 'Mobile: the full number with its country code.')
   }
   const nights = nightsOf(b.arrival!, b.departure!)
   if (nights.length > 60) throw new HttpError(400, 'A single reservation can be at most 60 nights.')
   const today = await businessDate(t)
-  if (b.arrival! < today) throw new HttpError(400, `Arrival can't be before today's business date (${today}).`)
+  if (b.arrival! < today) throw new HttpError(400, `Arrival can't be before today (${showDay(today)}).`)
   if (b.source && !SOURCES[b.source]) throw new HttpError(400, `Booked through: ${Object.keys(SOURCES).join(', ')}.`)
   if (b.source && OTAS[b.source] && !b.otaRef?.trim()) throw new HttpError(400, `The ${OTAS[b.source]} booking ID, to match the OTA's payout.`)
   if (b.debtorId) {
@@ -134,13 +153,15 @@ export async function bookStay(ctx: Ctx, t: Db, who: Caller, b: BookingInput) {
   const amounts: number[] = b.nightAmounts ? [...b.nightAmounts] : []
   for (const n of b.nightAmounts ? [] : nights) {
     const a = blockRate ?? (b.debtorId ? await contractRate(t, b.debtorId, b.plan!, b.roomTypeId!, n) : null) ?? await rateFor(t, b.plan!, b.roomTypeId!, n)
-    if (a == null) throw new HttpError(422, `No ${b.plan} rate for ${b.roomTypeId} on ${n}.`)
+    if (a == null) throw new HttpError(422, await noRateMessage(t, b.plan!, b.roomTypeId!, n))
     amounts.push(a)
   }
 
   const g = b.guest!
-  const mobile = g.mobile ? '+91' + g.mobile.replace(/\D/g, '').slice(-10) : null
-  let [guest] = mobile ? await t.query<{ id: string }>('select id from guest where mobile = $1', [mobile]) : []
+  const digits = g.mobile ? g.mobile.replace(/\D/g, '') : ''
+  const mobile = digits ? ((g.nationality ?? 'IN').toUpperCase() === 'IN' ? '+91' + digits.slice(-10) : '+' + digits) : null
+  // The same person comes back: same mobile and the same name. Someone else on a shared number is a new guest.
+  let [guest] = mobile ? await t.query<{ id: string }>('select id from guest where mobile = $1 and lower(trim(name)) = lower(trim($2)) order by created_at desc limit 1', [mobile, g.name!]) : []
   if (!guest) {
     guest = { id: newId('G') }
     await t.query('insert into guest (id, name, mobile, email, nationality, company, gstin) values ($1, $2, $3, $4, $5, $6, $7)',
@@ -196,15 +217,24 @@ export function frontOfficeRoutes(app: FastifyInstance, ctx: Ctx) {
 
   app.get('/api/reservations', async (req) => {
     await frontDesk(ctx, req)
-    const q = req.query as { status?: string; date?: string }
+    const q = req.query as { status?: string; date?: string; q?: string; upcoming?: string }
     const params: unknown[] = []
     const where: string[] = []
     if (q.status) { params.push(q.status); where.push(`r.status = $${params.length}`) }
     if (q.date) { params.push(q.date); where.push(`$${params.length}::date >= r.arrival and $${params.length}::date <= r.departure`) }
+    // Find a booking by guest name, mobile, booking number, room or OTA reference.
+    const term = q.q?.trim()
+    if (term) {
+      params.push(`%${term.toLowerCase()}%`, term.toLowerCase(), term.replace(/\D/g, ''))
+      const n = params.length - 2
+      where.push(`(lower(g.name) like $${n} or lower(r.id) like $${n} or lower(coalesce(r.ota_ref, '')) like $${n} or lower(coalesce(s.room_no, '')) = $${n + 1}
+        or (length($${n + 2}) >= 4 and coalesce(g.mobile, '') like '%' || $${n + 2} || '%'))`)
+    }
+    if (q.upcoming === 'true') where.push(`r.arrival > (select business_date from property limit 1) and r.status = 'confirmed'`)
     return db.query(
-      `select r.id, r.status, g.name as guest, r.room_type_id, s.room_no, r.arrival::text, r.departure::text, r.adults, r.children, r.source, r.eta
+      `select r.id, r.status, g.name as guest, g.mobile, r.room_type_id, s.room_no, r.arrival::text, r.departure::text, r.adults, r.children, r.source, r.eta, r.ota_ref
          from reservation r join guest g on g.id = r.guest_id left join space s on s.id = r.space_id
-        ${where.length ? 'where ' + where.join(' and ') : ''} order by r.arrival, g.name limit 500`, params)
+        ${where.length ? 'where ' + where.join(' and ') : ''} order by ${term ? 'r.arrival desc' : 'r.arrival'}, g.name limit ${term ? 50 : 500}`, params)
   })
 
   app.get('/api/reservations/:id', async (req) => {
@@ -219,7 +249,10 @@ export function frontOfficeRoutes(app: FastifyInstance, ctx: Ctx) {
     const [formC] = await db.query('select due_at, submitted_at, reference from form_c where reservation_id = $1', [id])
     const [online] = await db.query('select eta, nationality, id_type, id_last4, address, purpose, preferences, company, gstin, submitted_at from online_checkin where reservation_id = $1', [id])
     const paymentLinks = await db.query('select url, amount_paise, status, created_at, paid_at from payment_link where reservation_id = $1 order by created_at', [id])
-    return { ...r, guest, nights, folios, lines, balance: await reservationBalance(db, id), formC: formC ?? null, onlineCheckin: online ?? null, paymentLinks }
+    const documents = await db.query(`select id, doc_type, number, issue_date::text, total_paise from tax_document where reservation_id = $1 order by issued_at, number`, [id])
+    const [more] = await db.query(`select r.source, r.ota_ref, r.eta, r.requests, r.cancel_reason, r.checked_in_at, r.checked_out_at, s.room_no, t.name as room_type
+                                     from reservation r left join space s on s.id = r.space_id join room_type t on t.id = r.room_type_id where r.id = $1`, [id])
+    return { ...r, ...more, guest, nights, folios, lines, balance: await reservationBalance(db, id), formC: formC ?? null, onlineCheckin: online ?? null, paymentLinks, documents }
   })
 
   app.post('/api/reservations/:id/assign-room', async (req) => {
@@ -296,20 +329,24 @@ export function frontOfficeRoutes(app: FastifyInstance, ctx: Ctx) {
   app.post('/api/reservations/:id/check-in', async (req) => {
     const who = await frontDesk(ctx, req)
     const { id } = req.params as { id: string }
-    const b = req.body as { spaceId?: string; upgrade?: boolean; idType?: string; idNumber?: string }
-    if (!b?.idType || !b.idNumber || b.idNumber.replace(/\s/g, '').length < 4) throw new HttpError(400, 'Record the guest\'s ID type and number.')
+    const b = req.body as { spaceId?: string; upgrade?: boolean; idType?: string; idNumber?: string; notClean?: boolean }
+    if (!b?.idType || !b.idNumber) throw new HttpError(400, 'Record the guest\'s ID type and number.')
+    const idNo = b.idNumber.replace(/[\s-]/g, '').toUpperCase()
+    if (b.idType === 'aadhaar' && !/^\d{12}$/.test(idNo)) throw new HttpError(400, 'Aadhaar: 12 digits.')
+    if (b.idType === 'passport' && !/^[A-Z0-9]{6,9}$/.test(idNo)) throw new HttpError(400, 'Passport number: 6 to 9 letters and digits.')
+    if (idNo.length < 6) throw new HttpError(400, 'Enter the full ID number (only its last 4 characters are kept).')
     return db.tx(async (t) => {
       const r = await loadReservation(t, id, true)
       if (r.status !== 'confirmed') throw new HttpError(409, `Reservation is ${r.status}.`)
       const today = await businessDate(t)
-      if (r.arrival !== today) throw new HttpError(409, `Arrival is on ${r.arrival}; today's business date is ${today}.`)
+      if (r.arrival !== today) throw new HttpError(409, `This booking arrives on ${showDay(r.arrival)}; today is ${showDay(today)}.`)
       if (b.spaceId) await assignRoom(t, id, b.spaceId, r.room_type_id, !!b.upgrade)
       else if (!r.space_id) throw new HttpError(409, 'Assign a room first.')
       const last4 = b.idNumber!.replace(/\s/g, '').slice(-4)
       await t.query('update guest set id_type = $2, id_last4 = $3 where id = $1', [r.guest_id, b.idType, last4])
       await t.query(`update reservation set status = 'in_house', checked_in_at = $2 where id = $1`, [id, now()])
       const [{ space_id: roomId }] = await t.query<{ space_id: string }>('select space_id from reservation where id = $1', [id])
-      const hk = await onCheckIn(t, roomId, who, now())
+      const hk = await onCheckIn(t, roomId, who, now(), !!b.notClean)
       const [g] = await t.query<{ nationality: string; name: string }>('select nationality, name from guest where id = $1', [r.guest_id])
       let formCDue: string | null = null
       if (g.nationality !== 'IN') {
@@ -341,6 +378,13 @@ export function frontOfficeRoutes(app: FastifyInstance, ctx: Ctx) {
       const r = await loadReservation(t, id, true)
       if (r.status !== 'in_house') throw new HttpError(409, `Reservation is ${r.status}.`)
       const today = await businessDate(t)
+      // Leaving on the day they arrived (day use): the first night is charged now, as at the night audit.
+      const [{ posted }] = await t.query<{ posted: number }>('select count(*)::int as posted from room_night where reservation_id = $1 and posted_line_id is not null', [id])
+      if (!posted && r.arrival === today) {
+        await postNight(ctx, t, id, today, who)
+        // Charged, but the room is free to sell again tonight.
+        await t.query('update room_night set released = true where reservation_id = $1 and night = $2', [id, today])
+      }
       // Leaving early: nights from today onward are released, not charged.
       const released = await t.query<{ night: string }>(
         `update room_night set released = true where reservation_id = $1 and night >= $2 and posted_line_id is null and not released returning night::text`, [id, today])

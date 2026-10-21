@@ -107,29 +107,40 @@ export function invoiceRoutes(app: FastifyInstance, ctx: Ctx) {
     await viewer(req)
     const d = await loadDoc((req.params as { id: string }).id)
     const original = d.original_id ? await loadDoc(d.original_id) : null
+    // A stay's invoice says who stayed, in which room and when, and what was paid against it.
+    const [stay] = d.reservation_id ? await db.query<{ guest: string; room_no: string | null; arrival: string; departure: string; paid: string | null }>(
+      `select g.name as guest, s.room_no, r.arrival::text, r.departure::text,
+              (select -sum(l.amount_paise) from folio_line l join folio f on f.id = l.folio_id where f.reservation_id = r.id and l.kind in ('payment', 'refund')) as paid
+         from reservation r join guest g on g.id = r.guest_id left join space s on s.id = r.space_id where r.id = $1`, [d.reservation_id]) : []
+    const dmy = (x: string) => x.split('-').reverse().join('/')
     const party = (p: Party) => `<b>${esc(p.name)}</b><br>${[p.address, p.city, p.pin].filter(Boolean).map(esc).join(', ')}${p.gstin ? `<br>GSTIN: ${esc(p.gstin)}` : ''}${p.stateCode ? `<br>State: ${esc(stateName(p.stateCode))}` : ''}`
-    const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(TITLES[d.doc_type])} ${esc(d.number)}</title>
+    const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(TITLES[d.doc_type])} ${esc(d.number)}</title>
 <style>
   body{font:13px/1.45 system-ui,-apple-system,'Segoe UI',sans-serif;color:#14211e;margin:24px auto;max-width:820px;padding:0 16px}
   h1{font-size:20px;margin:0 0 4px}.muted{color:#5a6b66}.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:16px 0}
   .box{border:1px solid #c9d3cf;border-radius:6px;padding:10px 12px}table{width:100%;border-collapse:collapse;margin:12px 0}
   th,td{border-bottom:1px solid #dfe6e3;padding:6px 8px;text-align:left;vertical-align:top}th{background:#eef2ef;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
   td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.tot td{font-weight:700}.irn{word-break:break-all;font-family:ui-monospace,monospace;font-size:11px}
+  .scroll{overflow-x:auto}
+  @media (max-width:640px){body{margin:12px auto;font-size:12px}.grid{grid-template-columns:1fr}}
   @media print{body{margin:0}}
 </style></head><body>
 <h1>${esc(TITLES[d.doc_type])}</h1>
 <div class="muted">No. <b>${esc(d.number)}</b> · Date ${esc(d.issue_date.split('-').reverse().join('/'))}${original ? ` · Against ${esc(original.number)} dated ${esc(original.issue_date.split('-').reverse().join('/'))}` : ''}</div>
 <div class="grid"><div class="box"><div class="muted">Supplier</div>${party(d.supplier)}</div><div class="box"><div class="muted">${d.b2b ? 'Recipient' : 'Billed to'}</div>${party(d.recipient)}</div></div>
+${stay ? `<div class="box"><div class="muted">Stay</div><b>${esc(stay.guest)}</b>${stay.room_no ? ` · Room ${esc(stay.room_no)}` : ''} · ${esc(dmy(stay.arrival))} to ${esc(dmy(stay.departure))}</div>` : ''}
 <div class="muted">Place of supply: ${esc(stateName(d.place_of_supply))} · Tax payable on reverse charge: ${d.reverse_charge ? 'Yes' : 'No'}</div>
-<table><thead><tr><th>#</th><th>Description</th><th>SAC</th><th class="n">Qty</th><th class="n">Taxable ₹</th><th class="n">GST %</th><th class="n">CGST ₹</th><th class="n">SGST ₹</th><th class="n">Total ₹</th></tr></thead><tbody>
+<div class="scroll"><table><thead><tr><th>#</th><th>Description</th><th>SAC</th><th class="n">Qty</th><th class="n">Taxable ₹</th><th class="n">GST %</th><th class="n">CGST ₹</th><th class="n">SGST ₹</th><th class="n">Total ₹</th></tr></thead><tbody>
 ${d.lines.map((l) => `<tr><td>${l.slNo}</td><td>${esc(l.description)}</td><td>${esc(l.sac)}</td><td class="n">${l.qty}</td><td class="n">${money(l.taxable)}</td><td class="n">${l.gstRate}</td><td class="n">${money(l.cgst)}</td><td class="n">${money(l.sgst)}</td><td class="n">${money(l.total)}</td></tr>`).join('')}
 <tr class="tot"><td colspan="4">Total</td><td class="n">${money(d.taxable_paise)}</td><td></td><td class="n">${money(d.cgst_paise)}</td><td class="n">${money(d.sgst_paise)}</td><td class="n">${money(d.total_paise)}</td></tr>
-</tbody></table>
+</tbody></table></div>
 <table><thead><tr><th>GST rate</th><th class="n">Taxable ₹</th><th class="n">CGST ₹</th><th class="n">SGST ₹</th></tr></thead><tbody>
 ${d.tax_summary.map((s) => `<tr><td>${s.rate}% (CGST ${s.rate / 2}% + SGST ${s.rate / 2}%)</td><td class="n">${money(s.taxable)}</td><td class="n">${money(s.cgst)}</td><td class="n">${money(s.sgst)}</td></tr>`).join('')}
 </tbody></table>
+<p style="font-size:16px"><b>${d.doc_type === 'credit_note' ? 'Credit total' : 'Total'} (with GST): ₹${money(d.total_paise)}</b></p>
 <p><b>Amount in words:</b> ${esc(d.amount_in_words)}</p>
 ${d.advance_adjusted_paise ? `<p>Advance received earlier (receipt vouchers): ₹${money(d.advance_adjusted_paise)}</p>` : ''}
+${stay && d.doc_type === 'invoice' && stay.paid != null ? `<p>Paid: ₹${money(Number(stay.paid))} · Balance: ₹${money(d.total_paise - Number(stay.paid))}</p>` : ''}
 ${d.reason ? `<p>Reason: ${esc(d.reason)}</p>` : ''}
 ${d.irn ? `<div class="box"><div class="muted">E-invoice</div>IRN: <span class="irn">${esc(d.irn)}</span><br>Ack No: ${esc(d.ack_no)} · Ack Date: ${esc(d.ack_date ? new Date(d.ack_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short', hour12: false }) : '')}</div>` : d.irn_status === 'pending' ? '<p class="muted">E-invoice (IRN) pending.</p>' : ''}
 <p style="margin-top:40px;text-align:right">For ${esc(d.supplier.name)}<br><br>Authorised signatory</p>

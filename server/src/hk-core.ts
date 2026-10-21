@@ -59,11 +59,17 @@ export async function addTask(t: Db, spaceId: string, kind: TaskKind, day: strin
 }
 
 /** Check-in refuses rooms out of order; the room becomes occupied (and clean). */
-export async function onCheckIn(t: Db, spaceId: string, who: Caller, now: Date) {
+export async function onCheckIn(t: Db, spaceId: string, who: Caller, now: Date, notClean = false) {
   const h = await hkOf(t, spaceId)
   if (!h) return { warning: null }
   if (h.status === 'out_of_order') throw new HttpError(409, `Room ${h.room_no} is out of order. Choose another room.`)
-  const warning = h.status === 'vacant_dirty' ? `Room ${h.room_no} has not been cleaned yet.` : h.status === 'vacant_clean' ? `Room ${h.room_no} is clean but not inspected.` : null
+  // A room not yet cleaned after the last guest is refused unless the desk says so: then it stays on the cleaning list.
+  if (h.status === 'vacant_dirty') {
+    if (!notClean) throw new HttpError(409, `Room ${h.room_no} has not been cleaned since the last guest. Choose a clean room, or tick "Check in before it is cleaned" so housekeeping cleans it with the guest in.`, { notClean: true })
+    await setHk(t, spaceId, 'occupied_dirty', who, now)
+    return { warning: `Room ${h.room_no} is still to be cleaned: housekeeping has it on the list.` }
+  }
+  const warning = h.status === 'vacant_clean' ? `Room ${h.room_no} is clean but not inspected.` : null
   await setHk(t, spaceId, 'occupied_clean', who, now)
   await t.query(`update hk_task set status = 'cancelled' where space_id = $1 and kind = 'checkout' and status in ('pending', 'reclean')`, [spaceId])
   return { warning }
@@ -74,7 +80,9 @@ export async function onCheckOut(t: Db, spaceId: string, day: string, who: Calle
   await t.query(`update room_hk set dnd = false, dnd_since = null where space_id = $1`, [spaceId])
   await setHk(t, spaceId, 'vacant_dirty', who, now)
   await t.query(`update hk_task set status = 'cancelled' where space_id = $1 and kind = 'stayover' and status in ('pending', 'reclean')`, [spaceId])
-  await addTask(t, spaceId, 'checkout', day, now, 10)
+  // A room let before it was cleaned still has its check-out clean on the list: one clean covers both guests.
+  const [open] = await t.query(`select 1 from hk_task where space_id = $1 and kind = 'checkout' and status in ('pending', 'reclean', 'in_progress')`, [spaceId])
+  if (!open) await addTask(t, spaceId, 'checkout', day, now, 10)
 }
 
 /** A guest moved rooms: the old one needs a check-out clean, the new one is occupied. */

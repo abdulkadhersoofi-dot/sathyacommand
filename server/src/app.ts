@@ -9,7 +9,7 @@ import { approvalRoutes, createApproval } from './routes/approvals'
 import { authRoutes, requireCaller } from './routes/auth'
 import { inventoryRoutes } from './routes/inventory'
 import { userRoutes } from './routes/users'
-import { frontOfficeRoutes } from './routes/frontoffice'
+import { frontOfficeRoutes, noRateMessage } from './routes/frontoffice'
 import { nightAuditRoutes } from './routes/nightaudit'
 import { invoiceRoutes } from './routes/invoices'
 import { dashboardRoutes } from './routes/dashboard'
@@ -73,6 +73,12 @@ export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boo
 
   app.setErrorHandler((err, _req, reply) => {
     if (err instanceof HttpError) return reply.status(err.status).send({ error: err.message, ...err.extra })
+    // A database rule the screens did not catch: say so plainly instead of "something went wrong".
+    const code = (err as { code?: string }).code
+    if (code === '23514' || code === '23502' || code === '22P02' || code === '22007' || code === '22008') {
+      return reply.status(400).send({ error: 'Some of the details entered are not valid. Check the amounts, dates and required fields, then try again.' })
+    }
+    if (code === '23505') return reply.status(409).send({ error: 'That already exists. Use a different name or number.' })
     const status = (err as { statusCode?: number }).statusCode ?? 500
     if (status === 500) { app.log.error(err); if (process.env.DEBUG_500) console.error(err) }
     return reply.status(status).send({ error: status === 500 ? 'Something went wrong on the server.' : err.message })
@@ -164,7 +170,7 @@ export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boo
         `select r.amount_paise from rate r join rate_plan p on p.id = r.rate_plan_id
           where p.code = $1 and r.room_type_id = $2 and $3::date between r.valid_from and r.valid_to
           order by r.valid_from desc limit 1`, [b.plan, b.roomTypeId, date])
-      if (!rate) throw new HttpError(422, `No ${b.plan} rate for ${b.roomTypeId} on ${date}.`)
+      if (!rate) throw new HttpError(422, await noRateMessage(db, b.plan, b.roomTypeId, date))
       lines.push(accommodationNight(ctx.tax, { date, charged: rate.amount_paise, extras: rupees(b.extrasPerNight ?? 0) }))
     }
     const sum = (k: 'taxable' | 'cgst' | 'sgst' | 'total') => lines.reduce((a, l) => a + l[k], 0)
@@ -174,6 +180,7 @@ export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boo
   // Set a rate. Above ₹7,500 a night goes to the MD's approval inbox, because it would move the restaurant to 18% GST.
   app.put('/api/rates', async (req, reply) => {
     const who = await requireCaller(ctx, req)
+    if (!['*', 'revenue.manage', 'front_desk'].some((p) => who.permissions.has(p))) throw new HttpError(403, 'Only the MD, the GM or the front office can change room rates.')
     const b = req.body as { plan: string; roomTypeId: string; validFrom: string; validTo: string; amount: number }
     if (!b?.plan || !b.roomTypeId || !b.validFrom || !b.validTo || !(b.amount > 0)) {
       throw new HttpError(400, 'Send plan, roomTypeId, validFrom, validTo and amount (₹).')

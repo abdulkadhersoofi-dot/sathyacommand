@@ -207,7 +207,7 @@ export function housekeepingRoutes(app: FastifyInstance, ctx: Ctx) {
     return db.tx(async (t) => {
       const x = await task(t, (req.params as { id: string }).id)
       if (x.status !== 'cleaned') throw new HttpError(409, 'Only cleaned rooms can be inspected.')
-      if (x.assigned_to === who.userId && !who.permissions.has('*')) throw new HttpError(403, 'Someone else must inspect your own room.')
+      if (x.assigned_to === who.userId && !who.permissions.has('*')) throw new HttpError(403, 'You cleaned this room yourself, so another supervisor or the executive housekeeper must inspect it.')
       const pass = b.score! >= PASS_SCORE
       if (!pass && !b.notes?.trim()) throw new HttpError(400, 'Say what needs re-cleaning.')
       await t.query(`update hk_task set status = $2, inspected_by = $3, inspected_at = $4, score = $5, inspection_notes = $6 where id = $1`,
