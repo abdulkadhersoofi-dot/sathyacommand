@@ -790,6 +790,8 @@ Status and steps: [Phase 7 plan](phase-7/README.md). Steps 7.1 (banquets: venue 
 
 ### Phase 8 · HR & payroll Weeks 41–46
 
+Status and steps: [Phase 8 plan](phase-8/README.md). Step 8.1 (employee records, pay structures, onboarding, ID cards, leave with approval on the phone, holidays, training) is built; payroll (8.2) and salary TDS, Form 16 and settlements (8.3) follow.
+
 - Employee records, rosters, leave
 - Payroll with PF, ESI, professional tax, labour welfare fund and salary TDS
 - Payslips and Form 16 in the staff app; training records

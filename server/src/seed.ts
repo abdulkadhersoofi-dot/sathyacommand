@@ -14,6 +14,7 @@ import { ensureStores } from './routes/stores'
 import { ensureChart } from './ledger'
 import { ensureBanquets } from './banquets'
 import { ensureActivities } from './guest'
+import { ensureHolidays, loadPayrollConfig } from './hr'
 import { ensureEngineering } from './eng-core'
 import type { Db } from './db'
 
@@ -122,6 +123,7 @@ async function seedInto(db: Db, opts: { today?: string; mdMobile?: string }) {
   await ensureChart(db)
   await ensureBanquets(db)
   await ensureActivities(db)
+  await ensureHolidays(db, loadPayrollConfig(), [Number(today.slice(0, 4)), Number(today.slice(0, 4)) + 1])
 
   await appendAudit(db, {
     actor: SYSTEM, action: 'system.seed', entity: { type: 'property', id: PROPERTY },

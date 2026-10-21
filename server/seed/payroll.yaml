@@ -1,0 +1,128 @@
+# Sathya HMS · HR and payroll rules (DRAFT for HR and CA review)
+# Amounts in ₹. The software reads this file: change a number here, not in the code.
+# Law as understood in October 2026, with the Labour Codes in force since 21 November 2025. CA check marks
+# what must be confirmed before the first payroll is paid.
+
+# Departments: each person's cost goes to a department of the profit and loss (rooms, fnb, bar, banquets,
+# other, admin, sales, maintenance, utilities).
+departments:
+  front_office:   { name: Front office, ledger: rooms }
+  housekeeping:   { name: Housekeeping, ledger: rooms }
+  laundry:        { name: Laundry, ledger: rooms }
+  kitchen:        { name: Kitchen, ledger: fnb }
+  restaurant:     { name: Restaurant service, ledger: fnb }
+  bar:            { name: Bar, ledger: bar }
+  banquets:       { name: Banquets, ledger: banquets }
+  recreation:     { name: Pool and recreation, ledger: other }
+  engineering:    { name: Engineering, ledger: maintenance }
+  gardens:        { name: Gardens and grounds, ledger: maintenance }
+  security:       { name: Security, ledger: admin }
+  stores:         { name: Stores and purchase, ledger: admin }
+  accounts:       { name: Accounts, ledger: admin }
+  hr:             { name: HR, ledger: admin }
+  sales:          { name: Sales and marketing, ledger: sales }
+  management:     { name: Management, ledger: admin }
+
+# Leave (Tamil Nadu Shops and Establishments Act, 1947, as the resort's baseline). HR check
+leave_year_starts: "01-01"
+leave_types:
+  CL: { name: Casual leave, days: 12, credit: yearly, carry_forward: 0, paid: true }
+  SL: { name: Sick leave, days: 12, credit: yearly, carry_forward: 0, paid: true, certificate_after_days: 2 }
+  EL: { name: Earned leave, days: 12, credit: monthly, after_months: 12, carry_forward: 24, paid: true, encashable: true }
+  CO: { name: Compensatory off, days: 0, credit: by_grant, carry_forward: 0, paid: true, expires_days: 30 }
+  ML: { name: Maternity leave, days: 182, credit: by_grant, carry_forward: 0, paid: true }
+  LOP: { name: Leave without pay, days: 0, credit: none, carry_forward: 0, paid: false }
+
+# Tamil Nadu Industrial Establishments (National and Festival Holidays) Act: the four national holidays are
+# fixed; HR adds the five festival holidays chosen for the year (Pongal, Tamil New Year, Deepavali…).
+national_holidays: ["01-26", "05-01", "08-15", "10-02"]
+festival_holidays_required: 5
+
+onboarding_checklist:
+  - Appointment letter signed
+  - ID proof seen (Aadhaar last four only kept)
+  - PAN collected
+  - Bank account verified
+  - UAN linked or new UAN generated
+  - ESIC registration (if covered)
+  - Photo for the ID card
+  - Medical fitness (food handlers)
+  - Uniform and locker issued
+  - Consent notice (personal data) accepted
+
+# ---------------------------------------------------------------- statutory, used by payroll (8.2)
+wages:
+  # Code on Wages: "wages" are basic and DA; what is left out (HRA, allowances) may be at most half of the
+  # total pay, the excess counting as wages. CA check
+  exclusions_cap_percent: 50
+  overtime_multiplier: 2
+  working_days_for_hourly_rate: 26
+  hours_per_day: 8
+
+pf:
+  wage_ceiling: 15000
+  employee_percent: 12
+  employer_percent: 12
+  eps_percent: 8.33               # of wages up to the ceiling, from the employer's 12%
+  edli_percent: 0.5
+  admin_percent: 0.5
+  admin_minimum_per_month: 500
+  eps_age_limit: 58
+  due_day: 15
+
+esi:
+  wage_ceiling: 21000             # gross wages a month at the start of a contribution period
+  employee_percent: 0.75
+  employer_percent: 3.25
+  exempt_daily_wage_up_to: 176    # employee share not deducted
+  periods: ["04-01", "10-01"]
+  due_day: 15
+
+# Tamil Nadu professional tax, half-yearly (April–September, October–March), on the half-year's gross,
+# deducted in the half's last month. Rates of the local body the resort is in. CA check (Coimbatore / local body)
+professional_tax:
+  deduct_in_months: [9, 3]
+  half_year_slabs:
+    - { up_to: 21000, tax: 0 }
+    - { up_to: 30000, tax: 180 }
+    - { up_to: 45000, tax: 425 }
+    - { up_to: 60000, tax: 930 }
+    - { up_to: 75000, tax: 1025 }
+    - { up_to: null, tax: 1250 }
+
+# Tamil Nadu Labour Welfare Fund: a yearly contribution for those employed on 31 December, paid by 31 January.
+labour_welfare_fund:
+  employee: 20
+  employer: 40
+  deduct_in_month: 12
+
+bonus:
+  # Code on Wages: those earning up to the ceiling get at least 8.33% of wages (on the higher of ₹7,000 and
+  # the minimum wage), at most 20%. Provided for monthly, paid yearly. CA check
+  wage_ceiling: 21000
+  calculation_wage_cap: 7000
+  provision_percent: 8.33
+
+gratuity:
+  # 15 days' wages for each year of service (26 working days a month); payable after 5 years, or 1 year
+  # for fixed-term employees under the Code on Social Security. Provided for monthly at this rate. CA check
+  provision_percent: 4.81
+  min_years: 5
+  min_years_fixed_term: 1
+  ceiling: 2000000
+
+# Salary TDS (Income-tax Act, 2025, from 1 April 2026). Annual slabs, ₹. CA check
+salary_tds:
+  cess_percent: 4
+  new:
+    standard_deduction: 75000
+    slabs: [{ up_to: 400000, rate: 0 }, { up_to: 800000, rate: 5 }, { up_to: 1200000, rate: 10 }, { up_to: 1600000, rate: 15 }, { up_to: 2000000, rate: 20 }, { up_to: 2400000, rate: 25 }, { up_to: null, rate: 30 }]
+    rebate_income_up_to: 1200000      # no tax up to here, with marginal relief just above
+  old:
+    standard_deduction: 50000
+    slabs: [{ up_to: 250000, rate: 0 }, { up_to: 500000, rate: 5 }, { up_to: 1000000, rate: 20 }, { up_to: null, rate: 30 }]
+    rebate_income_up_to: 500000
+    rebate_max: 12500
+    deduction_caps: { section_80c: 150000, section_80d: 25000, home_loan_interest: 200000 }
+
+minimum_wage_per_month: null      # Tamil Nadu hotels and restaurants schedule, by class of work: HR to fill

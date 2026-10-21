@@ -22,6 +22,7 @@ import { ensureBanquets } from './banquets'
 import { sweepBlocks } from './sales'
 import { paymentProviderFromEnv, sweepUnpaid } from './channels'
 import { ensureActivities, planMessages, sendDue } from './guest'
+import { ensureHolidays, loadPayrollConfig } from './hr'
 import { businessDate } from './fo-core'
 
 // DATABASE_URL set → PostgreSQL (production). Otherwise a local PGlite database in ./data.
@@ -46,6 +47,7 @@ await ensureStores(db)
 await ensureChart(db)
 await ensureBanquets(db)
 await ensureActivities(db)
+await ensureHolidays(db, loadPayrollConfig(), [new Date().getFullYear(), new Date().getFullYear() + 1])
 const app = buildApp(db, { logger: true, printAgentKey: process.env.PRINT_AGENT_KEY || undefined, payments: paymentProviderFromEnv(), channelKey: process.env.CHANNEL_KEY || undefined, appDir: process.env.APP_DIR ?? fileURLToPath(new URL('../../dist/', import.meta.url)) })
 app.log.info({ engine: db.engine, migrationsApplied: applied, seeded }, 'database ready')
 // Escalations, planned maintenance, expiry reminders, missed patrols and keys not returned, once a minute.

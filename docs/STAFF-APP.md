@@ -7,10 +7,12 @@ The staff app is the same HMS web app, opened on a phone. Everyone signs in with
 | Today | everyone | language (English / தமிழ்), the location policy (accepted once), clock in and out, the shift and late minutes, **SOS**, and their work: rooms to clean, food ready to pick up, open SOS alerts for security |
 | Messages | everyone | messages from managers, by role; urgent ones are marked |
 | My attendance | everyone | their own days and hours, and where the app placed them today |
+| My leave | everyone whose login HR has linked to their employee record | leave balances, **Ask for leave** (type, dates, half day, reason), what was approved or turned down and why, cancelling, the holidays to come |
 | Team | managers, security | SOS alerts (I'm going / resolve), who is on duty and where, who is rostered but not in, today's attendance with selfies |
 | Rosters | HR, managers | shifts (morning, evening, night…) and the weekly roster; copy last week |
 | Settings | GM, MD | the resort boundary, lining up GPS with the 3D map, selfie at clock-in, indoor beacons |
 | Guests → Requests from rooms | reception, housekeeping supervisors, F&B manager, captains | what guests ask from the QR card in their room (towels, room service, a fault), with **On it** and **Done** |
+| People → Leave | department heads, HR, GM, operations manager | leave waiting for approval (a department head sees their own department's), **Approve** or **Turn down** with a reason |
 | Banquets → Event orders | kitchen, F&B service, housekeeping, engineering, security, front office | each event's sheet for their department (plates to cook, tables and chairs, parking, instructions) from the latest revision, and **Acknowledge**; a new event order arrives as a message |
 
 ## Location and privacy

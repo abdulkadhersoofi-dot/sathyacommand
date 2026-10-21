@@ -13,6 +13,7 @@ import { InventoryWorkspace } from './inv/workspace'
 import { AccountsWorkspace } from './acc/workspace'
 import { BanquetsWorkspace } from './bq/workspace'
 import { GuestsWorkspace } from './guest/workspace'
+import { PeopleWorkspace } from './hr/workspace'
 import { EMERGENCY, type Emergency } from './sec/desk'
 import { Outbox } from './live/outbox'
 import { Store, type Layer } from './data/store'
@@ -58,6 +59,7 @@ let invWs: InventoryWorkspace | null = null
 let accWs: AccountsWorkspace | null = null
 let bqWs: BanquetsWorkspace | null = null
 let guestWs: GuestsWorkspace | null = null
+let hrWs: PeopleWorkspace | null = null
 
 let tab: Tab = 'live'
 let tipId: string | null = null
@@ -340,7 +342,7 @@ async function checkEmergency() {
   world.setPins('assembly', pts.filter((p) => p.x != null).map((p) => ({ id: p.id, x: Number(p.x), z: Number(p.z), shape: 'marker', colour: 0x35a46b, label: `Assembly: ${p.name}`, pulse: true })))
 }
 
-function hideWorkspaces() { for (const w of [fnb, hkWs, staffWs, engWs, secWs, invWs, accWs, bqWs, guestWs]) if (w?.open) w.hide() }
+function hideWorkspaces() { for (const w of [fnb, hkWs, staffWs, engWs, secWs, invWs, accWs, bqWs, guestWs, hrWs]) if (w?.open) w.hide() }
 
 // ---------- interactions ----------
 document.addEventListener('click', async (e) => {
@@ -662,6 +664,13 @@ if (api && me && liveAdapter) {
     const gBtn = $('#btn-guests')
     gBtn.hidden = false
     gBtn.addEventListener('click', () => { if (guestWs!.open) guestWs!.hide(); else { hideWorkspaces(); void guestWs!.show() } })
+  }
+  // People: HR, the GM and department heads (leave approval).
+  if (PeopleWorkspace.allowed(me)) {
+    hrWs = new PeopleWorkspace(api, me, outbox, () => renderSide())
+    const hBtn = $('#btn-hr')
+    hBtn.hidden = false
+    hBtn.addEventListener('click', () => { if (hrWs!.open) hrWs!.hide(); else { hideWorkspaces(); void hrWs!.show() } })
   }
   addModulesMenu()
   setTab('arrivals')

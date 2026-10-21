@@ -14,6 +14,7 @@ const MODULES: [string, string, string][] = [
   ['Accounts', 'Phase 6', 'Ledgers posted automatically from bills, payments and purchases; trial balance, profit & loss by department, balance sheet, GST, TDS and VAT returns, receivables, banks, fixed assets, budgets, Tally'],
   ['Banquets & sales', 'Phase 7', 'Venue calendar with clash checks, weddings and events from enquiry to quote, contract and advances (GST receipt vouchers), event orders to every department, final bill; company accounts with contracted rates, follow-ups, wedding room blocks; the guests\' booking page and online check-in, selling rules, the channel manager link'],
   ['Guests', 'Phase 7', 'Requests from the QR in every room (housekeeping, room service, faults), WhatsApp messages at each step of a stay, feedback with replies, activities on the room bill'],
+  ['People', 'Phase 8', 'Employee records with statutory IDs, pay structures under the Code on Wages, onboarding, ID cards, training due; leave asked on the phone and approved by the department head; the holiday calendar'],
   ['God Mode', 'MD only', 'Every change in a log that cannot be altered, approvals, alerts'],
 ]
 
