@@ -87,7 +87,7 @@ Prompted by the MD's review on 21 October 2026. Each problem below was reproduce
 ## Status (21 October 2026): done
 
 All seven steps are done. Checks:
-- the automated tests pass (440, including a real day on a fresh install);
+- the automated tests pass (433, including a real day on a fresh install);
 - the front desk, approvals and accounts were walked through in a browser on PGlite and on PostgreSQL 16, on a computer and on a phone.
 
 | # | What you saw | Now |
