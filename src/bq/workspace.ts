@@ -16,7 +16,7 @@ import { ChannelsView } from './channels'
 // and packages that are sold.
 
 type Tab = 'calendar' | 'events' | 'sales' | 'accounts' | 'blocks' | 'channels' | 'beo' | 'venues'
-export type BqHost = WorkspaceHost & { openEvent(id: string): void; newEnquiry(venueId?: string, date?: string): void; newBlock(eventId: string, title: string): void; openBlock(id: string): void }
+export type BqHost = WorkspaceHost & { openEvent(id: string): void; newEnquiry(venueId?: string, date?: string): void; newBooking(venueId?: string, date?: string): void; newBlock(eventId: string, title: string): void; openBlock(id: string): void }
 
 export class BanquetsWorkspace extends Workspace<Tab> implements BqHost {
   protected views: Record<Tab, View>
@@ -51,6 +51,11 @@ export class BanquetsWorkspace extends Workspace<Tab> implements BqHost {
   openEvent(id: string) { this.events.selected = id; void this.show('events') }
   newBlock(eventId: string, title: string) { this.blocks.selected = null; void this.show('blocks'); void this.blocks.create(eventId, title) }
   openBlock(id: string) { this.blocks.selected = id; void this.show('blocks') }
+  newBooking(venueId?: string, date?: string) {
+    this.events.selected = null
+    void this.show('events')
+    void this.events.book(venueId, date)
+  }
   newEnquiry(venueId?: string, date?: string) {
     this.events.selected = null
     void this.show('events')

@@ -935,3 +935,9 @@ button.link { background: none; border: 0; padding: 0; color: var(--accent); fon
 .opening-grid { max-height: 52vh; }
 .opening-grid input { width: 120px; text-align: right; font: 500 13px var(--f-mono); background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 5px 7px; }
 .opening-grid thead th { position: sticky; top: 0; background: var(--surface); z-index: 1; }
+.bq-more { margin: 10px 0; border: 1px solid var(--line); border-radius: 10px; padding: 6px 12px; }
+.bq-more summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--accent); padding: 4px 0; }
+.bq-more[open] summary { margin-bottom: 8px; }
+.bq-action { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; font-size: 13px; }
+.bq-action label { display: flex; align-items: center; gap: 8px; }
+.bq-estimate { margin: 8px 0 0; font-weight: 600; }

@@ -72,7 +72,7 @@ export class EventsView {
     const lost = this.rows.filter((r) => r.status === 'lost')
     const won = this.rows.filter((r) => ['definite', 'billed', 'closed'].includes(r.status))
     return `<div class="ws-toolbar">${FILTERS.map(([id, label]) => `<button type="button" class="chip" data-evf="${id}" aria-pressed="${id === this.filter}">${esc(label)}</button>`).join('')}
-        ${this.h.can('events.manage') ? '<button type="button" class="btn primary" data-evact="new">New enquiry</button>' : ''}</div>
+        ${this.h.can('events.manage') ? '<button type="button" class="btn primary" data-evact="book">Book an event</button><button type="button" class="btn" data-evact="new">New enquiry</button>' : ''}</div>
       <div class="row-card mc-card"><div class="mc-figs"><span><small>Open pipeline</small><b class="mono">${money(pipeline)}</b></span><span><small>Won</small><b class="mono">${won.length}</b></span>
         <span><small>Lost</small><b class="mono">${lost.length}</b></span><span><small>Conversion</small><b class="mono">${won.length + lost.length ? Math.round((won.length * 100) / (won.length + lost.length)) : 0}%</b></span></div></div>
       ${rows.map((r) => `<div class="row-card bq-row" data-ev="${esc(r.id)}" role="button" tabindex="0">
@@ -194,6 +194,63 @@ export class EventsView {
       ...(this.accounts.length ? { debtorId: val(f, 'acct') || null } : {}) }
   }
 
+  /**
+   * Book an event in one form: who, the function (and a second one if needed), and book it, hold the dates or
+   * keep it as an enquiry, with any advance taken now. The quote and contract are made from it.
+   */
+  async book(venueId?: string, date?: string) {
+    if (!this.venues.length || !this.pkgs.length) { this.venues = await this.h.cached('/api/banquets/venues'); this.pkgs = await this.h.cached('/api/banquets/packages') }
+    const fn = (i: number, name: string, d: { venueId?: string; date?: string; from: string; to: string }) => `
+      <label>Function<input name="fname${i}" maxlength="60" value="${esc(name)}" placeholder="Reception, Muhurtham…"></label>
+      <label>Venue<select name="venue${i}">${i ? '<option value="">—</option>' : ''}${this.venueOpts(d.venueId)}</select></label>
+      <label>Day<input name="date${i}" type="date" value="${esc(d.date ?? '')}"></label>
+      <label>From – to<span class="bq-times"><input name="from${i}" type="time" value="${d.from}"><input name="to${i}" type="time" value="${d.to}"></span></label>
+      <label>Guests<input name="pax${i}" type="number" min="1" inputmode="numeric"></label>
+      <label>Setup<select name="style${i}">${opt(Object.entries(STYLE_LABEL), 'rounds')}</select></label>
+      <label class="span2">Menu (price a plate)<select name="menu${i}">${this.menuOpts()}</select></label>`
+    const form = this.h.modal.open('Book an event', `<div class="form-grid">
+        <label>Kind<select name="kind">${opt(KINDS, 'wedding')}</select></label><label>Client's name<input name="client" maxlength="120" required></label>
+        <label>Mobile<input name="mobile" inputmode="tel" placeholder="98400 12345"></label><label>How they came<select name="source">${opt(SOURCES, 'phone')}</select></label></div>
+      <div class="sec-title">The function</div><div class="form-grid">${fn(0, 'Reception', { venueId, date, from: '18:00', to: '22:30' })}</div>
+      <details class="bq-more"><summary>Another function on this booking (e.g. the muhurtham that morning)</summary><div class="form-grid">${fn(1, '', { date, from: '06:00', to: '11:00' })}</div></details>
+      <details class="bq-more"><summary>More details: event name, email, company and GSTIN for the bill, discount, notes</summary><div class="form-grid">
+        <label class="span2">Event name<input name="title" maxlength="120" placeholder="Ravi and Priya wedding (blank: the client's name)"></label>
+        <label>Email<input name="email" type="email"></label><label>Company (for the bill)<input name="company"></label>
+        <label>GSTIN<input name="gstin" maxlength="15"></label><label>Discount %<input name="disc" type="number" min="0" max="50" step="0.5" value="0"></label>
+        <label class="span2">Billing address<input name="addr" maxlength="300"></label><label class="span2">Notes<textarea name="notes" rows="2" maxlength="2000"></textarea></label></div></details>
+      <div class="sec-title">Book it?</div>
+      <div class="bq-action">${[['book', 'Book now', 'contract signed: the dates are theirs'], ['hold', 'Hold the dates', 'for a few days while they decide'], ['enquiry', 'Just an enquiry', 'pencilled; nothing is kept']].map(([v, l, h], i) =>
+        `<label class="check"><input type="radio" name="action" value="${v}" ${i === 0 ? 'checked' : ''}> <b>${l}</b> <small class="muted">${h}</small></label>`).join('')}</div>
+      <div class="form-grid"><label>Advance received now (₹)<input name="adv" type="number" min="0" inputmode="numeric"></label><label>Paid by<select name="method">${opt([['upi', 'UPI'], ['cash', 'Cash'], ['card', 'Card'], ['bank', 'Bank transfer'], ['cheque', 'Cheque']], 'upi')}</select></label>
+        <label class="span2">Reference (UTR, cheque or card approval)<input name="ref" maxlength="80"></label></div>
+      <p class="bq-estimate small" data-estimate></p>`, 'Save', async (f) => {
+      const fns = [0, 1].filter((i) => val(f, `venue${i}`) && (i === 0 || val(f, `date${i}`))).map((i) => ({ name: val(f, `fname${i}`) || 'Function', venueId: val(f, `venue${i}`), date: val(f, `date${i}`), from: val(f, `from${i}`), to: val(f, `to${i}`),
+        style: val(f, `style${i}`), expectedPax: num(f, `pax${i}`), menuId: val(f, `menu${i}`) || null }))
+      const action = (f.querySelector<HTMLInputElement>('input[name=action]:checked')?.value ?? 'book') as 'book' | 'hold' | 'enquiry'
+      const adv = num(f, 'adv')
+      const r = await this.h.api.post<{ id: string; number: string; status: string; note?: string }>('/api/banquets/book', {
+        kind: val(f, 'kind'), clientName: val(f, 'client'), clientMobile: val(f, 'mobile'), source: val(f, 'source'), title: val(f, 'title') || undefined, clientEmail: val(f, 'email') || undefined,
+        company: val(f, 'company') || undefined, gstin: val(f, 'gstin') || undefined, billingAddress: val(f, 'addr') || undefined, notes: val(f, 'notes') || undefined, discountPercent: num(f, 'disc') ?? 0,
+        functions: fns, action, advance: adv ? { amount: adv, method: val(f, 'method'), reference: val(f, 'ref') } : undefined })
+      this.selected = r.id
+      await this.reload()
+      return r.note ?? `${r.number} ${r.status === 'definite' ? 'booked' : r.status === 'hold' ? 'on hold' : 'saved as an enquiry'}${adv ? `; advance of ${money(adv * 100)} received` : ''}`
+    })
+    // A rough price as the form fills in: rental and plates, before GST.
+    const estimate = () => {
+      let total = 0
+      for (const i of [0, 1]) {
+        const v = this.venues.find((x) => x.id === val(form, `venue${i}`))
+        if (!v || (i && !val(form, `date${i}`))) continue
+        const p = this.pkgs.find((x) => x.id === val(form, `menu${i}`))
+        total += v.rental_paise + (p ? p.price_paise * Math.max(p.min_pax || 0, num(form, `pax${i}`) ?? 0) : 0)
+      }
+      const disc = num(form, 'disc') ?? 0
+      form.querySelector<HTMLElement>('[data-estimate]')!.textContent = total ? `About ${money(Math.round(total * (1 - disc / 100)))} before GST (venue rental and plates); the quote works out the exact figure.` : ''
+    }
+    form.addEventListener('input', estimate); form.addEventListener('change', estimate); estimate()
+  }
+
   /** A new enquiry, with its first function if a venue and day are given. */
   async enquiry(venueId?: string, date?: string) {
     if (!this.venues.length || !this.pkgs.length) { this.venues = await this.h.cached('/api/banquets/venues'); this.pkgs = await this.h.cached('/api/banquets/packages') }
@@ -255,6 +312,7 @@ export class EventsView {
     const a = el.closest<HTMLElement>('[data-evact]')?.dataset.evact
     if (!a) return false
     if (a === 'new') { await this.enquiry(); return false }
+    if (a === 'book') { await this.book(); return false }
     if (a === 'back') { this.selected = null; this.d = null; await this.load(); return true }
     if (!d) return false
     const done = async (msg: string) => { await this.reload(); return msg }

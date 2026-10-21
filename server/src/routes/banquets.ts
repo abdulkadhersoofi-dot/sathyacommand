@@ -253,6 +253,75 @@ export function banquetRoutes(app: FastifyInstance, ctx: Ctx) {
     })
   })
 
+  /**
+   * Book an event in one go, as the sales desk would on the phone: the client, the functions (venue, day,
+   * times, guests, menu), and whether to book it, hold the dates or keep it as an enquiry, with any advance
+   * taken now. It runs the usual steps (enquiry, quote, acceptance, contract, payment), so every rule and
+   * approval still applies; the venue is checked before anything is saved.
+   */
+  app.post('/api/banquets/book', async (req, reply) => {
+    await need(req, 'events.manage')
+    const b = (req.body ?? {}) as { title?: string; kind?: string; clientName?: string; clientMobile?: string; clientEmail?: string; company?: string; gstin?: string; billingAddress?: string; source?: string; notes?: string
+      functions?: { name?: string; venueId?: string; date?: string; from?: string; to?: string; style?: string; expectedPax?: number; menuId?: string | null; rental?: number | null }[]
+      action?: 'book' | 'hold' | 'enquiry'; discountPercent?: number; advance?: { method?: string; amount?: number; reference?: string } }
+    const action = b.action ?? 'book'
+    if (!['book', 'hold', 'enquiry'].includes(action)) throw new HttpError(400, 'Book it, hold the dates, or keep it as an enquiry.')
+    if (!str(b.clientName)) throw new HttpError(400, 'The client\'s name.')
+    if (!b.functions?.length) throw new HttpError(400, 'At least one function: the venue, day and times.')
+    // The venue first (free, and big enough), so nothing is saved for a booking that cannot be made.
+    for (const f of b.functions) {
+      const label = f.name || 'The function'
+      if (!f.venueId || !DATE.test(f.date ?? '') || !TIME.test(f.from ?? '') || !TIME.test(f.to ?? '')) throw new HttpError(400, `${label}: pick the venue, the day and the times.`)
+      if (!(Number.isInteger(Number(f.expectedPax)) && Number(f.expectedPax) > 0)) throw new HttpError(400, `${label}: how many guests.`)
+      const [cap] = await db.query<{ capacity: number; name: string }>('select v.capacity, s.name from venue_setup v join space s on s.id = v.space_id where v.space_id = $1 and v.style = $2', [f.venueId, f.style ?? 'rounds'])
+      if (cap && Number(f.expectedPax) > cap.capacity) throw new HttpError(400, `${label}: ${cap.name} seats ${cap.capacity} in this setup, not ${f.expectedPax}.`)
+      if (action === 'enquiry') continue
+      const { starts, ends } = functionTimes(f.date!, f.from!, f.to!)
+      const firm = (await clashes(db, f.venueId, starts, ends, null)).find((c) => c.firm)
+      if (firm) throw new HttpError(409, `${label}: the venue is already ${firm.status === 'hold' ? 'held' : 'booked'} then for ${firm.title} (${firm.number}). Pick another time or venue.`)
+    }
+    const headers = { authorization: req.headers.authorization ?? '', 'content-type': 'application/json' }
+    const call = async (url: string, payload: unknown = {}) => {
+      const r = await app.inject({ method: 'POST', url, headers, payload: payload as object })
+      const body = r.json() as Record<string, unknown>
+      return r.statusCode < 300 ? { ok: true as const, body } : { ok: false as const, body, status: r.statusCode }
+    }
+    const kind = b.kind ?? 'wedding'
+    const ev = await call('/api/banquets/events', { title: str(b.title, 120) ?? `${str(b.clientName, 80)} · ${kind}`, kind, clientName: b.clientName, clientMobile: b.clientMobile, clientEmail: b.clientEmail,
+      company: b.company, gstin: b.gstin, billingAddress: b.billingAddress, source: b.source, notes: b.notes, expectedPax: Math.max(...b.functions.map((f) => Number(f.expectedPax) || 0)) || undefined })
+    if (!ev.ok) throw new HttpError(ev.status, String(ev.body.error ?? 'Could not save the event.'))
+    const id = String(ev.body.id), number = String(ev.body.number)
+    // Saved so far: an enquiry the desk can open and finish.
+    const stop = (status: number, msg: string) => reply.status(status).send({ error: `${msg} The event is saved as ${number}: open it to finish.`, id, number })
+    for (const f of b.functions) {
+      const r = await call(`/api/banquets/events/${id}/functions`, { name: f.name || 'Function', venueId: f.venueId, date: f.date, from: f.from, to: f.to, style: f.style ?? 'rounds', expectedPax: Number(f.expectedPax), menuId: f.menuId || null, rental: f.rental ?? null })
+      if (!r.ok) return stop(r.status, String(r.body.error))
+    }
+    let status = 'enquiry'
+    if (action !== 'enquiry') {
+      const q = await call(`/api/banquets/events/${id}/quote`, { discountPercent: Number(b.discountPercent ?? 0) })
+      if (!q.ok) return stop(q.status, String(q.body.error))
+      if (q.body.status === 'awaiting_approval') return reply.status(201).send({ id, number, status: 'quoted', note: 'The discount is above your limit: the quote waits for the GM, then the contract can be signed.' })
+      status = 'quoted'
+      if (action === 'hold') {
+        const h = await call(`/api/banquets/events/${id}/hold`, {})
+        if (!h.ok) return stop(h.status, String(h.body.error))
+        status = 'hold'
+      } else {
+        const a = await call(`/api/banquets/quotes/${q.body.id}/accept`)
+        if (!a.ok) return stop(a.status, String(a.body.error))
+        const c = await call(`/api/banquets/events/${id}/contract`, {})
+        if (!c.ok) return stop(c.status, String(c.body.error))
+        status = 'definite'
+      }
+    }
+    if (b.advance && Number(b.advance.amount) > 0) {
+      const p = await call(`/api/banquets/events/${id}/payments`, { method: b.advance.method, amount: Number(b.advance.amount), reference: b.advance.reference })
+      if (!p.ok) return reply.status(p.status).send({ error: `${String(p.body.error)} The event is ${status === 'definite' ? 'booked' : status === 'hold' ? 'on hold' : 'saved'} as ${number}; take the advance from it.`, id, number })
+    }
+    return reply.status(201).send({ id, number, status })
+  })
+
   app.patch('/api/banquets/events/:id', async (req) => {
     const who = await need(req, 'events.manage')
     const b = (req.body ?? {}) as Record<string, unknown>
