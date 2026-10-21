@@ -28,14 +28,19 @@ const sum = (rs: Rate[]) => rs.reduce((a, r) => ({ taxable: a.taxable + r.taxabl
 const IMS: Record<string, [string, string]> = { accepted: ['Accepted', '--st-vacant'], rejected: ['Rejected', '--st-departing'], pending: ['No action', '--muted'] }
 const M2B: Record<string, [string, string]> = { matched: ['Matched', '--st-vacant'], mismatch: ['Amount differs', '--st-departing'], unmatched: ['Not in our books', '--marigold'] }
 
+interface PendingIrn { id: string; doc_type: string; number: string; issue_date: string; recipient: string; gstin: string | null; total_paise: number; irn_status: string; irn_deadline: string | null }
+
 export class GstView {
   private period = ''
   private d: Month | null = null
+  private irn: PendingIrn[] = []
   constructor(private h: Host) {}
 
   async load() {
     if (!this.period) { const d = new Date(`${this.h.to}T00:00:00Z`); d.setUTCDate(0); this.period = d.toISOString().slice(0, 7) }
     this.d = await this.h.cached(`/api/gst/${this.period}`)
+    // Company bills waiting for their e-invoice number (IRN).
+    this.irn = this.h.can('einvoice.generate') ? [...await this.h.cached<PendingIrn[]>('/api/tax-documents?irnStatus=pending'), ...await this.h.cached<PendingIrn[]>('/api/tax-documents?irnStatus=failed')] : []
   }
 
   html() {
@@ -51,6 +56,11 @@ export class GstView {
         ${file ? `<label class="btn file-btn">Import GSTR-2B…<input type="file" accept=".json,.csv,application/json,text/csv" data-2b hidden></label>
           ${filed('GSTR1') ? '' : '<button type="button" class="btn primary" data-gs="file1">GSTR-1 filed…</button>'}${filed('GSTR3B') ? '' : '<button type="button" class="btn primary" data-gs="file3b">GSTR-3B filed…</button>'}` : ''}</div>
       <div class="ws-toolbar">${status('GSTR1', 'GSTR-1')} ${status('GSTR3B', 'GSTR-3B')} <span class="small muted">GSTR-3B due ${esc(g3.due)}</span></div>
+      ${this.irn.length ? `<div class="sec-title">E-invoices to generate <span>${this.irn.length}</span></div>
+        <p class="muted small">Bills to companies with a GSTIN need an e-invoice number (IRN) from the GST portal within 30 days. Generate it here if a GST provider is connected; otherwise download the JSON, upload it on einvoice1.gst.gov.in, and record the IRN it gives.</p>
+        ${this.irn.map((x) => `<div class="row-card"><div class="rc-title"><span class="mono">${esc(x.number)}</span> ${esc(x.recipient)} <small class="muted">${esc(x.gstin ?? '')}</small></div>
+          <div class="rc-sub">${esc(showDate(x.issue_date))} · ${money(Number(x.total_paise))}${x.irn_deadline ? ` · due by ${esc(showDate(x.irn_deadline))}` : ''}${x.irn_status === 'failed' ? ' · <b class="fd-warn">refused last time</b>' : ''}</div>
+          <div class="rc-right"><button type="button" class="btn small" data-irn-gen="${esc(x.id)}">Generate</button><button type="button" class="btn small" data-irn-json="${esc(x.id)}" data-irn-no="${esc(x.number)}">JSON</button><button type="button" class="btn small primary" data-irn-rec="${esc(x.id)}" data-irn-no="${esc(x.number)}">Record IRN…</button></div></div>`).join('')}` : ''}
 
       <div class="sec-title">GSTR-1: what the resort supplied</div>
       <div class="acc-scroll"><table class="acc-table">${head}<tbody>
@@ -110,6 +120,32 @@ export class GstView {
   }
 
   async click(el: HTMLElement) {
+    const gen = el.closest<HTMLElement>('[data-irn-gen]')?.dataset.irnGen
+    if (gen) {
+      try { const r = await this.h.api.post<{ irn: string }>(`/api/tax-documents/${gen}/irn`); toast(`IRN ${r.irn.slice(0, 12)}… recorded`) } catch (e) { toast((e as Error).message) }
+      await this.load(); return true
+    }
+    const js = el.closest<HTMLElement>('[data-irn-json]')
+    if (js) {
+      const j = await this.h.api.get(`/api/tax-documents/${js.dataset.irnJson}/irn-json`)
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(new Blob([JSON.stringify(j, null, 1)], { type: 'application/json' }))
+      link.download = `${(js.dataset.irnNo ?? 'invoice').replace(/\//g, '-')}.json`
+      link.click()
+      return false
+    }
+    const rec = el.closest<HTMLElement>('[data-irn-rec]')
+    if (rec) {
+      this.h.modal.open(`Record the IRN · ${rec.dataset.irnNo}`, `<div class="form-grid">
+          <label class="span2">IRN (64 characters)<input name="irn" maxlength="64" autocomplete="off" class="mono"></label>
+          <label>Acknowledgement number<input name="ack" inputmode="numeric" autocomplete="off"></label><label>Acknowledgement date<input name="date" type="date" value="${esc(this.h.to)}"></label></div>
+        <p class="muted small">Copy them from the e-invoice portal after uploading the JSON. The printed invoice then shows the IRN.</p>`, 'Save', async (f) => {
+        await this.h.api.post(`/api/tax-documents/${rec.dataset.irnRec}/irn-manual`, { irn: val(f, 'irn'), ackNo: val(f, 'ack'), ackDate: val(f, 'date') })
+        await this.load(); this.h.render()
+        return 'IRN recorded'
+      })
+      return false
+    }
     const a = el.closest<HTMLElement>('[data-gs]')?.dataset.gs
     if (a === 'json') {
       const j = await this.h.api.get(`/api/gst/${this.period}/gstr1.json`)

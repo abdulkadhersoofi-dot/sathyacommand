@@ -109,7 +109,7 @@ export class TicketsView {
         if (a === 'spares') {
           const spares = (await this.h.api.get<{ id: string; name: string; unit: string; stock: number; active: boolean }[]>('/api/eng/spares')).filter((s) => s.active && s.stock > 0)
           this.h.modal.open('Draw spares', spares.length ? `<div class="form-grid"><label class="span2">Part<select name="spare">${spares.map((s) => `<option value="${esc(s.id)}">${esc(s.name)} · ${s.stock} ${esc(s.unit)}</option>`).join('')}</select></label>
-            <label>Quantity<input name="qty" type="number" min="0.01" step="0.01" value="1"></label></div>` : '<p>The engineering store is empty.</p>', spares.length ? 'Draw' : 'Done', async (f) => {
+            <label>Quantity<input name="qty" type="number" min="0.01" step="0.01" value="1"></label></div>` : '<p>The engineering store has nothing in it yet. Ask the stores to transfer the part from the main store (Stores → Stock → Transfer to a store → Engineering store), or raise an indent for it.</p>', spares.length ? 'Draw' : 'Done', async (f) => {
             if (!spares.length) return ''
             const r = await this.h.api.post<{ pending?: boolean }>(`/api/eng/spares/${val(f, 'spare')}/issue`, { qty: Number(val(f, 'qty')), ticketId: t.id })
             return after(r.pending ? 'Above your limit: sent for approval' : 'Drawn from the store')

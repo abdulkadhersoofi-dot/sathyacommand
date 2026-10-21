@@ -42,7 +42,33 @@ export async function assertMonthOpen(t: Db, storeId: string, day: string) {
   }
 }
 
-const BOOK_NAME: Record<string, string> = { kitchen: 'kitchen ingredient', bar: 'bar brand', spares: 'spare part', linen: 'linen item' }
+/** Creates (or finds by name) the kitchen ingredient, spare part or linen item for a store item, and links it. */
+async function autoLink(t: Db, item: StockItem & { name: string }, ledger: string): Promise<string> {
+  const [it] = await t.query<{ unit: string }>('select unit from item where id = $1', [item.id])
+  const fail = (msg: string) => { const err = new Error(msg) as Error & { statusCode: number }; err.statusCode = 409; throw err }
+  let id: string
+  if (ledger === 'kitchen') {
+    if (!['g', 'ml', 'pcs'].includes(it.unit)) fail(`${item.name} is kept in ${it.unit}; the kitchen counts in grams, millilitres or pieces. Change the item's unit, or keep it in the main store.`)
+    const [have] = await t.query<{ id: string }>('select id from ingredient where lower(name) = lower($1) and id not in (select ingredient_id from item where ingredient_id is not null)', [item.name])
+    id = have?.id ?? `ING-${item.id}`
+    if (!have) await t.query('insert into ingredient (id, name, unit, created_at) values ($1, $2, $3, now()) on conflict (name) do nothing', [id, item.name, it.unit])
+    await t.query('update item set ingredient_id = $2 where id = $1', [item.id, id])
+    item.ingredient_id = id
+  } else if (ledger === 'spares') {
+    const [have] = await t.query<{ id: string }>('select id from spare where lower(name) = lower($1) and id not in (select spare_id from item where spare_id is not null)', [item.name])
+    id = have?.id ?? `SP-${item.id}`
+    if (!have) await t.query('insert into spare (id, name, unit) values ($1, $2, $3)', [id, item.name, it.unit])
+    await t.query('update item set spare_id = $2 where id = $1', [item.id, id])
+    item.spare_id = id
+  } else {
+    const [have] = await t.query<{ id: string }>('select id from linen_item where lower(name) = lower($1) and id not in (select linen_item_id from item where linen_item_id is not null)', [item.name])
+    id = have?.id ?? `LN-${item.id}`
+    if (!have) await t.query('insert into linen_item (id, name) values ($1, $2) on conflict (name) do nothing', [id, item.name])
+    await t.query('update item set linen_item_id = $2 where id = $1', [item.id, id])
+    item.linen_item_id = id
+  }
+  return id
+}
 let seq = 0
 const moveId = (p: string) => `${p}-${Date.now().toString(36).toUpperCase()}${(seq++ % 1296).toString(36).toUpperCase().padStart(2, '0')}${Math.random().toString(36).slice(2, 5).toUpperCase()}`
 
@@ -56,9 +82,14 @@ export async function moveStock(t: Db, m: Move) {
   if (!ledger) throw new Error(`Unknown store ${m.storeId}`)
   await assertMonthOpen(t, m.storeId, m.day)
   const inward = m.qty > 0
-  const link = { kitchen: m.item.ingredient_id, bar: m.item.brand_id, spares: m.item.spare_id, linen: m.item.linen_item_id }[ledger as 'kitchen']
+  let link = { kitchen: m.item.ingredient_id, bar: m.item.brand_id, spares: m.item.spare_id, linen: m.item.linen_item_id }[ledger as 'kitchen']
+  // Goods coming into the kitchen, engineering or linen store for the first time: that book gets its own
+  // record of the item (same name and unit), linked, so nobody has to set it up beforehand.
+  if (ledger !== 'own' && ledger !== 'bar' && !link && inward) link = await autoLink(t, m.item, ledger)
   if (ledger !== 'own' && !link) {
-    const err = new Error(`${m.item.name} is not linked to a ${BOOK_NAME[ledger]}: link it on the item, or use the main store.`) as Error & { statusCode: number }
+    const err = new Error(ledger === 'bar'
+      ? `${m.item.name} is not a bar brand yet. Add it under Restaurant → Bar stock → Brands (with its liquor class and bottle size), then link it on the item.`
+      : `${m.item.name} has never been received into this store, so there is none to take out.`) as Error & { statusCode: number }
     err.statusCode = 409
     throw err
   }

@@ -51,7 +51,7 @@ export class VatView {
 }
 
 interface Asset { id: string; code: string; name: string; category: string; dept: string | null; put_to_use: string; cost_paise: number; life_years: string; accumulatedPaise: number; bookValuePaise: number; disposed_on: string | null }
-interface Reg { classes: Record<string, { label: string; life: number; itRate: number }>; departments: Record<string, string>; assets: Asset[]; runs: { month: string; amount_paise: string; voucher: string | null }[] }
+interface Reg { classes: Record<string, { label: string; life: number; itRate: number }>; departments: Record<string, string>; assets: Asset[]; runs: { month: string; amount_paise: string; voucher: string | null }[]; nextMonth: string; businessDate: string }
 interface ItBlock { label: string; rate: number; openingPaise: number; additionsFullPaise: number; additionsHalfPaise: number; salesPaise: number; depreciationPaise: number; closingPaise: number }
 
 export class AssetsView {
@@ -61,8 +61,11 @@ export class AssetsView {
   async load() { this.d = await this.h.cached('/api/assets/register'); this.it = await this.h.cached('/api/assets/it-depreciation') }
   html() {
     const d = this.d!, manage = this.h.can('assets.manage'), it = this.it!
-    const next = d.runs[0] ? (() => { const x = new Date(`${d.runs[0].month}-01T00:00:00Z`); x.setUTCMonth(x.getUTCMonth() + 1); return x.toISOString().slice(0, 7) })() : lastMonth(this.h.to)
-    return `<div class="ws-toolbar">${manage ? `<button type="button" class="btn primary" data-fa="add">Add an asset…</button><button type="button" class="btn" data-fa="dep" data-month="${esc(next)}">Post depreciation for ${esc(next)}</button>` : ''}</div>
+    const due = dueMonths(d.nextMonth, d.businessDate)
+    const label = (m: string) => new Date(`${m}-01T00:00:00Z`).toLocaleDateString('en-IN', { month: 'short', year: 'numeric', timeZone: 'UTC' })
+    const depBtn = !d.assets.length ? '' : !due.length ? `<span class="muted small">Depreciation is posted up to ${esc(label(lastMonth(`${d.nextMonth}-15`)))}.</span>`
+      : `<button type="button" class="btn" data-fa="dep">Post depreciation for ${esc(label(due[0]))}${due.length > 1 ? ` to ${esc(label(due[due.length - 1]))} (${due.length} months)` : ''}</button>`
+    return `<div class="ws-toolbar">${manage ? `<button type="button" class="btn primary" data-fa="add">Add an asset…</button>${depBtn}` : ''}</div>
       <p class="muted small">Assets bought on a vendor bill are put in the books by charging the bill's line to the asset account; add them here too, so they are depreciated. Depreciation in the books is straight line over the Companies Act lives; the income-tax figure below is by block.</p>
       <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Asset</th><th>Class</th><th>In use from</th><th class="n">Cost</th><th class="n">Depreciation</th><th class="n">Book value</th><th></th></tr></thead><tbody>
         ${d.assets.map((a) => `<tr class="${a.disposed_on ? 'retired' : ''}"><td><span class="mono">${esc(a.code)}</span> ${esc(a.name)}${a.dept ? ` <small class="muted">${esc(d.departments[a.dept] ?? a.dept)}</small>` : ''}</td>
@@ -79,9 +82,16 @@ export class AssetsView {
     const done = async (msg: string) => { await this.load(); this.h.render(); return msg }
     const a = el.closest<HTMLElement>('[data-fa]')
     if (a?.dataset.fa === 'dep') {
-      const r = await this.h.api.post<{ amountPaise: number; assets: number }>('/api/assets/depreciation', { month: a.dataset.month })
-      await this.load(); this.h.render()
-      toast(`${money(r.amountPaise)} posted for ${r.assets} assets`)
+      // Every month that is over and not yet posted, in order.
+      let total = 0, months = 0
+      try {
+        for (const m of dueMonths(this.d!.nextMonth, this.d!.businessDate)) {
+          const r = await this.h.api.post<{ amountPaise: number }>('/api/assets/depreciation', { month: m }).catch((e) => { if (/Nothing to depreciate/.test((e as Error).message)) return null; throw e })
+          if (!r) break
+          total += r.amountPaise; months++
+        }
+      } finally { await this.load(); this.h.render() }
+      toast(months ? `${money(total)} depreciation posted for ${months} month${months === 1 ? '' : 's'}` : 'Nothing to depreciate yet')
     }
     if (a?.dataset.fa === 'add') {
       const d = this.d!
@@ -90,11 +100,11 @@ export class AssetsView {
           <label>Department<select name="dept"><option value="">—</option>${Object.entries(d.departments).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('')}</select></label>
           <label>Cost (₹)<input name="cost" type="number" min="1"></label><label>In use from<input name="from" type="date"></label>
           <label>Life (years, blank: the class's)<input name="life" type="number" min="1" step="0.5"></label>
-          <label class="span2"><span><input type="checkbox" name="opening"> Held before the books began: put it in at cost less the depreciation already taken</span></label>
+          <label class="span2"><span><input type="checkbox" name="opening"> Held before the books began (if it is not already in your opening balances, it is put in at cost less the depreciation already taken)</span></label>
           <label>Depreciation already taken (₹)<input name="dep" type="number" min="0" value="0"></label></div>`, 'Add', async (f) => {
-        await this.h.api.post('/api/assets/register', { name: val(f, 'name'), category: val(f, 'cat'), dept: val(f, 'dept') || undefined, cost: Number(val(f, 'cost')), putToUse: val(f, 'from'),
+        const r = await this.h.api.post<{ note: string | null }>('/api/assets/register', { name: val(f, 'name'), category: val(f, 'cat'), dept: val(f, 'dept') || undefined, cost: Number(val(f, 'cost')), putToUse: val(f, 'from'),
           lifeYears: val(f, 'life') ? Number(val(f, 'life')) : undefined, openingDep: Number(val(f, 'dep') || 0), postOpening: (f.elements.namedItem('opening') as HTMLInputElement).checked })
-        return done('Asset added')
+        return done(r.note ? `Asset added. ${r.note}` : 'Asset added')
       })
     }
     const id = el.closest<HTMLElement>('[data-dispose]')?.dataset.dispose
@@ -148,4 +158,15 @@ export class BudgetView {
 /** The books for the CA's Tally, as Tally's XML import. */
 export async function downloadTally(h: Host) {
   download(`Tally_${h.from}_${h.to}.xml`, await h.api.req<string>('GET', `/api/accounts/tally.xml?from=${h.from}&to=${h.to}&masters=1`), 'application/xml')
+}
+
+/** Months from the next one due up to the last month that is over. */
+function dueMonths(next: string, businessDate: string) {
+  const out: string[] = []
+  const cur = businessDate.slice(0, 7)
+  for (let m = next; m < cur && out.length < 36;) {
+    out.push(m)
+    const x = new Date(`${m}-01T00:00:00Z`); x.setUTCMonth(x.getUTCMonth() + 1); m = x.toISOString().slice(0, 7)
+  }
+  return out
 }

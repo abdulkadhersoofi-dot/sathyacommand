@@ -122,7 +122,7 @@ export function bankRoutes(app: FastifyInstance, ctx: Ctx) {
   app.patch('/api/bank-accounts/:id', async (req) => {
     const who = await need(req, 'bank.reconcile')
     const { id } = req.params as { id: string }
-    const b = (req.body ?? {}) as { bank?: string; branch?: string; accountNo?: string; ifsc?: string; isDefault?: boolean; active?: boolean }
+    const b = (req.body ?? {}) as { name?: string; bank?: string; branch?: string; accountNo?: string; ifsc?: string; isDefault?: boolean; active?: boolean }
     const ifsc = b.ifsc === undefined ? undefined : b.ifsc.trim().toUpperCase() || null
     if (ifsc && !IFSC_RE.test(ifsc)) throw new HttpError(400, 'IFSC: 4 letters, 0, then 6 letters or digits.')
     return db.tx(async (t) => {
@@ -130,6 +130,12 @@ export function bankRoutes(app: FastifyInstance, ctx: Ctx) {
       if (!before) throw new HttpError(404, 'No such bank account.')
       if (b.active === false && before.is_default) throw new HttpError(409, 'Make another account the default first.')
       if (b.isDefault) await t.query('update bank_account set is_default = false where is_default and id <> $1', [id])
+      if (b.name?.trim() && b.name.trim() !== before.name) {
+        const [dup] = await t.query('select 1 from bank_account where lower(name) = lower($1) and id <> $2', [b.name.trim(), id])
+        if (dup) throw new HttpError(409, 'Another bank account already has that name.')
+        await t.query('update bank_account set name = $2 where id = $1', [id, b.name.trim()])
+        await t.query('update account set name = $2 where code = $1', [before.account_code, b.name.trim()])
+      }
       await t.query(`update bank_account set bank = coalesce($2, bank), branch = coalesce($3, branch), account_no = coalesce($4, account_no), ifsc = case when $5::boolean then $6 else ifsc end,
           is_default = coalesce($7, is_default), active = coalesce($8, active) where id = $1`,
         [id, b.bank?.trim() || null, b.branch?.trim() || null, b.accountNo?.replace(/\s/g, '') || null, ifsc !== undefined, ifsc ?? null, b.isDefault ?? null, b.active ?? null])

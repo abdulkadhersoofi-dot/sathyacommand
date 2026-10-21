@@ -25,6 +25,7 @@ interface Detail {
   lines: { id: string; kind: string; description: string; amount_paise: number; business_date: string; reverses: string | null; ref: string | null }[]
   balance: number
   documents: { id: string; doc_type: string; number: string; issue_date: string; total_paise: number }[]
+  formC: { due_at: string; submitted_at: string | null; reference: string | null } | null
 }
 interface Found { id: string; status: string; guest: string; mobile: string | null; room_no: string | null; arrival: string; departure: string; source: string; ota_ref: string | null }
 
@@ -80,7 +81,7 @@ export class FrontDesk {
     <div class="fd-date">Business date <b>${fmtDay(today)}</b></div>`
     const card = (r: Reservation, actions: string) => `<div class="row-card" ${r.spaceId ? `data-focus="${esc(r.spaceId)}"` : ''}>
       <div class="rc-title">${r.vip ? '<span class="vip">VIP</span> ' : ''}${esc(r.guest)}</div>
-      <div class="rc-sub">${r.roomNo ? `Room ${esc(r.roomNo)}` : 'No room yet'} · ${r.pax} pax${r.company ? ` · ${esc(r.company)}` : ''}${r.balance ? ` · <b>due ${rs(r.balance * 100)}</b>` : ''}
+      <div class="rc-sub">${r.roomNo ? `Room ${esc(r.roomNo)}` : 'No room yet'} · ${r.pax} pax${r.company ? ` · ${esc(r.company)}` : ''}${r.balance > 0 ? ` · <b>due ${rs(r.balance * 100)}</b>` : r.balance < 0 ? ` · paid ${rs(-r.balance * 100)} ahead` : ''}
         ${r.pastStays ? ` · <span class="fd-tag ok">Returning guest · ${ordinal(r.pastStays + 1)} stay</span>` : ''}${r.onlineCheckin ? ' · <span class="fd-tag ok">Checked in online</span>' : ''}${r.payBy ? ` · <span class="fd-tag warn">Deposit due by ${new Date(r.payBy).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>` : ''}${r.otaRef ? ` · <span class="fd-tag">${esc(SOURCES[r.source] ?? r.source)} ${esc(r.otaRef)}</span>` : ''}</div>
       <div class="rc-right">${actions}${desk ? `<button class="btn small ghost" data-fd="open" data-res="${esc(r.id)}" type="button">Open</button>` : ''}</div></div>`
     const btn = (act: string, id: string, label: string, primary = false) => desk ? `<button class="btn small${primary ? ' primary' : ''}" data-fd="${act}" data-res="${esc(id)}" type="button">${label}</button>` : ''
@@ -259,6 +260,9 @@ export class FrontDesk {
         ${open && pending ? `<dt>Still to be charged</dt><dd>about ${rs(pending)} with GST</dd>` : ''}<dt>Balance</dt><dd>${balanceLine}</dd></dl>
       ${d.documents.length ? `<div class="sec-title">Invoices and receipts</div>${d.documents.map((x) => `<div class="fd-line"><span>${esc(showDate(x.issue_date))}</span><span>${esc(DOC_NAMES[x.doc_type] ?? x.doc_type)} ${esc(x.number)}</span><span class="num">${rs(Number(x.total_paise))}</span>
         <button type="button" class="btn small" data-bk="print" data-doc="${esc(x.id)}">Print</button></div>`).join('')}` : ''}
+      ${d.formC ? `<div class="sec-title">Form C (foreign national)</div>${d.formC.submitted_at
+        ? `<p class="small">Filed on the FRRO portal · reference ${esc(d.formC.reference)}</p>`
+        : `<p class="small ${new Date(d.formC.due_at) < new Date() ? 'fd-warn' : ''}">To be filed on the FRRO portal by ${esc(new Date(d.formC.due_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }))}. ${act('formc', 'Record Form C filed')}</p>`}` : ''}
       ${actions.length ? `<div class="fd-actions">${actions.join('')}</div>` : ''}`, 'Done', async () => '')
     form.addEventListener('click', (e) => {
       const b = (e.target as HTMLElement).closest<HTMLElement>('[data-bk]')
@@ -274,6 +278,7 @@ export class FrontDesk {
       if (a === 'discount') void this.discount(d)
       if (a === 'cancel') void this.cancel(d)
       if (a === 'reverse') void this.reverse(d, b.dataset.line!)
+      if (a === 'formc') void this.formC(d)
     })
   }
 
@@ -480,6 +485,14 @@ export class FrontDesk {
     })
   }
 
+  async formC(d: Detail) {
+    this.open(`Form C · ${d.guest.name}`, `<p class="muted small">File Form C on the FRRO portal (indianfrro.gov.in) within 24 hours of arrival, then enter the reference it gives.</p>
+      <div class="form-grid"><label class="span2">Form C reference number<input name="ref" required autocomplete="off"></label></div>`, 'Save', async (f) => {
+      await this.api.post(`/api/form-c/${encodeURIComponent(d.id)}`, { reference: this.val(f, 'ref') })
+      return this.done(d.id, 'Form C recorded')
+    })
+  }
+
   async reverse(d: Detail, lineId: string) {
     const l = d.lines.find((x) => x.id === lineId)!
     this.open('Reverse a charge', `<p>${esc(l.description)} · ${rs(Number(l.amount_paise))}</p>
@@ -491,7 +504,7 @@ export class FrontDesk {
 
   private showInvoice(inv: { id: string; number: string; irnStatus: string }) {
     this.open('Checked out', `<p>Tax invoice <b>${esc(inv.number)}</b> issued.</p>
-      ${inv.irnStatus === 'pending' ? '<p class="muted">Company bill: accounts will generate the e-invoice (IRN).</p>' : ''}`, 'Done', async () => '',
+      ${inv.irnStatus === 'pending' ? '<p class="muted">Company bill: accounts generates its e-invoice number (IRN) under Accounts → GST.</p>' : ''}`, 'Done', async () => '',
     `<button type="button" class="btn" data-print>Print invoice</button>`)
     this.modal.el.querySelector('[data-print]')!.addEventListener('click', () => void this.api.openDocument(`/api/tax-documents/${inv.id}/print`))
   }

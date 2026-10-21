@@ -145,18 +145,17 @@ describe('discounts and service charge', () => {
 })
 
 describe('liquor', () => {
-  it('needs every VAT rate and the TN VAT registration before a liquor bill can be paid', async () => {
+  it('needs every VAT rate and the TN VAT registration before a liquor bill is made', async () => {
     const id = await order('BAR', 'BAR-B1', [{ itemId: 'BAR-BR01', qty: 2 }, { itemId: 'BAR-SP01' }, { itemId: 'BAR-BS01' }], BAR)
-    let [b] = (await R.post(`/api/fnb/orders/${id}/bill`, BAR, {})).json().bills
-    expect(b.amounts.vatMissing).toEqual(['imfl_spirits'])
-    expect((await R.post(`/api/fnb/bills/${b.id}/settle`, BAR, { payments: [{ method: 'card', amount: 1, reference: 'x' }] })).json().error).toMatch(/TN VAT rate for imfl_spirits/)
+    // No bill (and so no printed UPI QR) while the VAT set-up would refuse the payment.
+    expect((await R.post(`/api/fnb/orders/${id}/bill`, BAR, {})).json().error).toMatch(/TN VAT rate for imfl_spirits/)
     await put('/api/vat-rates/imfl_spirits', ACC, { rate: 20 })
-    ;[b] = (await R.post(`/api/fnb/orders/${id}/bill`, BAR, {})).json().bills
-    // beer 640 + VAT 92.80; whisky 180 + VAT 36; peanuts 120 + GST 6
-    expect(b.amounts).toMatchObject({ liquorTaxable: 82000, vat: 9280 + 3600, foodTaxable: 12000, cgst: 300, sgst: 300, total: 82000 + 12880 + 12600, payable: 107500 })
-    expect((await R.post(`/api/fnb/bills/${b.id}/settle`, BAR, { payments: [{ method: 'card', amount: 1075, reference: 'SLIP 77' }] })).json().error).toMatch(/TN VAT registration/)
+    expect((await R.post(`/api/fnb/orders/${id}/bill`, BAR, {})).json().error).toMatch(/TN VAT registration/)
     await R.post('/api/licences', ACC, { kind: 'tn_vat', name: 'TN VAT registration', number: '33123456789' })
     await R.post('/api/licences', ACC, { kind: 'fssai', name: 'FSSAI', number: '12423008000123' })
+    const [b] = (await R.post(`/api/fnb/orders/${id}/bill`, BAR, {})).json().bills
+    // beer 640 + VAT 92.80; whisky 180 + VAT 36; peanuts 120 + GST 6
+    expect(b.amounts).toMatchObject({ liquorTaxable: 82000, vat: 9280 + 3600, foodTaxable: 12000, cgst: 300, sgst: 300, total: 82000 + 12880 + 12600, payable: 107500 })
     const s = (await R.post(`/api/fnb/bills/${b.id}/settle`, BAR, { payments: [{ method: 'card', amount: 1075, reference: 'SLIP 77' }] })).json()
     expect(s).toMatchObject({ gstInvoice: expect.stringMatching(/^RST\/26-27\//), vatInvoice: 'VAT/26-27/000001' })
   })

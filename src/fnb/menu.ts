@@ -207,7 +207,7 @@ export class MenuView {
   async click(t: HTMLElement): Promise<boolean> {
     const api = this.ws.api, modal = this.ws.modal
     const get = (k: string) => t.closest<HTMLElement>(`[data-${k}]`)?.getAttribute(`data-${k}`) ?? undefined
-    const sub = get('msub'); if (sub) { this.sub = sub as Sub; return true }
+    const sub = get('msub'); if (sub) { this.sub = sub as Sub; await this.load(); return true }
     const o = get('moutlet'); if (o) { this.outletId = o; await this.load(); return true }
     const ei = get('edit-item'); if (ei) { this.itemForm(this.menu.items.find((x) => x.id === ei)); return true }
     const cat = get('cat')

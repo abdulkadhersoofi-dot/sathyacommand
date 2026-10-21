@@ -8,7 +8,7 @@ import { printTickets } from './print'
 
 interface KdsTicket {
   id: string; number: number; kind: 'KOT' | 'BOT'; station_id: string; status: 'new' | 'cooking' | 'ready'; prints: number; created_at: string
-  order_number: number; order_kind: string; table_label: string | null; room_no: string | null; outlet: string; covers: number
+  order_number: number; order_kind: string; table_label: string | null; room_no: string | null; outlet: string; covers: number; order_status?: string
   lines: { id: string; name: string; qty: number; note: string | null; seat: number | null; course: number; status: string; void_reason: string | null; allergens: string[]; jain: boolean }[]
 }
 
@@ -31,7 +31,7 @@ export class KitchenView {
       const where = k.table_label ? `Table ${k.table_label}` : k.room_no ? `Room ${k.room_no}` : 'Takeaway'
       return `<article class="kds" data-status="${k.status}" data-age="${age >= 20 ? 'late' : age >= 10 ? 'warn' : 'ok'}">
         <header><span class="kds-no">${k.kind} ${k.number}</span><span class="kds-age" data-created="${esc(k.created_at)}">${age} min</span></header>
-        <div class="kds-where"><b>${esc(where)}</b> · ${esc(k.outlet)} · ${k.covers} pax${this.stationId ? '' : ` · ${esc(this.ws.stations.find((s) => s.id === k.station_id)?.name ?? k.station_id)}`}</div>
+        <div class="kds-where"><b>${esc(where)}</b> · ${esc(k.outlet)} · ${k.covers} pax${this.stationId ? '' : ` · ${esc(this.ws.stations.find((s) => s.id === k.station_id)?.name ?? k.station_id)}`}${k.order_status === 'closed' ? ' · <b>paid</b>' : ''}</div>
         <ul>${k.lines.map((l) => `<li class="${l.status === 'void' ? 'void' : ''}"><b>${l.qty}</b> ${esc(l.name)}${l.seat ? ` <i>seat ${l.seat}</i>` : ''}
           ${l.note ? `<div class="kds-note">${esc(l.note)}</div>` : ''}
           ${l.allergens.length || l.jain ? `<div class="kds-alert">${[...l.allergens.map((a) => a.toUpperCase()), ...(l.jain ? ['JAIN'] : [])].map(esc).join(' · ')}</div>` : ''}

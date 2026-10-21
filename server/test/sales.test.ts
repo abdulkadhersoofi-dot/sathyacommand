@@ -127,6 +127,8 @@ describe('event suppliers and company billing', () => {
     expect(d.vendors[0]).toMatchObject({ vendor: 'Bloom Decorators', agreedPaise: 2_000_000, billedPaise: 2_360_000 })
     expect(d.vendorCostPaise).toBe(2_000_000)
 
+    // The conference is over: guests served and the final bill come after it.
+    await R.db.query(`update property set business_date = '2026-12-19'`)
     await R.app.inject({ method: 'PATCH', url: `/api/banquets/functions/${d.functions[0].id}`, headers: { authorization: `Bearer ${SALES}` }, payload: { actualPax: 120 } })
     const bill = (await R.post(`/api/banquets/events/${ev}/bill`, SALES)).json()
     await patch(`/api/debtors/${KOVAI}`, GM, { creditLimit: 50000 })
@@ -134,10 +136,11 @@ describe('event suppliers and company billing', () => {
     await patch(`/api/debtors/${KOVAI}`, GM, { creditLimit: 500000 })
     expect((await R.post(`/api/banquets/events/${ev}/payments`, SALES, { method: 'company', amount: bill.balancePaise / 100 + 1 })).json().error).toMatch(/is due/)
     expect((await R.post(`/api/banquets/events/${ev}/payments`, SALES, { method: 'company', amount: bill.balancePaise / 100 })).statusCode).toBe(201)
-    const st = (await R.get(`/api/debtors/${KOVAI}/statement?from=2026-11-01&to=2026-11-30`, ACC)).json()
+    const st = (await R.get(`/api/debtors/${KOVAI}/statement?from=2026-11-01&to=2026-12-31`, ACC)).json()
     expect(st.lines.map((l: { narration: string; debitPaise: number }) => [l.narration, l.debitPaise])).toContainEqual([`Bill ${bill.number}`, bill.balancePaise])
-    const tb = (await R.get('/api/accounts/trial-balance?from=2026-04-01&to=2026-11-30', ACC)).json()
+    const tb = (await R.get('/api/accounts/trial-balance?from=2026-04-01&to=2026-12-31', ACC)).json()
     expect(tb.rows.find((r: { code: string }) => r.code === '1340').closingPaise).toBe(0)
+    await R.db.query(`update property set business_date = '2026-11-01'`)
   })
 
   it('shows the pipeline by stage and why events were lost', async () => {

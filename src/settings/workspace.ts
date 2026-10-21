@@ -46,6 +46,13 @@ class ProfileView implements View {
     return true
   }
   async click() { return false }
+  /** The PAN is characters 3–12 of the GSTIN: filled in as the GSTIN is typed. */
+  onInput(t: HTMLElement) {
+    if (!(t instanceof HTMLInputElement) || t.name !== 'gstin') return
+    const g = t.value.trim().toUpperCase()
+    const pan = t.form?.elements.namedItem('pan') as HTMLInputElement | null
+    if (pan && /^\d{2}[A-Z]{5}\d{4}[A-Z]/.test(g)) pan.value = g.slice(2, 12)
+  }
 }
 
 interface RoomType { id: string; name: string; base_rate_paise: number; max_occupancy: number; active: boolean; rooms: number }

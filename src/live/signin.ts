@@ -16,9 +16,11 @@ function deviceId() {
 }
 const deviceLabel = () => {
   const ua = navigator.userAgent
-  const os = /Android/.test(ua) ? 'Android' : /iPhone|iPad/.test(ua) ? 'iOS' : /Windows/.test(ua) ? 'Windows' : /Mac/.test(ua) ? 'Mac' : 'Device'
+  const os = /Android/.test(ua) ? 'Android' : /iPad/.test(ua) ? 'iPad' : /iPhone/.test(ua) ? 'iPhone' : /Windows/.test(ua) ? 'Windows' : /Mac/.test(ua) ? 'Mac' : /CrOS/.test(ua) ? 'Chromebook' : /Linux/.test(ua) ? 'Linux' : 'a computer'
   const br = /Edg\//.test(ua) ? 'Edge' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : /Firefox\//.test(ua) ? 'Firefox' : 'Browser'
-  return `${br} on ${os}`
+  const kind = matchMedia('(pointer: coarse)').matches ? (Math.min(screen.width, screen.height) < 600 ? 'phone' : 'tablet') : 'computer'
+  // The last characters of this browser's own ID tell two similar devices apart in the approval inbox.
+  return `${br} on ${os} ${kind === 'computer' ? '' : kind} · ${deviceId().slice(-4).toUpperCase()}`.replace(/\s+/g, ' ')
 }
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!))
@@ -75,7 +77,7 @@ export async function signIn(api: Api): Promise<Me> {
         break
       } catch (e) {
         if (e instanceof ApiError && e.body.stage === 'device_pending') {
-          card(`<h1>Device waiting for approval</h1><p>${esc(e.message)}</p><p class="muted">Ask the MD or GM to approve "${esc(deviceLabel())}" in the approval inbox, then sign in again.</p>
+          card(`<h1>Device waiting for approval</h1><p>${esc(e.message)}</p><p class="muted">Ask the MD or GM to approve "${esc(deviceLabel())}" under Approvals at the top of their screen, then sign in again.</p>
             <button class="btn primary" type="submit">Sign in again</button>`)
           await submitted(root.querySelector('form')!)
           restart = true

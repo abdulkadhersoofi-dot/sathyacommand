@@ -25,5 +25,5 @@ export const fmtTime = (isoOrHm?: string) => {
 
 export const minutesSince = (iso: string) => Math.round((Date.now() - new Date(iso).getTime()) / 60000)
 
-export const inr = (n: number) =>
+export const inr = (n: number): string => n < 0 ? `−${inr(-n)}` :
   n >= 100000 ? `₹${(n / 100000).toFixed(n >= 1000000 ? 1 : 2)}L` : `₹${n.toLocaleString('en-IN')}`

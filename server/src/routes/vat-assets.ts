@@ -31,6 +31,20 @@ export const CLASSES: Record<string, { account: string; life: number; itRate: nu
 
 interface AssetRow { id: string; code: string; name: string; category: string; account_code: string; dept: string | null; put_to_use: string; cost_paise: string; residual_percent: string; life_years: string; opening_dep_paise: string; disposed_on: string | null; sale_paise: string | null; posted: string }
 
+/** The day the books begin: the opening balances' date, else 1 April of the current financial year. */
+async function booksStart(t: Db) {
+  const [o] = await t.query<{ d: string | null }>(`select min(date)::text as d from voucher where source_type = 'opening'`)
+  if (o?.d) return o.d
+  const day = await businessDate(t)
+  const y = Number(day.slice(0, 4)) - (day.slice(5, 7) < '04' ? 1 : 0)
+  return `${y}-04-01`
+}
+/** The month depreciation is next due: after the last one posted, or the month the books begin. */
+async function nextDepMonth(t: Db) {
+  const [last] = await t.query<{ month: string | null }>('select max(month) as month from depreciation_run')
+  return last?.month ? addDays(monthEnd(last.month), 1).slice(0, 7) : (await booksStart(t)).slice(0, 7)
+}
+
 /** Straight-line depreciation for the days of a month the asset was in use, never beyond its cost less residual value. */
 function monthDep(a: AssetRow, month: string) {
   const start = `${month}-01`, end = monthEnd(month)
@@ -134,6 +148,7 @@ export function vatAssetRoutes(app: FastifyInstance, ctx: Ctx) {
         return { ...a, cost_paise: n(a.cost_paise), accumulatedPaise: acc, bookValuePaise: a.disposed_on ? 0 : n(a.cost_paise) - acc, posted: n(a.posted) }
       }),
       runs: await db.query('select r.month, r.amount_paise, v.number as voucher, r.run_at from depreciation_run r left join voucher v on v.id = r.voucher_id order by r.month desc limit 24'),
+      nextMonth: await nextDepMonth(db), businessDate: await businessDate(db),
     }
   })
 
@@ -158,12 +173,19 @@ export function vatAssetRoutes(app: FastifyInstance, ctx: Ctx) {
         [id, code, b.name!.trim(), b.category, cls.account, b.dept || null, b.putToUse, cost, residual, life, openingDep, b.billId || null, b.engAssetId || null, who.userId, now()])
       // An asset held before the books began comes in at its cost, less the depreciation already taken, against opening balances.
       // One bought on a vendor bill is already in the books (the bill line was charged to the asset account).
+      // If the opening balances already carry this asset account, the asset is in the books through them: the
+      // register entry only adds it for depreciation. Otherwise it goes in dated the day the books begin.
+      let note: string | null = null
       if (b.postOpening) {
-        await post(t, { kind: 'journal', date: await businessDate(t), narration: `${code} ${b.name!.trim()}: asset held before the books began`, source: { type: 'fixed_asset', id }, userId: who.userId, now: now(),
-          lines: [{ code: cls.account, amount: cost }, { code: '1690', amount: -openingDep }, { code: '3200', amount: -(cost - openingDep) }] })
+        const [inOpening] = await t.query(`select 1 from voucher v join voucher_line l on l.voucher_id = v.id where v.source_type = 'opening' and l.account_code = $1 and l.debit_paise > 0 limit 1`, [cls.account])
+        if (inOpening) note = `Already in the opening balances (account ${cls.account}), so nothing new was posted; it is in the register for depreciation.`
+        else {
+          await post(t, { kind: 'journal', date: await booksStart(t), narration: `${code} ${b.name!.trim()}: asset held before the books began`, source: { type: 'fixed_asset', id }, userId: who.userId, now: now(),
+            lines: [{ code: cls.account, amount: cost }, { code: '1690', amount: -openingDep }, { code: '3200', amount: -(cost - openingDep) }] })
+        }
       }
       await appendAudit(t, { actor: who, action: 'asset.add', entity: { type: 'fixed_asset', id }, amount: cost, after: { code, name: b.name, category: b.category, life, putToUse: b.putToUse } }, now())
-      return reply.status(201).send({ id, code })
+      return reply.status(201).send({ id, code, note })
     })
   })
 
@@ -177,10 +199,9 @@ export function vatAssetRoutes(app: FastifyInstance, ctx: Ctx) {
       if (monthEnd(month) >= await businessDate(t)) throw new HttpError(409, `${month} is not over yet.`)
       const [done] = await t.query('select 1 from depreciation_run where month = $1', [month])
       if (done) throw new HttpError(409, `Depreciation for ${month} is already posted.`)
-      const [last] = await t.query<{ month: string }>('select max(month) as month from depreciation_run')
-      // The first run starts the books' depreciation (earlier years are in each asset's depreciation already taken).
-      const expected = last?.month ? addDays(monthEnd(last.month), 1).slice(0, 7) : null
-      if (expected && month !== expected) throw new HttpError(409, month < expected ? `${month} is before the last month posted.` : `Post ${expected} first: months are depreciated in order.`)
+      // Months run in order from the month the books begin (earlier years are in each asset's depreciation already taken).
+      const expected = await nextDepMonth(t)
+      if (month !== expected) throw new HttpError(409, month < expected ? `${month} is before ${expected}, the next month to post.` : `Post ${expected} first: months are depreciated in order.`)
       const rows = await assets(t)
       const lines = rows.map((a) => ({ a, amount: monthDep(a, month) })).filter((x) => x.amount > 0)
       if (!lines.length) throw new HttpError(409, `Nothing to depreciate in ${month}.`)

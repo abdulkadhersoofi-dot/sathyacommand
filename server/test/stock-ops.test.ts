@@ -45,7 +45,8 @@ describe('issues and transfers', () => {
   it('issues against an approved indent into the kitchen book, at average cost', async () => {
     IND = (await R.post('/api/indents', CHEF, { storeId: 'ST-KITCHEN', lines: [{ itemId: RICE, qty: 1 }] })).json().id
     await R.post(`/api/indents/${IND}/approve`, GM)
-    expect((await R.post('/api/stock/issue', ST, { fromStoreId: 'ST-MAIN', toStoreId: 'ST-KITCHEN', indentId: IND, lines: [{ itemId: RICE, qty: 1 }] })).json().error).toMatch(/not linked to a kitchen ingredient/)
+    // More rice than the main store holds: refused, and nothing moves (the kitchen link is tested in qa-fixes).
+    expect((await R.post('/api/stock/issue', ST, { fromStoreId: 'ST-MAIN', toStoreId: 'ST-KITCHEN', indentId: IND, lines: [{ itemId: RICE, qty: 1000 }] })).json().error).toMatch(/Only .* of Ponni rice/)
     const before = await stockIn('ST-KITCHEN', ONION)
     // Onion: received into the main store, then sent to the kitchen.
     await R.post('/api/grns', ST, { vendorId: V, storeId: 'ST-MAIN', note: 'Market', lines: [{ itemId: ONION, qtyReceived: 20, rate: 30 }] })

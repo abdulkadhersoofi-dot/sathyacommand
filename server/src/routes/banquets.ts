@@ -5,6 +5,9 @@ import { can, HttpError, type Caller, type Ctx } from '../context'
 import type { Db } from '../db'
 import { addDays, newId } from '../eng-core'
 import { businessDate } from '../fo-core'
+
+/** The day in India a function starts on. */
+const istDay = (d: Date | string) => new Date(new Date(d).getTime() + 330 * 60_000).toISOString().slice(0, 10)
 import { nextSeriesNumber } from '../invoicing'
 import { checkCredit, CreditError } from '../receivables'
 import {
@@ -479,6 +482,8 @@ export function banquetRoutes(app: FastifyInstance, ctx: Ctx) {
       if (b.actualPax !== undefined) {
         if (!can(who, 'events.bill') && !can(who, 'events.manage')) throw new HttpError(403, 'Your role cannot do this.')
         if (!['definite'].includes(e.status)) throw new HttpError(409, 'Guests served are entered once the event is definite, before the bill.')
+        const fnDay = istDay(cur.starts_at)
+        if (fnDay > await businessDate(t)) throw new HttpError(409, `This function is on ${fnDay.split('-').reverse().join('/')}. Enter the guests served on or after that day.`)
         if (!(Number.isInteger(n(b.actualPax)) && n(b.actualPax) >= 0)) throw new HttpError(400, 'Guests served: a whole number.')
         await t.query('update event_function set actual_pax = $2 where id = $1', [cur.id, n(b.actualPax)])
         await audit(t, who, 'event.actual_pax', e, { after: { function: cur.id, pax: n(b.actualPax) } })
@@ -889,6 +894,9 @@ ${beo.functions.filter((f) => f.menu).map((f) => `<p><b>${esc(f.menu!.name)}</b>
       const e = await loadEvent(t, idOf(req), true)
       if (e.status !== 'definite') throw new HttpError(409, e.status === 'billed' ? 'Already billed.' : 'Only a definite event is billed.')
       const fns = await t.query<{ name: string; actual_pax: number | null; menu_id: string | null; starts_at: Date }>('select name, actual_pax, menu_id, starts_at from event_function where event_id = $1', [e.id])
+      const today = await businessDate(t)
+      const ahead = fns.filter((f) => istDay(f.starts_at) > today)
+      if (ahead.length) throw new HttpError(409, `${ahead.map((f) => f.name).join(', ')} has not happened yet (${istDay(ahead[0].starts_at).split('-').reverse().join('/')}). The final bill is made after the event; take an advance until then.`)
       const missing = fns.filter((f) => f.menu_id && f.actual_pax == null)
       if (missing.length) throw new HttpError(409, `Enter the guests served for ${missing.map((f) => f.name).join(', ')} first.`)
       const [q] = await t.query<{ discount_percent: string }>(`select discount_percent from event_quote where event_id = $1 and status = 'accepted'`, [e.id])

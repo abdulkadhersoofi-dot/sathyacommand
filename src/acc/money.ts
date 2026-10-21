@@ -148,7 +148,8 @@ export class BanksView {
     return `<div class="ws-toolbar"><select data-bank aria-label="Bank account">${this.banks.map((x) => `<option value="${esc(x.id)}"${x.id === this.bankId ? ' selected' : ''}>${esc(x.name)}${x.is_default ? ' (default)' : ''}</option>`).join('')}</select>
         ${manage ? `<label class="btn primary file-btn">Import statement (CSV)<input type="file" accept=".csv,text/csv" data-import hidden></label><button type="button" class="btn" data-bk="auto">Match again</button><button type="button" class="btn" data-bk="add">Add bank account</button>` : ''}
         <select data-show aria-label="Show"><option value="open"${this.show === 'open' ? ' selected' : ''}>To settle</option><option value="all"${this.show === 'all' ? ' selected' : ''}>All lines</option></select></div>
-      ${b ? `<div class="row-card mc-card"><div class="rc-title">${esc(b.name)} <small class="muted">${esc([b.bank, b.branch, b.account_no, b.ifsc].filter(Boolean).join(' · '))} · ledger ${esc(b.account_code)}</small></div>
+      ${b ? `<div class="row-card mc-card"><div class="rc-title">${esc(b.name)} <small class="muted">${esc([b.bank, b.branch, b.account_no, b.ifsc].filter(Boolean).join(' · ') || 'bank, account number and IFSC not entered yet')} · ledger ${esc(b.account_code)}</small>
+        ${manage ? '<button type="button" class="btn small" data-bk="edit">Bank details…</button>' : ''}</div>
         ${r ? `<div class="mc-figs"><span><small>Books on ${esc(r.asOf)}</small><b class="mono">${money(r.bookPaise)}</b></span>
           <span><small>Statement${r.statementDate ? ` on ${esc(r.statementDate)}` : ''}</small><b class="mono">${r.statementPaise == null ? '—' : money(r.statementPaise)}</b></span>
           <span><small>In the books, not the bank</small><b class="mono">${r.inBooksNotBank.length}</b></span><span><small>In the bank, not the books</small><b class="mono">${r.inBankNotBooks.length}</b></span>
@@ -182,6 +183,7 @@ export class BanksView {
     const a = el.closest<HTMLElement>('[data-bk]')?.dataset.bk
     if (a === 'auto') { const r = await this.h.api.post<{ matched: number }>(`/api/bank/${this.bankId}/auto-match`); toast(`${r.matched} matched`); await this.load(); return true }
     if (a === 'add') this.addBank()
+    if (a === 'edit') this.editBank()
     const b = el.closest<HTMLElement>('[data-bl]')
     if (!b) return false
     const id = b.dataset.id!, line = this.lines.find((l) => l.id === id)!
@@ -224,6 +226,21 @@ export class BanksView {
       m.querySelector('[data-kind]')!.addEventListener('change', sync); sync()
     }
     return false
+  }
+
+  private editBank() {
+    const b = this.banks.find((x) => x.id === this.bankId)
+    if (!b) return
+    this.h.modal.open(`Bank details · ${b.name}`, `<div class="form-grid">
+        <label class="span2">Name<input name="name" maxlength="60" value="${esc(b.name)}"></label>
+        <label>Bank<input name="bank" maxlength="60" value="${esc(b.bank ?? '')}" placeholder="e.g. State Bank of India"></label><label>Branch<input name="branch" maxlength="60" value="${esc(b.branch ?? '')}"></label>
+        <label>Account number<input name="no" maxlength="20" inputmode="numeric" value="${esc(b.account_no ?? '')}"></label><label>IFSC<input name="ifsc" maxlength="11" value="${esc(b.ifsc ?? '')}" style="text-transform:uppercase"></label>
+        <label class="span2"><span><input name="def" type="checkbox" ${b.is_default ? 'checked' : ''}> Payments go out of this account by default</span></label></div>`, 'Save', async (f) => {
+      await this.h.api.req('PATCH', `/api/bank-accounts/${encodeURIComponent(b.id)}`, { name: val(f, 'name'), bank: val(f, 'bank'), branch: val(f, 'branch'), accountNo: val(f, 'no'), ifsc: val(f, 'ifsc'), isDefault: (f.elements.namedItem('def') as HTMLInputElement).checked || undefined })
+      await this.load(); this.h.render()
+      window.dispatchEvent(new CustomEvent('sathya:setup-changed'))
+      return 'Saved'
+    })
   }
 
   private addBank() {

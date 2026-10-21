@@ -160,9 +160,18 @@ export function fnbBillingRoutes(app: FastifyInstance, ctx: Ctx) {
   })
 
   // ---------- bills ----------
+  /** A cancellation or discount on the order that still waits for a manager: no bill or payment until it is decided. */
+  const waiting = async (t: Db, orderId: string, kinds: string[]) => {
+    const [a] = await t.query<{ kind: string }>(`select kind from approval where status = 'pending' and kind = any($1) and payload->>'orderId' = $2 limit 1`, [kinds, orderId])
+    if (a) throw new HttpError(409, a.kind === 'fnb.void_after_kot'
+      ? 'An item cancelled on this order waits for the F&B manager. Ask them to approve or reject it under Approvals first.'
+      : 'The discount on this bill waits for a manager. Ask them to approve or reject it under Approvals before taking payment.')
+  }
+
   app.post('/api/fnb/orders/:id/bill', async (req, reply) => {
     const who = await biller(req)
     const { id } = req.params as { id: string }
+    await waiting(db, id, ['fnb.void_after_kot'])
     const b = (req.body ?? {}) as { parts?: number; groups?: string[][]; discountPercent?: number; discountReason?: string; serviceCharge?: boolean; billTo?: BillTo }
     const discount = b.discountPercent ?? 0
     if (!(discount >= 0 && discount <= 100)) throw new HttpError(400, 'Discount: 0–100%.')
@@ -222,6 +231,13 @@ export function fnbBillingRoutes(app: FastifyInstance, ctx: Ctx) {
         await appendAudit(t, { actor: who, action: 'fnb_bill.discount_requested', entity: { type: 'fnb_order', id }, after: { percent: discount, limit }, note: b.discountReason }, now())
         return reply.status(202).send({ bills, pending: true, approvalId, message: `A ${discount}% discount is above your ${limit}% limit and waits for a manager. The bill shows no discount until then.` })
       }
+      // A bill with liquor is not made (or printed with a UPI QR) until the VAT set-up lets it be paid.
+      const missing = [...new Set(bills.flatMap((x) => x.amounts.vatMissing))]
+      if (missing.length) throw new HttpError(409, `Set the TN VAT rate for ${missing.join(', ')} under Restaurant → Licences & tax first, then make the bill.`)
+      if (bills.some((x) => x.amounts.liquor.length)) {
+        const tin = (await licencesFor(t, 'vat_bill')).find((l) => l.kind === 'tn_vat')
+        if (!tin) throw new HttpError(409, 'Add the TN VAT registration (TIN) under Restaurant → Licences & tax first: every liquor bill prints it.')
+      }
       return reply.status(201).send({ bills })
     })
   })
@@ -268,6 +284,7 @@ export function fnbBillingRoutes(app: FastifyInstance, ctx: Ctx) {
       const [bill] = await t.query<BillRow>('select * from fnb_bill where id = $1 for update', [id])
       if (!bill) throw new HttpError(404, 'No such bill.')
       if (bill.status !== 'open') throw new HttpError(409, `This bill is ${bill.status}.`)
+      await waiting(t, bill.order_id, ['fnb.void_after_kot', 'fnb.discount'])
       const o = await orderFor(t, bill.order_id)
       const a = bill.amounts
       if (a.vatMissing.length) throw new HttpError(409, `Set the TN VAT rate for ${a.vatMissing.join(', ')} (Licences & tax) before billing liquor.`)

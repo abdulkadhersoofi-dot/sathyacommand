@@ -59,6 +59,11 @@ describe('fixed assets', () => {
   it('depreciates month by month on the Companies Act lives, in order', async () => {
     expect((await R.post('/api/assets/depreciation', AC, { month: '2026-11' })).json().error).toMatch(/not over/)
     await R.db.query(`update property set business_date = '2027-01-05'`)
+    // The books begin on 1 April: those months come first, the building alone (the chairs came in November).
+    expect((await R.post('/api/assets/depreciation', AC, { month: '2026-11' })).json().error).toMatch(/Post 2026-04 first/)
+    for (const m of ['2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10']) {
+      expect((await R.post('/api/assets/depreciation', AC, { month: m })).json()).toMatchObject({ assets: 1 })
+    }
     const r = (await R.post('/api/assets/depreciation', AC, { month: '2026-11' })).json()
     // Chairs: ₹7,60,000 over 8 years, 21 days; building: ₹4.75 crore over 60 years, 30 days.
     expect(r).toMatchObject({ assets: 2, amountPaise: Math.round(76000000 / 8 * 21 / 365) + Math.round(4750000000 / 60 * 30 / 365) })

@@ -61,6 +61,33 @@ export async function createApproval(ctx: Ctx, db: Db, kind: string, requestedBy
   return id
 }
 
+const inr = (paise: unknown) => `₹${(Number(paise ?? 0) / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
+const day = (d: unknown) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(d ?? '')); return m ? `${m[3]}/${m[2]}/${m[1]}` : String(d ?? '') }
+const PLAN: Record<string, string> = { EP: 'room only', CP: 'with breakfast', MAP: 'breakfast + 1 meal', AP: 'all meals' }
+
+/** What the request is, in plain words, for the inbox. */
+export function describeApproval(kind: string, p: Record<string, unknown>, by: string, reason: string | null): { title: string; detail: string } {
+  const r = reason ?? ''
+  switch (kind) {
+    case 'device.register': return { title: `New device for ${by}`, detail: `${p.label ?? 'Unnamed browser'}. Approve only if ${by} is signing in on it now.` }
+    case 'rate.above_limit': return { title: `Room rate ${inr(p.amount)} a night`, detail: `${p.roomTypeId} ${PLAN[String(p.plan)] ?? p.plan}, ${day(p.validFrom)} to ${day(p.validTo)}. ${r}` }
+    case 'reservation.discount': return { title: `${p.percent}% discount on a room booking`, detail: `Booking ${p.reservationId}. ${r}` }
+    case 'purchase.payment': return { title: `Vendor payment ${inr(p.net)} to ${p.vendor}`, detail: `${p.number}` }
+    case 'purchase.po': return { title: `Purchase order ${p.number}: ${inr(p.total)}`, detail: r }
+    case 'menu.price': return { title: `Menu price: ${p.item}`, detail: `${inr(p.from)} → ${inr(p.price)}` }
+    case 'fnb.void_after_kot': return { title: `Cancel ${p.qty} × ${p.item} (${inr(p.amount)})`, detail: `Order ${p.order}, already sent to the kitchen. ${r}` }
+    case 'fnb.discount': return { title: `${p.percent}% discount on restaurant order ${p.order}`, detail: `${p.outlet ?? ''}. ${r}` }
+    case 'kitchen.wastage': return { title: `Kitchen wastage: ${p.ingredient}`, detail: r }
+    case 'bar.breakage': return { title: `Bar breakage: ${p.ml} ml ${p.brand} (${inr(p.value)})`, detail: r }
+    case 'bar.count': return { title: `Bar stock count: ${p.variancePercent}% difference`, detail: `${p.brands} brands counted` }
+    case 'stock.count': return { title: `Store count ${p.number}: difference ${inr(p.net)}`, detail: r }
+    case 'stock.month_close': return { title: `Store month close ${p.month}`, detail: r }
+    case 'eng.spares': return { title: 'Spares for engineering', detail: r }
+    case 'event.discount': return { title: `${p.percent}% discount on ${p.title}`, detail: `Event ${p.number}, quote ${inr(p.totalPaise)}` }
+    default: return { title: kind, detail: r }
+  }
+}
+
 const canDecide = (c: Caller, kind: string) => {
   const k = KINDS[kind]
   return !!k && (k.permission === '*' ? c.permissions.has('*') : can(c, k.permission))
@@ -73,7 +100,12 @@ export function approvalRoutes(app: FastifyInstance, ctx: Ctx) {
     const rows = await ctx.db.query<{ id: string; kind: string; requested_by: string }>(
       `select a.id, a.kind, a.status, a.payload, a.reason, a.requested_by, u.name as requested_by_name, a.created_at, a.decided_by, a.decided_at
          from approval a join app_user u on u.id = a.requested_by where a.status = $1 order by a.created_at`, [status])
-    return rows.filter((a) => canDecide(who, a.kind) || a.requested_by === who.userId)
+    return rows.filter((a) => canDecide(who, a.kind) || a.requested_by === who.userId).map((a) => {
+      const x = a as unknown as { payload: Record<string, unknown>; requested_by_name: string; reason: string | null }
+      // A God Mode user may decide their own request; anyone else may not.
+      const mayDecide = canDecide(who, a.kind) && (a.requested_by !== who.userId || who.permissions.has('*'))
+      return { ...a, ...describeApproval(a.kind, x.payload, x.requested_by_name, x.reason), canDecide: mayDecide }
+    })
   })
 
   app.post('/api/approvals/:id/decide', async (req) => {

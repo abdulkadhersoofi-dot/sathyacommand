@@ -147,6 +147,9 @@ describe('a wedding from enquiry to final bill', () => {
   })
 
   it('bills plates served above the guarantee, takes in the advances, then the balance and feedback close it', async () => {
+    expect((await R.post(`/api/banquets/events/${EV}/bill`, ACC)).json().error).toMatch(/has not happened yet/)
+    expect((await patch(`/api/banquets/functions/${MUH}`, ACC, { actualPax: 780 })).json().error).toMatch(/on or after that day/)
+    await R.db.query(`update property set business_date = '2026-12-13'`)
     expect((await R.post(`/api/banquets/events/${EV}/bill`, ACC)).json().error).toMatch(/guests served/)
     await patch(`/api/banquets/functions/${MUH}`, ACC, { actualPax: 780 })
     await patch(`/api/banquets/functions/${REC}`, ACC, { actualPax: 690 })
@@ -168,7 +171,7 @@ describe('a wedding from enquiry to final bill', () => {
   })
 
   it('books it all: banquet revenue by kind, GST on advances taken back, the event ledger at nil', async () => {
-    const tbr = await R.get('/api/accounts/trial-balance?from=2026-04-01&to=2026-11-30', ACC)
+    const tbr = await R.get('/api/accounts/trial-balance?from=2026-04-01&to=2026-12-31', ACC)
     const tb = tbr.json()
     const row = (code: string) => tb.rows.find((r: { code: string }) => r.code === code)
     expect(row('1340').closingPaise).toBe(0)
@@ -177,7 +180,7 @@ describe('a wedding from enquiry to final bill', () => {
     expect(row('4310').closingPaise).toBeLessThan(0)
     expect(row('4320').closingPaise).toBeLessThan(0)
     expect(tb.totals.debitPaise).toBe(tb.totals.creditPaise)
-    const g = (await R.get('/api/gst/2026-11', ACC)).json()
+    const g = (await R.get('/api/gst/2026-12', ACC)).json()
     expect(g.gstr1.b2cs.map((r: { rate: number }) => r.rate)).toEqual([5, 18])
   })
 })

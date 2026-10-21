@@ -43,10 +43,11 @@ export class Billing {
           ${b.status === 'settled' ? tonePill('Paid', '--st-vacant') : tonePill('To pay', '--marigold')}</div>
         <dl class="kv">
           ${a.foodGross ? `<dt>Food &amp; soft drinks</dt><dd>${rs(a.foodGross)}</dd>` : ''}
+          ${a.liquorGross ? `<dt>Liquor</dt><dd>${rs(a.liquorGross)}</dd>` : ''}
           ${a.foodDiscount + a.liquorDiscount ? `<dt>Discount ${Number(b.discount_percent)}%</dt><dd>−${rs(a.foodDiscount + a.liquorDiscount)}</dd>` : ''}
           ${a.service ? `<dt>Service charge ${Number(b.service_percent)}%</dt><dd>${rs(a.service)}</dd>` : ''}
           ${a.foodTaxable ? `<dt>GST ${a.gstRate}%</dt><dd>${rs(a.cgst + a.sgst)}</dd>` : ''}
-          ${a.liquorGross ? `<dt>Liquor</dt><dd>${rs(a.liquorGross - a.liquorDiscount)}</dd><dt>TN VAT</dt><dd>${rs(a.vat)}</dd>` : ''}
+          ${a.liquorGross ? `<dt>TN VAT</dt><dd>${rs(a.vat)}</dd>` : ''}
           ${a.roundOff ? `<dt>Round off</dt><dd>${rs(a.roundOff)}</dd>` : ''}
           <dt><b>${b.status === 'settled' ? 'Paid' : 'To pay'}</b></dt><dd><b>${rs(b.reservation_id ? a.total : a.payable)}</b></dd>
         </dl>
@@ -122,7 +123,9 @@ export class Billing {
       }
       const r = await this.ws.api.post<{ gstInvoice: string | null; vatInvoice: string | null; orderClosed: boolean }>(`/api/fnb/bills/${b.id}/settle`, body)
       await this.reload()
-      return `Paid${r.gstInvoice ? ` · Tax invoice ${r.gstInvoice}` : ''}${r.vatInvoice ? ` · VAT invoice ${r.vatInvoice}` : ''}${r.orderClosed ? ' · table free' : ''}`
+      const toRoom = checked(f, 'toRoom')
+      const room = toRoom ? guests.find((g) => g.id === val(f, 'res'))?.roomNo : null
+      return `${toRoom ? `Charged to room ${room ?? ''}`.trim() : 'Paid'}${r.gstInvoice ? ` · Tax invoice ${r.gstInvoice}` : ''}${r.vatInvoice ? ` · VAT invoice ${r.vatInvoice}` : ''}${r.orderClosed ? (o.kind === 'room_service' ? ' · order closed' : ' · table free') : ''}`
     })
     const el = this.ws.modal.el, form = el.querySelector('form')!
     const sync = () => {

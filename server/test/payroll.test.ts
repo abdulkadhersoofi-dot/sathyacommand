@@ -44,6 +44,7 @@ describe('working out the month', () => {
   it('runs September for everyone on the rolls with a pay structure', async () => {
     expect((await R.post('/api/payroll/runs', GM, { month: '2026-09' })).statusCode).toBe(403)
     expect((await R.post('/api/payroll/runs', HR, { month: '2026-11' })).json().error).toMatch(/not started/)
+    expect((await R.post('/api/payroll/runs', HR, { month: '2026-10' })).json().error).toMatch(/still going on.*from the 25th/)
     const r = (await R.post('/api/payroll/runs', HR, { month: '2026-09' })).json()
     RUN = r.id
     expect(r.missing.map((m: { name: string }) => m.name)).toEqual(['New Joiner'])

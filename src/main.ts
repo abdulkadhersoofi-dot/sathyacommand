@@ -4,6 +4,7 @@ import type { HmsAdapter } from './data/adapters/HmsAdapter'
 import { Api, serverAvailable } from './live/api'
 import { signIn, type Me } from './live/signin'
 import { FrontDesk } from './ui/frontdesk'
+import { Approvals } from './ui/approvals'
 import { FnbWorkspace } from './fnb/workspace'
 import { HkWorkspace } from './hk/workspace'
 import { StaffWorkspace } from './staff/workspace'
@@ -59,6 +60,7 @@ let fnb: FnbWorkspace | null = null
 let hkWs: HkWorkspace | null = null
 let staffWs: StaffWorkspace | null = null
 let settingsWs: SettingsWorkspace | null = null
+let approvals: Approvals | null = null
 let engWs: EngWorkspace | null = null
 let secWs: SecurityWorkspace | null = null
 let invWs: InventoryWorkspace | null = null
@@ -564,6 +566,7 @@ if (!liveMode) {
   if (!seen) showDemoGuide(liveUrl)
 }
 if (api && me && liveAdapter) {
+  liveAdapter.canSeeEvents = ['*', 'events.view', 'events.manage', 'events.payment', 'events.bill', 'venues.manage'].some((p) => me!.permissions.includes(p))
   const badge = document.querySelector<HTMLElement>('.sample-badge')!
   badge.textContent = 'Live'
   badge.classList.add('live')
@@ -691,6 +694,8 @@ if (api && me && liveAdapter) {
     void setupBanner()
     window.addEventListener('sathya:setup-changed', () => void setupBanner())
   }
+  // The approval inbox: shows itself when something waits for this person (or for someone else on their behalf).
+  approvals = new Approvals(api, $('#btn-approvals') as HTMLButtonElement)
   addModulesMenu()
   setTab('arrivals')
 }
@@ -733,6 +738,7 @@ async function checkDay() {
     if (moved) { if (wasToday) await store.setDate(next.businessDate); await store.reload() }
     renderChrome()
   } catch { /* offline: try again next time */ }
+  void approvals?.refresh()
 }
 setInterval(() => { if (!document.hidden) void checkDay() }, 60_000)
 window.addEventListener('sathya:day-closed', () => void checkDay())

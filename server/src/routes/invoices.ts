@@ -72,7 +72,7 @@ export function invoiceRoutes(app: FastifyInstance, ctx: Ctx) {
   app.post('/api/tax-documents/:id/irn', async (req) => {
     const who = await requireCaller(ctx, req)
     if (!can(who, 'einvoice.generate')) throw new HttpError(403, 'Only accounts can generate e-invoices.')
-    if (!ctx.einvoice) throw new HttpError(503, 'No e-invoice provider is connected yet. Choose a GSP in Phase 0 settings.')
+    if (!ctx.einvoice) throw new HttpError(503, 'No e-invoice provider (GSP) is connected. Download the JSON, upload it on einvoice1.gst.gov.in, then record the IRN the portal gives.', { noProvider: true })
     const d = await loadDoc((req.params as { id: string }).id)
     if (!['pending', 'failed'].includes(d.irn_status)) throw new HttpError(409, d.irn_status === 'generated' ? 'IRN already generated.' : 'This document does not need an IRN.')
     let original: DocForIrn['original']
@@ -100,6 +100,42 @@ export function invoiceRoutes(app: FastifyInstance, ctx: Ctx) {
       await db.query(`update tax_document set irn_status = 'failed', irn_error = $2 where id = $1`, [d.id, (e as Error).message])
       throw new HttpError(502, `The e-invoice provider refused it: ${(e as Error).message}`)
     }
+  })
+
+  // Without a provider: the JSON to upload on the IRP portal (einvoice1.gst.gov.in), then the IRN it gives is recorded here.
+  const irnDoc = async (id: string) => {
+    const d = await loadDoc(id)
+    let original: DocForIrn['original']
+    if (d.original_id) { const o = await loadDoc(d.original_id); original = { number: o.number, issueDate: o.issue_date } }
+    const doc: DocForIrn = {
+      docType: d.doc_type === 'credit_note' ? 'credit_note' : 'invoice', number: d.number, issueDate: d.issue_date, supplier: d.supplier, recipient: d.recipient,
+      placeOfSupply: d.place_of_supply, lines: d.lines, original,
+      totals: { taxable: d.taxable_paise, cgst: d.cgst_paise, sgst: d.sgst_paise, total: d.total_paise },
+    }
+    return { d, doc }
+  }
+  app.get('/api/tax-documents/:id/irn-json', async (req, reply) => {
+    const who = await requireCaller(ctx, req)
+    if (!can(who, 'einvoice.generate')) throw new HttpError(403, 'Only accounts can generate e-invoices.')
+    const { d, doc } = await irnDoc((req.params as { id: string }).id)
+    const blockers = irnBlockers(doc)
+    if (blockers.length) throw new HttpError(422, `The GST portal would reject this document: ${blockers.join(' ')}`, { problems: blockers })
+    reply.header('content-disposition', `attachment; filename="${d.number.replace(/\//g, '-')}.json"`)
+    return [buildIrnPayload(doc)]
+  })
+  app.post('/api/tax-documents/:id/irn-manual', async (req) => {
+    const who = await requireCaller(ctx, req)
+    if (!can(who, 'einvoice.generate')) throw new HttpError(403, 'Only accounts can generate e-invoices.')
+    const b = (req.body ?? {}) as { irn?: string; ackNo?: string; ackDate?: string }
+    const irn = b.irn?.trim().toLowerCase() ?? ''
+    if (!/^[0-9a-f]{64}$/.test(irn)) throw new HttpError(400, 'The IRN is 64 letters and digits, as the portal shows it.')
+    if (!/^\d{10,20}$/.test(b.ackNo?.trim() ?? '')) throw new HttpError(400, 'Enter the acknowledgement number from the portal.')
+    if (!/^\d{4}-\d{2}-\d{2}/.test(b.ackDate ?? '')) throw new HttpError(400, 'Enter the acknowledgement date.')
+    const d = await loadDoc((req.params as { id: string }).id)
+    if (!['pending', 'failed'].includes(d.irn_status)) throw new HttpError(409, d.irn_status === 'generated' ? 'IRN already recorded.' : 'This document does not need an IRN.')
+    await db.query(`update tax_document set irn_status = 'generated', irn = $2, ack_no = $3, ack_date = $4, irn_error = null where id = $1`, [d.id, irn, b.ackNo!.trim(), new Date(`${b.ackDate!.slice(0, 10)}T12:00:00+05:30`)])
+    await appendAudit(db, { actor: who, action: 'einvoice.record', entity: { type: 'tax_document', id: d.id }, after: { number: d.number, irn, ackNo: b.ackNo } }, ctx.now())
+    return { ok: true }
   })
 
   // Printable document with every field the GST invoice rules require.

@@ -42,6 +42,8 @@ export class LiveAdapter implements HmsAdapter {
   readonly appIdOf = new Map<string, string>()
   businessDate = todayKey()
 
+  /** Roles without the banquets screens see no events (and the calendar is not asked for). */
+  canSeeEvents = true
   constructor(public api: Api) {}
 
   private snapshot(from: string, to: string) {
@@ -83,6 +85,7 @@ export class LiveAdapter implements HmsAdapter {
   async getEvents(range: DateRange): Promise<EventBooking[]> {
     const to = range.to < addDaysIso(range.from, 92) ? range.to : addDaysIso(range.from, 92)
     let r: { bookings: ServerBooking[] }
+    if (!this.canSeeEvents) return []
     try { r = await this.api.get(`/api/banquets/calendar?from=${range.from}&to=${to}`) } catch { return [] }
     const now = Date.now()
     return r.bookings.filter((b) => b.firm).map((b) => {

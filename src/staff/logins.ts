@@ -62,13 +62,17 @@ export class LoginsView {
       this.h.modal.open('Add login', `<div class="form-grid"><label class="span2">Name<input name="name" maxlength="80" required></label>
         <label class="span2">Email<input name="email" type="email" maxlength="254" required placeholder="name@example.com"></label>
         <label>Mobile (optional)<input name="mobile" inputmode="tel" placeholder="98400 00000"></label>
-        <label>CA access, days<input name="days" type="number" min="1" max="90" placeholder="30"></label>
-        ${this.roleChecks([])}</div><p class="muted small">CA access days apply only to the external auditor role.</p>`, 'Add', async (f) => {
+        ${this.roleChecks([])}
+        <label data-ca-days hidden>Auditor's access, days<input name="days" type="number" min="1" max="90" placeholder="30"></label></div>`, 'Add', async (f) => {
         const r = await api.post<{ tempPassword: string }>('/api/users', { name: val(f, 'name'), email: val(f, 'email'), mobile: val(f, 'mobile') || undefined, roles: this.picked(f),
           accessDays: val(f, 'days') ? Number(val(f, 'days')) : undefined })
         await this.load(); this.h.render()
         this.handOver(val(f, 'name'), val(f, 'email').toLowerCase(), r.tempPassword)
       })
+      // The access period applies only to the external auditor (the CA), so it shows when that role is ticked.
+      const form = this.h.modal.el.querySelector('form')!
+      const ca = form.querySelector<HTMLElement>('[data-ca-days]')!
+      form.addEventListener('change', () => { ca.hidden = !checked(form, 'role:external_auditor') })
     }
     const [act, id] = a.split(':')
     const u = this.rows.find((x) => x.id === id)

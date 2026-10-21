@@ -22,7 +22,7 @@ export interface Ws extends WorkspaceHost {
   inHouse(): { id: string; guest: string; roomNo: string | null }[]
 }
 
-export const rs = (paise: number) => '₹' + (paise / 100).toLocaleString('en-IN', { minimumFractionDigits: paise % 100 ? 2 : 0, maximumFractionDigits: 2 })
+export const rs = (paise: number) => (paise < 0 ? '−' : '') + '₹' + (Math.abs(paise) / 100).toLocaleString('en-IN', { minimumFractionDigits: paise % 100 ? 2 : 0, maximumFractionDigits: 2 })
 export const minutesAgo = (iso: string) => Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60_000))
 export const chips = (items: [string, string][], current: string, attr: string) =>
   `<div class="ws-chips">${items.map(([id, label]) => `<button type="button" class="chip" data-${attr}="${esc(id)}" aria-pressed="${id === current}">${esc(label)}</button>`).join('')}</div>`

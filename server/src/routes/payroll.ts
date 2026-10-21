@@ -59,6 +59,11 @@ export function payrollRoutes(app: FastifyInstance, ctx: Ctx, cfg: PayrollConfig
     if (!MONTH.test(b.month ?? '')) throw new HttpError(400, 'Month as YYYY-MM.')
     const today = await businessDate(db)
     if (b.month! > today.slice(0, 7)) throw new HttpError(400, 'That month has not started.')
+    // The month in progress: from the 25th, so the salaries are ready to pay at the month end (attendance for
+    // the days left is taken as worked). Before that the days are not known.
+    if (b.month === today.slice(0, 7) && Number(today.slice(8, 10)) < 25) {
+      throw new HttpError(409, `${monthName(b.month!)} is still going on: its payroll can be worked out from the 25th. Last month's is ${monthName(lastMonthOf(today))}.`)
+    }
     return db.tx(async (t) => {
       const [open] = await t.query<{ status: string }>(`select status from payroll_run where month = $1 and status <> 'cancelled'`, [b.month])
       if (open) throw new HttpError(409, `There is already a payroll for ${monthName(b.month!)} (${open.status}).`)
@@ -297,3 +302,5 @@ export function payrollRoutes(app: FastifyInstance, ctx: Ctx, cfg: PayrollConfig
     return send(reply, `Salaries-${r.month}.csv`, 'text/csv', csv([['Employee code', 'Beneficiary name', 'Account number', 'IFSC', 'Amount', 'Narration'], ...rows]))
   })
 }
+
+function lastMonthOf(day: string) { const d = new Date(`${day.slice(0, 7)}-01T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() - 1); return d.toISOString().slice(0, 7) }

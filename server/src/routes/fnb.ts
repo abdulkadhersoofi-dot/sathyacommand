@@ -40,7 +40,7 @@ async function nextCounter(t: Db, date: string, kind: string) {
 /** Refuses a liquor sale on a dry day, outside licensed hours, or before the hours are set. */
 export async function checkLiquorAllowed(ctx: Ctx, t: Db) {
   const [p] = await t.query<{ bar_open: string | null; bar_close: string | null }>('select bar_open, bar_close from property limit 1')
-  if (!p.bar_open || !p.bar_close) throw new HttpError(409, 'Set the licensed bar hours (bar settings) before selling liquor.')
+  if (!p.bar_open || !p.bar_close) throw new HttpError(409, 'Set the licensed bar hours under Restaurant → Licences & tax → Bar licence hours before selling liquor.')
   const dry = (await t.query<{ day: string }>('select day::text from dry_day')).map((d) => d.day)
   const r = liquorSaleAllowed(ctx.tax, istLocal(ctx.now()), { open: p.bar_open, close: p.bar_close, dryDays: dry })
   if (!r.allowed) throw new HttpError(409, r.reason!)
@@ -111,6 +111,9 @@ const APPROVAL_KINDS = {
   'fnb.void_after_kot': {
     permission: 'fnb.void',
     async apply(t: Db, p: Record<string, unknown>, decider: Caller, ctx: Ctx) {
+      // Once the bill is made the item is on it: the bill has to be cancelled first.
+      const [o] = await t.query<{ status: string; number: number }>('select status, number from fnb_order where id = $1', [p.orderId])
+      if (o && o.status !== 'open') throw new HttpError(409, `Order ${o.number} is already ${o.status}. Cancel its bill first, or reject this request.`)
       await voidSentItem(ctx, t, decider, String(p.itemId), String(p.reason), String(p.requestedBy))
     },
   },
@@ -683,10 +686,14 @@ export function fnbRoutes(app: FastifyInstance, ctx: Ctx) {
     const { stationId } = req.query as { stationId?: string }
     const kots = await db.query<{ id: string; status: string; created_at: Date }>(
       `select k.id, k.number, k.kind, k.station_id, k.status, k.prints, k.created_at, k.ready_at, o.number as order_number, o.kind as order_kind,
-              tb.label as table_label, s.room_no, ot.name as outlet, o.covers
+              tb.label as table_label, s.room_no, ot.name as outlet, o.covers, o.status as order_status
          from kot k join fnb_order o on o.id = k.order_id join outlet ot on ot.id = o.outlet_id
          left join dining_table tb on tb.id = o.table_id left join reservation r on r.id = o.reservation_id left join space s on s.id = r.space_id
-        where k.status <> 'served' and ($1::text is null or k.station_id = $1) order by k.created_at`, [stationId ?? null])
+        where k.status <> 'served' and ($1::text is null or k.station_id = $1)
+          -- a ticket with every item cancelled has nothing to make; a paid order's tickets leave the screen after 3 hours
+          and exists (select 1 from order_item i where i.kot_id = k.id and i.status <> 'void')
+          and (o.status in ('open', 'billed') or k.created_at > $2)
+        order by k.created_at`, [stationId ?? null, new Date(now().getTime() - 3 * 3600_000)])
     const lines = kots.length ? await db.query<{ kot_id: string }>(
       `select i.kot_id, i.id, i.name, i.qty, i.note, i.seat, i.course, i.status, i.void_reason, m.allergens, m.jain
          from order_item i join menu_item m on m.id = i.item_id where i.kot_id = any($1) order by i.course, i.added_at, i.seq`, [kots.map((k) => k.id)]) : []
