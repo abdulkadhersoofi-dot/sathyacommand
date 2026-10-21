@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { blockCells, lodgingObjects, rectPoly, validateLayout, type Building, type Cottage, type GroundPatch, type LodgingKind, type Pool, type RoomBlock, type SiteLayout, type V2 } from '../data/layout'
+import { blockCells, lodgingObjects, rectPoly, validateLayout, type Building, type Cottage, type GroundPatch, type LodgingKind, type Pool, type Road, type RoomBlock, type SiteLayout, type V2 } from '../data/layout'
 import type { World } from '../scene/World'
 import type { Api } from '../live/api'
 import type { Me } from '../live/signin'
@@ -9,7 +9,7 @@ import { esc, toast } from '../ui/dom'
 // roof and colours in the panel, add from templates, undo / redo. In live mode a draft is saved and
 // published as a new version; in the demo the changes stay on this screen.
 
-type Kind = 'building' | 'block' | 'villa' | 'ground' | 'pool'
+type Kind = 'building' | 'block' | 'villa' | 'ground' | 'pool' | 'road'
 interface Sel { kind: Kind; id: string }
 
 const MARIGOLD = 0xe8a317
@@ -38,7 +38,9 @@ export class Studio {
   private sel: Sel | null = null
   private panel: HTMLElement
   private helpers = new THREE.Group()
-  private drag: { start: V2; moved: boolean; original: string } | null = null
+  private drag: { start: V2; moved: boolean; original: string; point?: number } | null = null
+  /** The point of the selected road being dragged or last touched. */
+  private point: number | null = null
   private rooms: { id: string; room_no: string; twin_id: string | null }[] = []
 
   constructor(private world: World, private api: Api | null, private me: Me | null, private onExit: (published: boolean) => void) {
@@ -94,10 +96,10 @@ export class Studio {
     this.render()
   }
 
-  private find(sel: Sel | null = this.sel): Building | RoomBlock | Cottage | GroundPatch | Pool | undefined {
+  private find(sel: Sel | null = this.sel): Building | RoomBlock | Cottage | GroundPatch | Pool | Road | undefined {
     if (!sel) return undefined
     const l = this.layout
-    return ({ building: l.buildings, block: l.blocks, villa: l.villas, ground: l.ground, pool: l.pools }[sel.kind] as { id: string }[]).find((o) => o.id === sel.id) as never
+    return ({ building: l.buildings, block: l.blocks, villa: l.villas, ground: l.ground, pool: l.pools, road: l.roads }[sel.kind] as { id: string }[]).find((o) => o.id === sel.id) as never
   }
 
   private kindOf(id: string): Kind | null {
@@ -107,23 +109,42 @@ export class Studio {
     if (l.villas.some((o) => o.id === id)) return 'villa'
     if (l.pools.some((o) => o.id === id)) return 'pool'
     if (l.ground.some((o) => o.id === id)) return 'ground'
+    if (l.roads.some((o) => o.id === id)) return 'road'
     return null
   }
 
   private outline(sel: Sel | null = this.sel): V2[] | null {
     const o = this.find(sel)
     if (!o) return null
+    if ('pts' in o) return o.pts
     return 'rect' in o ? rectPoly(o.rect) : (o as { poly: V2[] }).poly
   }
 
   private translate(sel: Sel, dx: number, dz: number) {
     const o = this.find(sel)!
     if ('rect' in o) { const [a, b, c, d] = o.rect; o.rect = [round2(a + dx), round2(b + dz), round2(c + dx), round2(d + dz)] }
+    else if ('pts' in o) o.pts = o.pts.map(([x, z]) => [round2(x + dx), round2(z + dz)])
     else (o as { poly: V2[] }).poly = (o as { poly: V2[] }).poly.map(([x, z]) => [round2(x + dx), round2(z + dz)])
   }
 
-  private drawHelpers(offset: V2 = [0, 0]) {
+  private drawHelpers(offset: V2 = [0, 0], moving?: { point: number; to: V2 }) {
     this.helpers.clear()
+    const road = this.sel?.kind === 'road' ? this.find() as Road | undefined : undefined
+    if (road) {
+      // The centre line and a handle on each point (the one in hand larger).
+      const pts = road.pts.map(([x, z], i): V2 => (moving?.point === i ? moving.to : [x + offset[0], z + offset[1]]))
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts.map(([x, z]) => new THREE.Vector3(x, 0.7, z))), new THREE.LineBasicMaterial({ color: MARIGOLD }))
+      line.material.depthTest = false; line.renderOrder = 20
+      this.helpers.add(line)
+      pts.forEach(([x, z], i) => {
+        const size = i === this.point || i === moving?.point ? 2.6 : 1.8
+        const h = new THREE.Mesh(new THREE.BoxGeometry(size, 0.3, size), new THREE.MeshBasicMaterial({ color: i === this.point ? 0xffffff : MARIGOLD, depthTest: false }))
+        h.position.set(x, 0.8, z); h.renderOrder = 21
+        this.helpers.add(h)
+      })
+      this.world.invalidate()
+      return
+    }
     const p = this.outline()
     if (!p) { this.world.invalidate(); return }
     const pts = p.map(([x, z]) => new THREE.Vector3(x + offset[0], 0.6, z + offset[1]))
@@ -141,10 +162,26 @@ export class Studio {
   // ---------- pointer ----------
   private onDown(e: PointerEvent) {
     if (!this.open || e.button !== 0) return
+    // A selected road: grab the point under the pointer to move just that point.
+    if (this.sel?.kind === 'road') {
+      const g = this.world.groundAt(e.clientX, e.clientY), road = this.find() as Road | undefined
+      if (g && road) {
+        const near = road.pts.map(([x, z], i) => ({ i, d: Math.hypot(x - g[0], z - g[1]) })).sort((a, b) => a.d - b.d)[0]
+        if (near && near.d <= Math.max(3, road.width)) {
+          this.point = near.i
+          this.drag = { start: g, moved: false, original: JSON.stringify(this.layout), point: near.i }
+          this.world.controls.enabled = false
+          ;(e.target as Element).setPointerCapture?.(e.pointerId)
+          e.stopPropagation()
+          this.drawHelpers()
+          return
+        }
+      }
+    }
     const id = this.world.layoutHit(e.clientX, e.clientY)
     const kind = id ? this.kindOf(id) : null
     if (!id || !kind) return
-    if (this.sel?.id !== id) { this.sel = { kind, id }; this.render(); return }
+    if (this.sel?.id !== id) { this.sel = { kind, id }; this.point = null; this.render(); return }
     const g = this.world.groundAt(e.clientX, e.clientY)
     if (!g) return
     this.drag = { start: g, moved: false, original: JSON.stringify(this.layout) }
@@ -159,7 +196,8 @@ export class Studio {
     if (!g) return
     const dx = g[0] - this.drag.start[0], dz = g[1] - this.drag.start[1]
     if (Math.hypot(dx, dz) > 0.5) this.drag.moved = true
-    this.drawHelpers([dx, dz])
+    if (this.drag.point !== undefined) this.drawHelpers([0, 0], { point: this.drag.point, to: [g[0], g[1]] })
+    else this.drawHelpers([dx, dz])
     e.stopPropagation()
   }
 
@@ -171,6 +209,12 @@ export class Studio {
     this.world.controls.enabled = true
     if (!g || !d.moved || !this.sel) { this.drawHelpers(); return }
     const sel = this.sel
+    if (d.point !== undefined) {
+      const i = d.point
+      this.commit(() => { const r = this.find(sel) as Road; r.pts[i] = [round2(g[0]), round2(g[1])] })
+      e.stopPropagation()
+      return
+    }
     this.commit(() => this.translate(sel, g[0] - d.start[0], g[1] - d.start[1]))
     e.stopPropagation()
   }
@@ -211,7 +255,7 @@ export class Studio {
 
   private add(t: string) {
     const target: V2 = [round2(this.world.controls.target.x), round2(this.world.controls.target.z)]
-    const used = new Set(lodgingObjects(this.layout).map((o) => o.id).concat(this.layout.buildings.map((b) => b.id), this.layout.ground.map((g) => g.id)))
+    const used = new Set(lodgingObjects(this.layout).map((o) => o.id).concat(this.layout.buildings.map((b) => b.id), this.layout.ground.map((g) => g.id), this.layout.roads.map((r) => r.id)))
     const next = (prefix: string) => { let i = 1; while (used.has(`${prefix}-${i}`)) i++; return `${prefix}-${i}` }
     const lodging: Record<string, [LodgingKind, number, number]> = { villa: ['villa', 10, 9], cottage: ['cottage', 8, 7], tent: ['tent', 6, 5] }
     const buildings: Record<string, Omit<Building, 'id' | 'poly'> & { w: number; d: number }> = {
@@ -241,6 +285,12 @@ export class Studio {
         const c = this.freeSpot(target, 30, 30)
         l.blocks.push({ id, label: `Block ${letter || n}`, idPrefix: `BLK${n}`, numberPrefix: letter, rect: [c[0] - 15, c[1] - 15, c[0] + 15, c[1] + 15], floors: 2, floorHeight: 3.4, depth: 9, ring: [3, 1, 3, 1] })
         this.sel = { kind: 'block', id }
+      } else if (t === 'road' || t === 'path') {
+        // A straight 40 m stretch through the middle of the view, to bend and stretch into place.
+        const id = next(t === 'road' ? 'ROAD' : 'PATH')
+        l.roads.push({ id, kind: t === 'road' ? 'drive' : 'path', width: t === 'road' ? 5 : 2, pts: [[round2(target[0] - 20), round2(target[1])], [round2(target[0] + 20), round2(target[1])]] })
+        this.sel = { kind: 'road', id }
+        this.point = null
       } else if (t === 'lawn') {
         const id = next('LAWN')
         const c = this.freeSpot(target, 30, 20)
@@ -256,7 +306,7 @@ export class Studio {
     })
     const p = this.outline()
     if (p) this.world.panTo(...centroid(p))
-    toast('Added. Click it again and drag it into place.')
+    toast(t === 'road' || t === 'path' ? 'Added. Drag its end points into place; "Add a bend" for curves.' : 'Added. Click it again and drag it into place.')
   }
 
   // ---------- panel ----------
@@ -275,7 +325,7 @@ export class Studio {
     const problems = validateLayout(this.layout)
     const field = (label: string, name: string, value: string | number, type = 'text', extra = '') =>
       `<label>${label}<input name="${name}" type="${type}" value="${esc(String(value))}" ${extra}></label>`
-    let inspector = '<p class="muted">Click a building, block, villa, lawn or pool to select it. Click it again and drag to move it.</p>'
+    let inspector = '<p class="muted">Click a building, block, villa, lawn, pool, road or footpath to select it. Click it again and drag to move it.</p>'
     if (o && this.sel) {
       const k = this.sel.kind
       let fields = ''
@@ -307,17 +357,25 @@ export class Studio {
           + field('Width (m)', 'w', round2(q.w), 'number', 'min="3" step="0.5"') + field('Depth (m)', 'd', round2(q.d), 'number', 'min="3" step="0.5"')
           + (live && can(this.me, 'inventory.edit') ? `<label class="span2">Bookable HMS room<select name="link"><option value="">Not linked</option>${this.rooms.map((r) => `<option value="${esc(r.id)}" ${r.twin_id === v.id ? 'selected' : ''}>${esc(r.room_no)}${r.twin_id && r.twin_id !== v.id ? ' (drawn elsewhere)' : ''}</option>`).join('')}</select></label>
             <p class="muted span2">${linked ? `Linked to room ${esc(linked.room_no)}.` : 'Link it so bookings show on this building.'} Linking takes effect once this layout is published.</p>` : '')
+      } else if (k === 'road') {
+        const r = o as Road
+        const len = r.pts.slice(1).reduce((a, p, i) => a + Math.hypot(p[0] - r.pts[i][0], p[1] - r.pts[i][1]), 0)
+        fields = `<label>Kind<select name="rkind">${[['drive', 'Road / drive'], ['path', 'Footpath / walkway'], ['highway', 'Public highway']].map(([v, n]) => `<option value="${v}" ${v === r.kind ? 'selected' : ''}>${n}</option>`).join('')}</select></label>`
+          + field('Width (m)', 'rwidth', r.width, 'number', 'min="1" max="40" step="0.5"')
+          + `<p class="muted span2">${r.pts.length} points · ${Math.round(len)} m. Drag a square to move that point; drag the road itself to move all of it.${this.point != null ? ` Point ${this.point + 1} is selected.` : ''}</p>`
       } else if (k === 'ground') {
         const g = o as GroundPatch
-        fields = `<label>Surface<select name="gkind">${['lawn', 'field', 'plot', 'paved', 'deck'].map((x) => `<option ${x === g.kind ? 'selected' : ''}>${x}</option>`).join('')}</select></label>`
+        fields = field('Name (shown on the map)', 'glabel', g.label ?? '', 'text', 'maxlength="60" placeholder="e.g. Lake Lawn"') + `<label>Surface<select name="gkind">${['lawn', 'field', 'plot', 'paved', 'deck'].map((x) => `<option ${x === g.kind ? 'selected' : ''}>${x}</option>`).join('')}</select></label>`
       }
-      const clash = k === 'ground' ? [] : this.overlapping(this.sel.id)
+      if (k === 'pool') fields = field('Name (shown on the map)', 'plabel', (o as Pool).label ?? '', 'text', 'maxlength="60" placeholder="Pool"')
+      const clash = k === 'ground' || k === 'road' ? [] : this.overlapping(this.sel.id)
       if (clash.length) fields += `<p class="verify span2">Overlaps ${clash.map(esc).join(', ')}. Drag it clear before publishing.</p>`
-      const canRotate = k !== 'block'
+      const canRotate = k !== 'block' && k !== 'road'
       inspector = `<div class="sec-title">Selected · ${esc(k === 'villa' ? (o as Cottage).kind : k)} <span class="mono">${esc(this.sel.id)}</span></div>
         <div class="form-grid studio-fields">${fields}</div>
         <div class="actions">${canRotate ? '<button class="btn small" data-st="rot-" type="button">↺ 15°</button><button class="btn small" data-st="rot+" type="button">↻ 15°</button>' : ''}
           ${k !== 'ground' && k !== 'pool' ? '' : '<button class="btn small" data-st="grow" type="button">Bigger</button><button class="btn small" data-st="shrink" type="button">Smaller</button>'}
+          ${k === 'road' ? `<button class="btn small" data-st="bend" type="button">Add a bend</button><button class="btn small" data-st="extend" type="button">Extend the end</button>${(o as Road).pts.length > 2 ? '<button class="btn small" data-st="unpoint" type="button">Remove the selected point</button>' : ''}` : ''}
           <button class="btn small" data-st="delete" type="button">Remove</button></div>`
     }
     this.panel.innerHTML = `<div class="drawer-inner">
@@ -325,7 +383,7 @@ export class Studio {
         <div class="tip-meta">${live ? `Editing a copy of version ${this.baseVersion ?? '—'}. Guests and staff see no change until you publish.` : 'Demo: changes stay on this screen and are not saved.'}</div></div>
         <button class="dr-close" type="button" data-st="exit" aria-label="Close">✕</button></div>
       <div class="sec-title">Add</div>
-      <div class="studio-add">${[['villa', 'Villa'], ['cottage', 'Cottage'], ['tent', 'Tent'], ['block', 'Room block'], ['hall', 'Hall'], ['restaurant', 'Restaurant'], ['pavilion', 'Pavilion'], ['building', 'Building'], ['lawn', 'Lawn'], ['pool', 'Pool']]
+      <div class="studio-add">${[['villa', 'Villa'], ['cottage', 'Cottage'], ['tent', 'Tent'], ['block', 'Room block'], ['hall', 'Hall'], ['restaurant', 'Restaurant'], ['pavilion', 'Pavilion'], ['building', 'Building'], ['lawn', 'Lawn'], ['pool', 'Pool'], ['road', 'Road'], ['path', 'Footpath']]
         .map(([t, n]) => `<button class="btn small" type="button" data-add="${t}">${n}</button>`).join('')}</div>
       <div class="actions"><button class="btn small" data-st="undo" type="button" ${this.undo.length ? '' : 'disabled'}>Undo</button><button class="btn small" data-st="redo" type="button" ${this.redo.length ? '' : 'disabled'}>Redo</button></div>
       ${inspector}
@@ -393,8 +451,17 @@ export class Studio {
           const q = quadSize(c.poly)
           c.poly = rectAt(centroid(c.poly), t.name === 'w' ? n : q.w, t.name === 'd' ? n : q.d, q.deg).map(([x, z]) => [round2(x), round2(z)])
         }
-      } else if (sel.kind === 'ground' && t.name === 'gkind') {
-        (o as unknown as GroundPatch).kind = v as GroundPatch['kind']
+      } else if (sel.kind === 'ground') {
+        const g = o as unknown as GroundPatch
+        if (t.name === 'gkind') g.kind = v as GroundPatch['kind']
+        if (t.name === 'glabel') { if (v.trim()) g.label = v.trim(); else delete g.label }
+      } else if (sel.kind === 'pool' && t.name === 'plabel') {
+        const p = o as unknown as Pool
+        if (v.trim()) p.label = v.trim(); else delete p.label
+      } else if (sel.kind === 'road') {
+        const r = o as unknown as Road
+        if (t.name === 'rkind') r.kind = v as Road['kind']
+        if (t.name === 'rwidth' && n >= 1 && n <= 40) r.width = n
       }
     })
   }
@@ -425,6 +492,25 @@ export class Studio {
     if (a === 'redo' && this.redo.length) { this.undo.push(JSON.stringify(this.layout)); this.layout = JSON.parse(this.redo.pop()!); this.world.rebuild(this.layout); this.render() }
     if (!sel) { if (a === 'save') void this.save(false); if (a === 'publish') void this.save(true); return }
     if (a === 'rot-' || a === 'rot+') this.commit(() => { const o = this.find(sel) as { poly: V2[] }; o.poly = rot(o.poly, a === 'rot+' ? 15 : -15).map(([x, z]) => [round2(x), round2(z)]) })
+    if (a === 'bend' || a === 'extend' || a === 'unpoint') this.commit(() => {
+      const r = this.find(sel) as Road
+      if (a === 'bend') {
+        // A new point in the middle of the longest stretch, to drag into a curve.
+        let best = 0, len = -1
+        r.pts.slice(1).forEach((p, i) => { const d = Math.hypot(p[0] - r.pts[i][0], p[1] - r.pts[i][1]); if (d > len) { len = d; best = i } })
+        const [p0, p1] = [r.pts[best], r.pts[best + 1]]
+        r.pts.splice(best + 1, 0, [round2((p0[0] + p1[0]) / 2), round2((p0[1] + p1[1]) / 2)])
+        this.point = best + 1
+      } else if (a === 'extend') {
+        const [p0, p1] = [r.pts[r.pts.length - 2], r.pts[r.pts.length - 1]]
+        const d = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) || 1
+        r.pts.push([round2(p1[0] + ((p1[0] - p0[0]) / d) * 15), round2(p1[1] + ((p1[1] - p0[1]) / d) * 15)])
+        this.point = r.pts.length - 1
+      } else if (r.pts.length > 2) {
+        r.pts.splice(this.point ?? r.pts.length - 1, 1)
+        this.point = null
+      }
+    })
     if (a === 'grow' || a === 'shrink') this.commit(() => {
       const o = this.find(sel) as { poly: V2[] }
       const [cx, cz] = centroid(o.poly), k = a === 'grow' ? 1.15 : 1 / 1.15
@@ -434,7 +520,7 @@ export class Studio {
       if (this.api && sel.kind === 'villa' && this.rooms.some((r) => r.twin_id === sel.id)) toast('This villa is linked to a bookable room. Publishing will unlink it, or refuse if a guest is booked.')
       this.commit((l) => {
         const drop = <T extends { id: string }>(xs: T[]) => xs.filter((x) => x.id !== sel.id)
-        l.buildings = drop(l.buildings); l.blocks = drop(l.blocks); l.villas = drop(l.villas); l.ground = drop(l.ground); l.pools = drop(l.pools)
+        l.buildings = drop(l.buildings); l.blocks = drop(l.blocks); l.villas = drop(l.villas); l.ground = drop(l.ground); l.pools = drop(l.pools); l.roads = drop(l.roads)
         if (sel.kind === 'pool') l.ground = l.ground.filter((g) => g.id !== `${sel.id}-DECK`)
       }, false)
     }

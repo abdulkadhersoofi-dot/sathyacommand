@@ -133,30 +133,43 @@ export class Overlays {
   pinAt(layer: string, id: string): THREE.Vector3 | null { return this.pins.get(layer)?.get(id)?.obj.position.clone() ?? null }
 
   // ---------- labels ----------
+  /** Every building, named ground, pool, block and villa is labelled with its own name, so new ones are too. */
   private buildLabels() {
-    const named: [string, string][] = [
-      ['RECEPTION', 'Reception'], ['RESTAURANT', 'Sathya Dine'], ['KITCHEN', 'Kitchen'],
-      ['HALL-JSH', 'A. John Samuel Hall'], ['CONV-HALL', 'Convention Hall'], ['LAWN-GRAND', 'Grand Lawn'],
-      ['LAWN-GARDEN', 'Garden Lawn'], ['PAVILION', 'Pavilion'], ['POOL', 'Pool'],
-      ['GROUND-CRICKET', 'Cricket Ground'], ['GROUND-NORTH', 'North Ground'], ['SERVICE', 'Service Block'],
-    ]
-    for (const [id, name] of named) {
-      const a = this.site.anchors.get(id)
-      if (!a) continue
-      this.addLabel(id, name, a.pos.clone().setY(a.height + 2), id)
+    const l = this.site.layout
+    const GROUND_NAMES: Record<string, string> = { 'LAWN-GRAND': 'Grand Lawn', 'LAWN-GARDEN': 'Garden Lawn', 'GROUND-CRICKET': 'Cricket Ground', 'GROUND-NORTH': 'North Ground', POOL: 'Pool' }
+    const seen = new Set<string>()
+    // A building drawn in parts (a hall and its annex) is labelled once; the label key is its HMS space when it has one, so live figures attach to it.
+    for (const b of l.buildings) {
+      const name = b.label?.trim()
+      if (!name || seen.has(name)) continue
+      seen.add(name)
+      const [cx, cz] = centroid(b.poly)
+      this.addLabel(b.spaceId && !this.labels.has(b.spaceId) ? b.spaceId : `b:${b.id}`, name, new THREE.Vector3(cx, b.height + 2, cz), b.spaceId)
     }
-    for (const b of this.site.layout.blocks) {
+    for (const g of l.ground) {
+      const name = g.label?.trim() || (g.spaceId ? GROUND_NAMES[g.spaceId] : undefined)
+      if (!name) continue
+      const [cx, cz] = centroid(g.poly)
+      this.addLabel(g.spaceId && !this.labels.has(g.spaceId) ? g.spaceId : `g:${g.id}`, name, new THREE.Vector3(cx, 2, cz), g.spaceId)
+    }
+    for (const p of l.pools) {
+      const name = p.label?.trim() || (p.spaceId ? GROUND_NAMES[p.spaceId] : 'Pool')
+      const [cx, cz] = centroid(p.poly)
+      if (!this.labels.has(p.spaceId ?? `p:${p.id}`)) this.addLabel(p.spaceId ?? `p:${p.id}`, name ?? 'Pool', new THREE.Vector3(cx, 2, cz), p.spaceId)
+    }
+    for (const b of l.blocks) {
       const [cx, cz] = centroid(rectPoly(b.rect))
       this.addLabel(`block:${b.id}`, `${b.label} · ${blockCells(b).length} rooms`, new THREE.Vector3(cx, b.floors * b.floorHeight + 3, cz))
     }
-    const villas = this.site.layout.villas
-    if (villas.length) {
-      const v = centroid(villas.map((x) => centroid(x.poly)))
-      this.addLabel('villas', villas.every((x) => x.kind === 'villa') ? 'Garden Villas' : 'Villas & Cottages', new THREE.Vector3(v[0], 8, v[1]))
+    for (const v of l.villas) {
+      const [cx, cz] = centroid(v.poly)
+      this.addLabel(`villa:${v.id}`, v.label?.trim() || v.id, new THREE.Vector3(cx, 6, cz))
+      this.labels.get(`villa:${v.id}`)!.el.classList.add('villa-label')
     }
   }
 
   private addLabel(key: string, text: string, pos: THREE.Vector3, spaceId?: string) {
+    this.labels.get(key)?.el.remove()          // never leave a replaced label behind on the screen
     const el = document.createElement('div')
     el.className = 'map-label'
     if (spaceId) el.dataset.space = spaceId

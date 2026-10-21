@@ -8,9 +8,10 @@ export type GroundKind = 'lawn' | 'field' | 'plot' | 'paved' | 'deck'
 export type Roof = 'flat' | 'hip' | 'canopy'
 export type LodgingKind = 'villa' | 'cottage' | 'suite' | 'tent'
 
-export interface GroundPatch { id: string; kind: GroundKind; poly: V2[]; spaceId?: string }
-export interface Pool { id: string; poly: V2[]; spaceId?: string }
-export interface Road { id: string; kind: 'drive' | 'highway'; width: number; pts: V2[] }
+export interface GroundPatch { id: string; kind: GroundKind; poly: V2[]; spaceId?: string; label?: string }
+export interface Pool { id: string; poly: V2[]; spaceId?: string; label?: string }
+/** A road or path: the main drive, a footpath, or the public highway outside. */
+export interface Road { id: string; kind: 'drive' | 'highway' | 'path'; width: number; pts: V2[] }
 export interface Building { id: string; spaceId?: string; label: string; poly: V2[]; height: number; roof: Roof; roofColor: number; wallColor: number }
 /** A multi-storey room block: rooms ring a courtyard; `ring` = rooms on the north, east, south and west sides. */
 export interface RoomBlock {
@@ -98,6 +99,7 @@ export function validateLayout(l: SiteLayout): string[] {
   for (const p of l.pools) poly(`Pool ${p.id}`, p.poly)
   for (const r of l.roads) {
     if (!num(r.width, 1, 40)) out.push(`Road ${r.id}: width must be 1–40 m.`)
+    if (!['drive', 'highway', 'path'].includes(r.kind)) out.push(`Road ${r.id} has an unknown kind.`)
     if (!Array.isArray(r.pts) || r.pts.length < 2 || r.pts.length > 200) out.push(`Road ${r.id} needs 2–200 points.`)
   }
   for (const b of l.buildings) {

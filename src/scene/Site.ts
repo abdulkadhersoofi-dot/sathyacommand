@@ -24,7 +24,7 @@ export class Site {
   roadPaths: V2[][]
 
   constructor(public layout: SiteLayout) {
-    this.roadPaths = layout.roads.filter((r) => r.kind === 'drive').map((r) => r.pts)
+    this.roadPaths = layout.roads.filter((r) => r.kind !== 'highway').map((r) => r.pts)
     this.buildTerrain()
     this.buildPool()
     this.buildBuildings()
@@ -75,8 +75,9 @@ export class Site {
     }
 
     for (const r of this.layout.roads) {
-      const mat = new THREE.MeshStandardMaterial({ color: r.kind === 'highway' ? 0x5d5f61 : 0xa49c8e, roughness: 0.95, side: THREE.DoubleSide })
-      const mesh = new THREE.Mesh(ribbon(r.pts, r.width, r.kind === 'highway' ? 0.05 : 0.08), mat)
+      // Highway asphalt, the drive in gravel, footpaths in light paving drawn just above the drive where they meet it.
+      const mat = new THREE.MeshStandardMaterial({ color: r.kind === 'highway' ? 0x5d5f61 : r.kind === 'path' ? 0xd2c7b1 : 0xa49c8e, roughness: 0.95, side: THREE.DoubleSide })
+      const mesh = new THREE.Mesh(ribbon(r.pts, r.width, r.kind === 'highway' ? 0.05 : r.kind === 'path' ? 0.1 : 0.08), mat)
       mesh.receiveShadow = true
       mesh.userData.layoutId = r.id
       this.editables.push(mesh)
