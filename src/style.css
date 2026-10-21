@@ -693,7 +693,7 @@ button.row-card { width: 100%; text-align: left; font: inherit; background: var(
 
 /* The top bar holds five workspaces: drop the toggle labels first, then the workspace labels. */
 @media (max-width: 1700px) { #btn-night span, #btn-eco span { display: none; } }
-@media (max-width: 1560px) { #btn-staff span, #btn-sec span, #btn-eng span, #btn-hk span, #btn-fnb span, #btn-inv span, #btn-acc span { display: none; } }
+@media (max-width: 1560px) { #btn-staff span, #btn-sec span, #btn-eng span, #btn-hk span, #btn-fnb span, #btn-inv span, #btn-acc span, #btn-bq span, #btn-guests span { display: none; } }
 
 /* stores & purchase */
 .item-row { grid-template-columns: minmax(0, 1.8fr) minmax(0, 1.2fr) minmax(0, 1fr) 90px minmax(0, 1fr) !important; }
@@ -879,3 +879,7 @@ button.link { background: none; border: 0; padding: 0; color: var(--accent); fon
 .bq-rules td, .bq-rules th { padding: 4px 3px; font-size: 11.5px; min-width: 26px; }
 .bq-rules td span { display: block; font-size: 10.5px; font-weight: 700; }
 .bq-rules th.wk { color: var(--marigold); }
+.qr-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.qr-card { border: 1px dashed var(--line); border-radius: 10px; background: #fff; color: #111; padding: 10px; text-align: center; display: flex; flex-direction: column; gap: 4px; }
+.qr-card .qr-svg svg { width: 120px; height: 120px; }
+.qr-card small { font-size: 11px; color: #555; }

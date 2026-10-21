@@ -76,7 +76,11 @@ The booking page is at `https://<your service>/book`; guests check in online fro
 |---|---|
 | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` | Website bookings take a deposit (the first night with GST) by Razorpay payment link; an unpaid booking lapses after two hours. In Razorpay's dashboard, add a webhook to `https://<your service>/public/payments/webhook` for the event `payment_link.paid`, with the same webhook secret. Try it in Razorpay's test mode first |
 | `CHANNEL_KEY` | A long random key shared with the channel manager. It reads availability and rates from `/channel/ari` and sends OTA bookings to `/channel/bookings`, both with the header `X-Channel-Key`. The channel manager's own format is mapped to these by its integration team |
-| `PUBLIC_URL` | The address guests should see in their links, if it is not the service's own (e.g. `https://book.sathyaresorts.in`) |
+| `PUBLIC_URL` | The address guests should see in their links, if it is not the service's own (e.g. `https://book.sathyaresorts.in`). On Render the service's own address is used by itself |
+| `GOOGLE_REVIEW_URL` | The resort's "write a review" link on Google: guests who give 4 or 5 stars are asked to post there |
+| `RESORT_MAP_URL` | The map link sent the day before arrival (by default, a Google Maps search for the resort's address) |
+
+Guest messages (WhatsApp) wait in **Guests → Messages** for the desk to send from its own phone until a WhatsApp Business provider is connected; that connection is added once the resort chooses the provider.
 
 ## Before real guests
 

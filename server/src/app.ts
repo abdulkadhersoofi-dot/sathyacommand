@@ -45,6 +45,7 @@ import { banquetRoutes } from './routes/banquets'
 import { salesRoutes } from './routes/sales'
 import { publicRoutes } from './routes/public'
 import { channelRoutes } from './routes/channels'
+import { guestRoutes } from './routes/guest'
 
 export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boolean; appDir?: string } = {}) {
   const ctx: Ctx = {
@@ -57,6 +58,7 @@ export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boo
     printAgentKey: opts.printAgentKey,
     payments: opts.payments,
     channelKey: opts.channelKey,
+    whatsapp: opts.whatsapp,
   }
   // Behind Render's proxy: the guest's own address, for the booking page's limits.
   const app = Fastify({ logger: opts.logger ?? false, trustProxy: true })
@@ -109,6 +111,7 @@ export function buildApp(db: Db, opts: Partial<Omit<Ctx, 'db'>> & { logger?: boo
   salesRoutes(app, ctx)
   publicRoutes(app, ctx)
   channelRoutes(app, ctx)
+  guestRoutes(app, ctx)
 
   // Serve the built 3D app and front desk screens from the same address as the API.
   if (opts.appDir && existsSync(opts.appDir)) app.register(fastifyStatic, { root: opts.appDir, index: 'index.html' })

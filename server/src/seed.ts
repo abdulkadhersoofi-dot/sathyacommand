@@ -13,6 +13,7 @@ import { ensureLinenLaundryAreas } from './routes/linen-laundry'
 import { ensureStores } from './routes/stores'
 import { ensureChart } from './ledger'
 import { ensureBanquets } from './banquets'
+import { ensureActivities } from './guest'
 import { ensureEngineering } from './eng-core'
 import type { Db } from './db'
 
@@ -120,6 +121,7 @@ async function seedInto(db: Db, opts: { today?: string; mdMobile?: string }) {
   await ensureStores(db)
   await ensureChart(db)
   await ensureBanquets(db)
+  await ensureActivities(db)
 
   await appendAudit(db, {
     actor: SYSTEM, action: 'system.seed', entity: { type: 'property', id: PROPERTY },

@@ -21,6 +21,7 @@ export function dashboardRoutes(app: FastifyInstance, ctx: Ctx) {
       `select r.id, r.status, g.name as guest, g.mobile, g.nationality, g.vip, r.adults + r.children as pax, r.arrival::text, r.departure::text,
               r.eta, r.checked_in_at, r.checked_out_at, r.source, r.requests, r.room_type_id, r.space_id, s.twin_id, s.room_no,
               r.bill_to_company, r.pay_by, r.ota_ref, exists (select 1 from online_checkin oc where oc.reservation_id = r.id) as online_checkin,
+              (select count(*)::int from reservation p where p.guest_id = r.guest_id and p.status = 'checked_out' and p.id <> r.id) as past_stays,
               (select coalesce(round(avg(amount_paise)), 0)::bigint from room_night rn where rn.reservation_id = r.id) as rate_paise,
               (select coalesce(sum(l.amount_paise), 0)::bigint from folio_line l join folio f on f.id = l.folio_id where f.reservation_id = r.id) as balance_paise,
               (select id from folio f where f.reservation_id = r.id order by created_at limit 1) as folio_id

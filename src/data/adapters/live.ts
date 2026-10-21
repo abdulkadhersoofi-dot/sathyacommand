@@ -16,7 +16,7 @@ interface ServerReservation {
   arrival: string; departure: string; eta: string | null; checked_in_at: string | null; checked_out_at: string | null; source: string
   requests: string | null; room_type_id: string; space_id: string | null; twin_id: string | null; room_no: string | null
   bill_to_company: string | null; rate_paise: number; balance_paise: number; folio_id: string
-  online_checkin?: boolean; pay_by?: string | null; ota_ref?: string | null
+  online_checkin?: boolean; pay_by?: string | null; ota_ref?: string | null; past_stays?: number
 }
 interface ServerBooking { name: string; venueId: string; date: string; from: string; to: string; startsAt: string; endsAt: string; pax: number; number: string; title: string; status: string; kind: string; firm: boolean
   client: string; turnaroundMinutes: number; valuePaise: number; paidPaise: number }
@@ -74,7 +74,7 @@ export class LiveAdapter implements HmsAdapter {
       checkInAt: r.checked_in_at ?? undefined, checkOutAt: r.checked_out_at ?? undefined, status: STATUS[r.status] ?? 'confirmed',
       source: r.source, rate: r.rate_paise / 100, balance: r.balance_paise / 100, vip: r.vip, notes: r.requests ?? undefined,
       folioId: r.folio_id, roomNo: r.room_no, roomTypeId: r.room_type_id, serverSpaceId: r.space_id, company: r.bill_to_company,
-      onlineCheckin: !!r.online_checkin, payBy: r.pay_by ?? null, otaRef: r.ota_ref ?? null,
+      onlineCheckin: !!r.online_checkin, payBy: r.pay_by ?? null, otaRef: r.ota_ref ?? null, pastStays: r.past_stays ?? 0,
     }))
   }
 

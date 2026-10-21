@@ -19,6 +19,9 @@ interface Cashier { open: boolean; cashTaken?: number; expectedInDrawer?: number
 const can = (me: Me, p: string) => me.permissions.includes('*') || me.permissions.includes(p)
 const rs = (p: number) => inr(Math.round(p / 100))
 
+/** 1st, 2nd, 3rd, 4th… */
+const ordinal = (n: number) => { const v = n % 100; return `${n}${['th', 'st', 'nd', 'rd'][(v - 20) % 10] ?? ['th', 'st', 'nd', 'rd'][v] ?? 'th'}` }
+
 export class FrontDesk {
   cashier: Cashier = { open: false }
   private modal = new FormModal()
@@ -50,7 +53,7 @@ export class FrontDesk {
     const card = (r: Reservation, actions: string) => `<div class="row-card" ${r.spaceId ? `data-focus="${esc(r.spaceId)}"` : ''}>
       <div class="rc-title">${r.vip ? '<span class="vip">VIP</span> ' : ''}${esc(r.guest)}</div>
       <div class="rc-sub">${r.roomNo ? `Room ${esc(r.roomNo)}` : 'No room yet'} · ${r.pax} pax${r.company ? ` · ${esc(r.company)}` : ''}${r.balance ? ` · <b>due ${rs(r.balance * 100)}</b>` : ''}
-        ${r.onlineCheckin ? ' · <span class="fd-tag ok">Checked in online</span>' : ''}${r.payBy ? ` · <span class="fd-tag warn">Deposit due by ${new Date(r.payBy).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>` : ''}${r.otaRef ? ` · <span class="fd-tag">${esc(r.source.replace('_', '.'))} ${esc(r.otaRef)}</span>` : ''}</div>
+        ${r.pastStays ? ` · <span class="fd-tag ok">Returning guest · ${ordinal(r.pastStays + 1)} stay</span>` : ''}${r.onlineCheckin ? ' · <span class="fd-tag ok">Checked in online</span>' : ''}${r.payBy ? ` · <span class="fd-tag warn">Deposit due by ${new Date(r.payBy).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>` : ''}${r.otaRef ? ` · <span class="fd-tag">${esc(r.source.replace('_', '.'))} ${esc(r.otaRef)}</span>` : ''}</div>
       <div class="rc-right">${actions}</div></div>`
     const btn = (act: string, id: string, label: string, primary = false) => `<button class="btn small${primary ? ' primary' : ''}" data-fd="${act}" data-res="${esc(id)}" type="button">${label}</button>`
     return toolbar + `

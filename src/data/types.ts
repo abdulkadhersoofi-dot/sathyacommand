@@ -47,6 +47,8 @@ export interface Reservation {
   /** A website booking waiting for its deposit until then. */
   payBy?: string | null
   otaRef?: string | null
+  /** Earlier stays of the same guest. */
+  pastStays?: number
 }
 
 export type OrderStatus = 'placed' | 'cooking' | 'ready' | 'served'

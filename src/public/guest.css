@@ -53,3 +53,6 @@ body.g-page { min-height: 100vh; }
 .g-page a { color: var(--g-accent); font-weight: 600; }
 .g-page a.g-btn { text-decoration: none; display: inline-block; }
 .g-page a.g-btn.primary { color: var(--g-accent-fg); }
+.g-qty { display: inline-flex; align-items: center; gap: 8px; }
+.g-qty .g-btn { padding: 4px 12px; }
+.g-card h3 { margin: 12px 0 6px; font-size: 13px; }

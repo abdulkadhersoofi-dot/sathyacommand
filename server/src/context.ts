@@ -6,6 +6,7 @@ import type { Actor } from '@sathya/audit'
 import type { Db } from './db'
 import type { EInvoiceProvider } from './einvoice'
 import type { PaymentProvider } from './channels'
+import type { WhatsAppSender } from './guest'
 
 // Everything a route needs, passed in once so tests can swap the clock and the SMS sender.
 
@@ -38,6 +39,8 @@ export interface Ctx {
   payments?: PaymentProvider
   /** Shared key the channel manager signs its calls with (CHANNEL_KEY); none: no channel manager. */
   channelKey?: string
+  /** Sends guests' WhatsApp messages; none: the desk sends them from its own WhatsApp. */
+  whatsapp?: WhatsAppSender
 }
 
 export interface Caller extends Actor {
