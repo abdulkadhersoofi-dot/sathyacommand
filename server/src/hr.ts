@@ -23,7 +23,8 @@ export interface PayrollConfig {
   labour_welfare_fund: { employee: number; employer: number; deduct_in_month: number; due: string }
   bonus: { wage_ceiling: number; calculation_wage_cap: number; provision_percent: number }
   gratuity: { provision_percent: number; min_years: number; min_years_fixed_term: number; ceiling: number }
-  salary_tds: { cess_percent: number; new: TaxRegime; old: TaxRegime & { rebate_max: number; deduction_caps: Record<string, number> } }
+  settlement: { leave_encashment_days_divisor: number; gratuity_days_per_year: number; gratuity_days_divisor: number }
+  salary_tds: { cess_percent: number; no_pan_rate: number; hra_metro: boolean; new: TaxRegime; old: TaxRegime & { rebate_max: number; deduction_caps: Record<string, number> } }
   minimum_wage_per_month: number | null
 }
 export interface TaxRegime { standard_deduction: number; slabs: Slab[]; rebate_income_up_to: number }

@@ -39,6 +39,7 @@ export const CHART: [string, string, AccountType, string, string | null][] = [
   ['1521', 'TCS paid on purchases (TASMAC)', 'asset', 'Taxes recoverable', null],
   ['1522', 'GST TCS deducted by OTAs', 'asset', 'Taxes recoverable', null],
   ['1540', 'Advance income tax paid', 'asset', 'Taxes recoverable', null],
+  ['1550', 'Staff advances and loans', 'asset', 'Short-term loans and advances', null],
   ['1600', 'Fixed assets: buildings', 'asset', 'Property, plant and equipment', null],
   ['1601', 'Fixed assets: plant and machinery', 'asset', 'Property, plant and equipment', null],
   ['1602', 'Fixed assets: furniture and fittings', 'asset', 'Property, plant and equipment', null],
@@ -488,6 +489,7 @@ export async function postPending(db: Db, now: Date) {
           { code: '2430', amount: -n(l.pt_paise) },
           { code: '2440', amount: -(n(l.lwf_employee_paise) + n(l.lwf_employer_paise)) },
           { code: '2300', amount: -n(l.tds_paise), ref: '192' },
+          { code: '1550', amount: -n(l.advance_recovery_paise), party: { type: 'staff', id: l.employee_id, name: l.name } },
           { code: '2400', amount: -n(l.net_paise), party: { type: 'staff', id: l.employee_id, name: l.name } })
       }
       lines.push({ code: '6110', amount: n(r.pf_admin_paise), dept: 'admin' }, { code: '2410', amount: -n(r.pf_admin_paise) })
@@ -504,11 +506,37 @@ export async function postPending(db: Db, now: Date) {
     }
     const dues = await t.query<{ id: string; month: string; kind: string; amount_paise: string; paid_on: string; reference: string; bank_code: string }>(
       `select id, month, kind, amount_paise, paid_on::text, reference, bank_code from statutory_payment s where not exists (select 1 from posted_source x where x.source_type = 'statutory_payment' and x.source_id = s.id)`)
-    const DUE_ACCOUNT: Record<string, [string, string]> = { pf: ['2410', 'Provident fund'], esi: ['2420', 'ESI'], pt: ['2430', 'Professional tax'], lwf: ['2440', 'Labour welfare fund'] }
+    const DUE_ACCOUNT: Record<string, [string, string]> = { pf: ['2410', 'Provident fund'], esi: ['2420', 'ESI'], pt: ['2430', 'Professional tax'], lwf: ['2440', 'Labour welfare fund'], tds: ['2300', 'Income tax deducted from salaries'] }
     for (const d of dues) {
       const [code, name] = DUE_ACCOUNT[d.kind]
       await post({ kind: 'payment', date: d.paid_on, narration: `${name} for ${d.month} paid (${d.reference})`, source: { type: 'statutory_payment', id: d.id },
-        lines: [{ code, amount: n(d.amount_paise), ref: d.reference }, { code: d.bank_code, amount: -n(d.amount_paise), ref: d.reference }] })
+        lines: [{ code, amount: n(d.amount_paise), ref: d.kind === 'tds' ? '192' : d.reference }, { code: d.bank_code, amount: -n(d.amount_paise), ref: d.reference }] })
+    }
+    // Salary advances and loans paid out; full and final settlements once approved and once paid.
+    const advances = await t.query<{ id: string; employee_id: string; name: string; kind: string; amount_paise: string; issued_on: string; bank_code: string; reference: string | null }>(
+      `select a.id, a.employee_id, e.name, a.kind, a.amount_paise, a.issued_on::text, a.bank_code, a.reference from salary_advance a join employee e on e.id = a.employee_id
+        where a.issued_on is not null and not exists (select 1 from posted_source x where x.source_type = 'salary_advance' and x.source_id = a.id)`)
+    for (const a of advances) {
+      await post({ kind: 'payment', date: a.issued_on, narration: `Salary ${a.kind} to ${a.name}`, source: { type: 'salary_advance', id: a.id },
+        lines: [{ code: '1550', amount: n(a.amount_paise), party: { type: 'staff', id: a.employee_id, name: a.name } }, { code: a.bank_code, amount: -n(a.amount_paise), ref: a.reference }] })
+    }
+    const SETTLEMENT_ACCOUNT: Record<string, string> = { leave: '6100', gratuity: '2460', bonus: '2450', advance: '1550', notice: '6100', other: '6100' }
+    const settled = await t.query<{ id: string; employee_id: string; name: string; ledger_dept: string; last_day: string; items: { key: string; label: string; amount_paise: number }[]; net_paise: string }>(
+      `select s.id, s.employee_id, e.name, s.ledger_dept, s.last_day::text, s.items, s.net_paise from settlement s join employee e on e.id = s.employee_id
+        where s.status in ('approved', 'paid') and not exists (select 1 from posted_source x where x.source_type = 'settlement' and x.source_id = s.id)`)
+    for (const s of settled) {
+      const party = { type: 'staff' as const, id: s.employee_id, name: s.name }
+      const dept = s.ledger_dept
+      await post({ kind: 'journal', date: s.last_day, narration: `Full and final settlement, ${s.name}`, source: { type: 'settlement', id: s.id }, lines: [
+        ...s.items.map((i) => ({ code: SETTLEMENT_ACCOUNT[i.key] ?? '6100', amount: i.amount_paise, dept: SETTLEMENT_ACCOUNT[i.key] === '6100' ? dept : undefined, party: i.key === 'advance' ? party : undefined })),
+        { code: '2400', amount: -n(s.net_paise), party }] })
+    }
+    const settledPaid = await t.query<{ id: string; employee_id: string; name: string; net_paise: string; paid_on: string; bank_code: string; reference: string | null }>(
+      `select s.id, s.employee_id, e.name, s.net_paise, s.paid_on::text, s.bank_code, s.reference from settlement s join employee e on e.id = s.employee_id
+        where s.status = 'paid' and not exists (select 1 from posted_source x where x.source_type = 'settlement_pay' and x.source_id = s.id)`)
+    for (const s of settledPaid) {
+      await post({ kind: 'payment', date: s.paid_on, narration: `Full and final settlement paid to ${s.name}`, source: { type: 'settlement_pay', id: s.id },
+        lines: [{ code: '2400', amount: n(s.net_paise), party: { type: 'staff', id: s.employee_id, name: s.name } }, { code: s.bank_code, amount: -n(s.net_paise), ref: s.reference }] })
     }
     return { posted }
   })

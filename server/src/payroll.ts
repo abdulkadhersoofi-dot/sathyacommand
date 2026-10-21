@@ -1,6 +1,7 @@
 import type { Db } from './db'
 import { addDays } from './eng-core'
 import { codeWages, grossOf, holidaysBetween, leaveDays, monthEndOf, type PayrollConfig, type Slab, type Structure } from './hr'
+import { declarationOf, fyOf, monthsAfter, monthTds, paidThisYear, yearFigures } from './salary-tax'
 
 // The monthly payroll: each person's pay for a month from their structure, attendance and leave, and the
 // statutory deductions on it (PF, ESI, Tamil Nadu professional tax and labour welfare fund). The rules and
@@ -19,10 +20,10 @@ export const FROZEN = ['submitted', 'checked', 'approved', 'paid']
 export interface PayEmployee {
   id: string; code: string; name: string; user_id: string | null; department: string; designation: string; joined_on: string; exit_on: string | null
   dob: string | null; uan: string | null; esic_ip: string | null; pan: string | null; bank_account: string | null; ifsc: string | null
-  pf_member: boolean; pt_applicable: boolean; lwf_applicable: boolean
+  pf_member: boolean; pt_applicable: boolean; lwf_applicable: boolean; tax_regime: string
 }
 export const EMPLOYEE_COLS = `e.id, e.code, e.name, e.user_id, e.department, e.designation, e.joined_on::text as joined_on, e.exit_on::text as exit_on, e.dob::text as dob,
-  e.uan, e.esic_ip, e.pan, e.bank_account, e.ifsc, e.pf_member, e.pt_applicable, e.lwf_applicable`
+  e.uan, e.esic_ip, e.pan, e.bank_account, e.ifsc, e.pf_member, e.pt_applicable, e.lwf_applicable, e.tax_regime`
 
 export interface Inputs { lopSet: number | null; otSet: number | null; otherEarnings: number; note: string | null }
 export type Line = Record<string, unknown> & { employee_id: string; gross_paise: number; net_paise: number; pf_wages_paise: number; warnings: string[] }
@@ -188,7 +189,17 @@ export async function payLine(t: Db, cfg: PayrollConfig, e: PayEmployee, month: 
 
   if (!e.bank_account || !e.ifsc) warnings.push('No bank account or IFSC: pay by cheque or add them')
   if (cfg.minimum_wage_per_month && grossOf(last) < R(cfg.minimum_wage_per_month)) warnings.push('Monthly pay is below the minimum wage')
-  const tds = 0, otherDeductions = 0
+  // Income tax: the year's tax on the salary projected to March, less what is already deducted, over the months left.
+  const { fy } = fyOf(month)
+  const decl = await declarationOf(t, e.id, fy, e.tax_regime)
+  const after = monthsAfter(cfg, month, e.exit_on)
+  const year = yearFigures(cfg, fy, decl, await paidThisYear(t, e.id, fy, month), { gross, basic: earned.basic, da: earned.da, hra: earned.hra, pt }, { structure: last, months: after.months, ptMonths: after.ptMonths })
+  const tds = Math.min(monthTds(cfg, year, gross, !!e.pan), Math.max(0, gross - pfEmployee - esiEmployee - pt - lwfEmployee))
+  if (!e.pan && year.annualTax > 0) warnings.push(`No PAN: tax deducted at ${cfg.salary_tds.no_pan_rate}% at least`)
+
+  // Salary advances and loans: each month's instalment, oldest first, never more than what is left to pay.
+  const advanceRecovery = Math.min(await advanceDue(t, e.id, mEnd), Math.max(0, gross - pfEmployee - esiEmployee - pt - lwfEmployee - tds))
+  const otherDeductions = advanceRecovery
   const net = gross - pfEmployee - esiEmployee - pt - lwfEmployee - tds - otherDeductions
 
   return {
@@ -202,14 +213,32 @@ export async function payLine(t: Db, cfg: PayrollConfig, e: PayEmployee, month: 
     esi_covered: esiCovered, esi_wages_paise: esiCovered ? gross : 0, esi_employee_paise: esiEmployee, esi_employer_paise: esiEmployer,
     pt_paise: pt, lwf_employee_paise: lwfEmployee, lwf_employer_paise: lwfEmployer, tds_paise: tds, other_deductions_paise: otherDeductions,
     net_paise: net, bonus_provision_paise: bonus, gratuity_provision_paise: gratuity, warnings,
+    advance_recovery_paise: advanceRecovery, tds_detail: year,
   }
+}
+
+/** What each salary advance or loan still has to be recovered, the recoveries in approved payrolls and settlements taken oldest first. */
+export async function advancesOutstanding(t: Db, employeeId: string, upto?: string) {
+  const advances = await t.query<{ id: string; amount_paise: string; instalment_paise: string; issued_on: string; status: string }>(
+    `select id, amount_paise, instalment_paise, issued_on::text, status from salary_advance where employee_id = $1 and status in ('active', 'closed')${upto ? ' and issued_on <= $2' : ''} order by issued_on, requested_at`, upto ? [employeeId, upto] : [employeeId])
+  const [{ r }] = await t.query<{ r: string | null }>(`select sum(l.advance_recovery_paise) as r from payroll_line l join payroll_run p on p.id = l.run_id where l.employee_id = $1 and p.status in ('approved', 'paid')`, [employeeId])
+  const [{ s }] = await t.query<{ s: string | null }>(`select sum((i->>'amount_paise')::bigint) as s from settlement, jsonb_array_elements(items) i where employee_id = $1 and status in ('approved', 'paid') and i->>'key' = 'advance'`, [employeeId])
+  let recovered = Number(r ?? 0) - Number(s ?? 0)          // a settlement's advance line is negative
+  return advances.map((a) => { const take = Math.min(Number(a.amount_paise), recovered); recovered -= take; return { id: a.id, status: a.status, instalment: Number(a.instalment_paise), outstanding: Number(a.amount_paise) - take } })
+}
+/** Advances fully recovered are closed. */
+export async function closeRecovered(t: Db, employeeId: string) {
+  for (const a of await advancesOutstanding(t, employeeId)) if (a.status === 'active' && a.outstanding <= 0) await t.query(`update salary_advance set status = 'closed' where id = $1`, [a.id])
+}
+async function advanceDue(t: Db, employeeId: string, monthEnd: string) {
+  return (await advancesOutstanding(t, employeeId, monthEnd)).reduce((s, a) => s + Math.min(a.instalment, a.outstanding), 0)
 }
 
 export async function saveLine(t: Db, runId: string, l: Line) {
   const cols = Object.keys(l)
   await t.query(`insert into payroll_line (run_id, ${cols.join(', ')}) values ($1, ${cols.map((_, i) => `$${i + 2}`).join(', ')})
     on conflict (run_id, employee_id) do update set ${cols.filter((c) => c !== 'employee_id').map((c) => `${c} = excluded.${c}`).join(', ')}`,
-  [runId, ...cols.map((c) => (c === 'warnings' ? JSON.stringify(l[c]) : l[c]))])
+  [runId, ...cols.map((c) => (c === 'warnings' || c === 'tds_detail' ? JSON.stringify(l[c]) : l[c]))])
 }
 
 /** The EPF admin charges for the month: a share of all members' PF wages, with a monthly minimum. */
@@ -248,10 +277,12 @@ export function duesOf(cfg: PayrollConfig, month: string, totals: Record<string,
     { kind: 'esi', name: 'ESI', amount: totals.esi_employee + totals.esi_employer, due: day(cfg.esi.due_day) },
     { kind: 'pt', name: 'Professional tax', amount: totals.pt, due: day(cfg.professional_tax.due_day) },
     { kind: 'lwf', name: 'Labour welfare fund', amount: totals.lwf_employee + totals.lwf_employer, due: `${Number(month.slice(0, 4)) + 1}-${cfg.labour_welfare_fund.due}` },
+    // Tax deducted from salaries: by the 7th of the next month, 30 April for March.
+    { kind: 'tds', name: 'Salary TDS', amount: totals.tds, due: month.endsWith('-03') ? `${next.slice(0, 4)}-04-30` : day(7) },
   ].filter((d) => d.amount > 0)
 }
 
-export const TOTAL_COLS = ['gross', 'basic', 'da', 'hra', 'conveyance', 'special', 'other', 'overtime', 'other_earnings', 'wages', 'pf_wages', 'pf_employee', 'eps', 'pf_employer', 'edli', 'esi_employee', 'esi_employer', 'pt', 'lwf_employee', 'lwf_employer', 'tds', 'other_deductions', 'net', 'bonus_provision', 'gratuity_provision']
+export const TOTAL_COLS = ['advance_recovery', 'gross', 'basic', 'da', 'hra', 'conveyance', 'special', 'other', 'overtime', 'other_earnings', 'wages', 'pf_wages', 'pf_employee', 'eps', 'pf_employer', 'edli', 'esi_employee', 'esi_employer', 'pt', 'lwf_employee', 'lwf_employer', 'tds', 'other_deductions', 'net', 'bonus_provision', 'gratuity_provision']
 export async function runTotals(t: Db, runId: string) {
   const [r] = await t.query<Record<string, string | null>>(`select count(*)::int as people, ${TOTAL_COLS.map((c) => `sum(${c}_paise) as ${c}`).join(', ')} from payroll_line where run_id = $1`, [runId])
   const [run] = await t.query<{ pf_admin_paise: string }>('select pf_admin_paise from payroll_run where id = $1', [runId])

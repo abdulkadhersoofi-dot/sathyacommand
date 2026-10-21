@@ -2,6 +2,7 @@ import { esc, toast, tonePill } from '../ui/dom'
 import { val } from '../ui/form-modal'
 import type { View, WorkspaceHost } from '../ui/workspace'
 import { money } from '../acc/books'
+import { printPayslips } from './payslip'
 
 // Payroll: a month's run from pay structures, attendance and leave; HR's changes for a person; the GM's
 // check and the MD's approval; payslips, the bank's transfer file, the EPFO and ESIC files, and the
@@ -12,11 +13,14 @@ interface Line { employee_id: string; code: string; name: string; department: st
   lop_set: number | null; ot_set: number | null; other_earnings_paise: number; note: string | null; lop_days: number; ot_hours: number; employed_days: number; paid_days: number; absent_days: number; leave_lop_days: number
   basic_paise: number; da_paise: number; hra_paise: number; conveyance_paise: number; special_paise: number; other_paise: number; overtime_paise: number; gross_paise: number; wages_paise: number
   pf_employee_paise: number; eps_paise: number; pf_employer_paise: number; edli_paise: number; esi_covered: boolean; esi_employee_paise: number; esi_employer_paise: number; pt_paise: number
-  lwf_employee_paise: number; lwf_employer_paise: number; tds_paise: number; other_deductions_paise: number; net_paise: number; net_words: string; bonus_provision_paise: number; gratuity_provision_paise: number; warnings: string[] }
+  lwf_employee_paise: number; lwf_employer_paise: number; tds_paise: number; other_deductions_paise: number; advance_recovery_paise: number; net_paise: number; net_words: string; bonus_provision_paise: number; gratuity_provision_paise: number; warnings: string[] }
 interface Run { id: string; month: string; monthName: string; status: string; days_in_month: number; sent_back_note: string | null; paid_on: string | null; pay_reference: string | null
   lines: Line[]; totals: Record<string, number>; dues: { kind: string; name: string; amount: number; due: string; paid: number }[]; missing: { id: string; code: string; name: string }[]; pendingLeave: number
   people: { createdBy: string | null; submittedBy: string | null; checkedBy: string | null; approvedBy: string | null }; employer: { name: string; address: string }; today: string; banks: { name: string; account_code: string }[] }
 
+interface Compare { uploadedAt: string; by: string; fields: string[]; people: { code: string; name: string; missing: string | null; diffs: { field: string; system: number; theirs: number; diff: number }[]; matched: boolean }[]; matched: number; total: number; allMatch: boolean }
+export interface Advance { id: string; employee_id: string; name: string; code: string; kind: string; amount_paise: number; instalment_paise: number; reason: string; status: string; issued_on: string | null; requested_by: string; decided_by: string | null; outstandingPaise: number }
+export interface Settlement { id: string; employee_id: string; name: string; code: string; last_day: string; items: { key: string; label: string; amount_paise: number; detail: string }[]; net_paise: number; net_words: string; status: string; note: string | null; paid_on: string | null; created_by: string; approved_by: string | null }
 export const PAY_TONE: Record<string, string> = { draft: '--muted', submitted: '--marigold', checked: '--marigold', approved: '--st-vacant', paid: '--st-vacant' }
 const STATUS: Record<string, string> = { draft: 'Draft', submitted: 'With the GM', checked: 'With the MD', approved: 'Approved', paid: 'Paid' }
 const download = (name: string, text: string, type: string) => {
@@ -27,16 +31,28 @@ const download = (name: string, text: string, type: string) => {
 }
 /** Notes explain a figure; warnings need someone to act. */
 const needsLook = (l: Line) => l.warnings.filter((w) => !w.startsWith('Note:'))
+const fyNow = () => { const d = new Date(); const y = d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1; return y }
+const fys = () => [0, 1, 2].map((k) => { const y = fyNow() - k; const v = `${y}-${String((y + 1) % 100).padStart(2, '0')}`; return `<option value="${v}">${v}</option>` }).join('')
+const quarterNow = () => { const m = new Date().getMonth(); return m >= 3 ? Math.floor((m - 3) / 3) + 1 : 4 }
 const lastMonth = () => { const d = new Date(); d.setUTCDate(0); return d.toISOString().slice(0, 7) }
 
 export class PayrollView implements View {
   private runs: RunRow[] = []
   private run: Run | null = null
+  private compare: Compare | null = null
+  private advances: Advance[] = []
+  private settlements: Settlement[] = []
+  private parallel: { months: { month: string; matched: number; total: number; allMatch: boolean }[]; monthsMatched: number; needed: number } | null = null
   private selected: string | null = null
   constructor(private h: WorkspaceHost & { cfg: { departments: Record<string, { name: string }> } }) {}
   async load() {
-    if (this.selected) this.run = await this.h.cached(`/api/payroll/runs/${this.selected}`)
-    else this.runs = await this.h.cached('/api/payroll/runs')
+    if (this.selected) {
+      this.run = await this.h.cached(`/api/payroll/runs/${this.selected}`)
+      this.compare = await this.h.cached(`/api/payroll/runs/${this.selected}/compare`)
+      return
+    }
+    ;[this.runs, this.advances, this.settlements, this.parallel] = await Promise.all([this.h.cached<RunRow[]>('/api/payroll/runs'), this.h.cached<Advance[]>('/api/payroll/advances'),
+      this.h.cached<Settlement[]>('/api/payroll/settlements'), this.h.cached<PayrollView['parallel']>('/api/payroll/parallel')])
   }
   private async reload() { await this.load(); this.h.render() }
   html() { return this.selected && this.run ? this.detail(this.run) : this.list() }
@@ -47,6 +63,36 @@ export class PayrollView implements View {
       <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Month</th><th>Status</th><th class="n">People</th><th class="n">Gross pay</th><th class="n">Net pay</th></tr></thead><tbody>
         ${this.runs.map((r) => `<tr><td><button type="button" class="linkish" data-run="${esc(r.id)}">${esc(new Date(`${r.month}-01T00:00:00Z`).toLocaleDateString('en-IN', { month: 'long', year: 'numeric', timeZone: 'UTC' }))}</button></td>
           <td>${tonePill(STATUS[r.status] ?? r.status, PAY_TONE[r.status] ?? '--muted')}</td><td class="n">${r.people}</td><td class="n">${money(r.grossPaise)}</td><td class="n">${money(r.netPaise)}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">No payroll run yet.</td></tr>'}
+      </tbody></table></div>
+      ${this.requests()}
+      <div class="sec-title">Returns and the parallel run</div>
+      <div class="ws-toolbar">${this.h.can('payroll.run', 'payroll.pay', 'payroll.view') ? `<label class="inline">24Q for <select data-q24fy>${fys()}</select><select data-q24q>${[1, 2, 3, 4].map((q) => `<option value="${q}" ${q === quarterNow() ? 'selected' : ''}>Q${q}</option>`).join('')}</select></label><button type="button" class="btn" data-pr="24q">Download 24Q figures</button>` : ''}</div>
+      ${this.parallel ? `<p class="small">${this.parallel.monthsMatched >= this.parallel.needed ? tonePill('Parallel run done', '--st-vacant') : tonePill(`Parallel run: ${this.parallel.monthsMatched} of ${this.parallel.needed} months matched`, '--marigold')}
+        ${this.parallel.months.map((m) => ` · ${esc(m.month)}: ${m.matched} of ${m.total} people match`).join('')}</p><p class="muted small">Open a month and use <b>Compare with current payroll</b> to put the figures from today's payroll beside the system's.</p>` : ''}`
+  }
+
+  private requests() {
+    const h = this.h
+    const adv = this.advances.filter((a) => ['pending', 'approved'].includes(a.status))
+    const fnf = this.settlements.filter((s) => ['draft', 'approved'].includes(s.status))
+    if (!adv.length && !fnf.length) return ''
+    return `<div class="sec-title">Waiting</div>
+      ${adv.map((a) => `<div class="row-card"><div class="rc-title">Salary ${esc(a.kind)} · ${esc(a.name)} <small class="muted mono">${esc(a.code)}</small> · ${money(a.amount_paise)}</div>
+        <div class="rc-sub">${money(a.instalment_paise)} a month · ${esc(a.reason)} · asked by ${esc(a.requested_by)}</div>
+        <div class="rc-right">${a.status === 'pending' ? (h.can('payroll.approve') ? `<button type="button" class="btn small primary" data-adv="${esc(a.id)}|approve">Approve</button><button type="button" class="btn small" data-adv="${esc(a.id)}|reject">Turn down</button>` : tonePill('With the GM', '--marigold'))
+          : h.can('payroll.pay') ? `<button type="button" class="btn small primary" data-adv="${esc(a.id)}|issue">Paid…</button>` : tonePill('To be paid by accounts', '--marigold')}</div></div>`).join('')}
+      ${fnf.map((x) => `<div class="row-card"><div class="rc-title">Full and final · ${esc(x.name)} <small class="muted mono">${esc(x.code)}</small> · ${money(x.net_paise)}</div>
+        <div class="rc-sub">last day ${esc(x.last_day)} · ${x.items.map((i) => `${esc(i.label)} ${money(i.amount_paise)}`).join(' · ')}</div>
+        <div class="rc-right">${x.status === 'draft' ? (h.can('payroll.approve') ? `<button type="button" class="btn small primary" data-fnf="${esc(x.id)}|approve">Approve</button>` : tonePill('With the GM', '--marigold')) + (h.can('payroll.run') ? `<button type="button" class="btn small ghost" data-fnf="${esc(x.id)}|cancel">Cancel</button>` : '')
+          : x.net_paise > 0 && h.can('payroll.pay') ? `<button type="button" class="btn small primary" data-fnf="${esc(x.id)}|pay">Paid…</button>` : tonePill(x.net_paise > 0 ? 'To be paid' : 'They owe the resort', '--marigold')}</div></div>`).join('')}`
+  }
+
+  private compared(c: Compare) {
+    return `<div class="sec-title">Compared with the current payroll ${c.allMatch ? tonePill('Every figure matches', '--st-vacant') : tonePill(`${c.matched} of ${c.total} people match`, '--marigold')}</div>
+      <p class="muted small">Uploaded by ${esc(c.by)} · within ₹1 counts as a match.</p>
+      <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Code</th><th>Name</th>${c.fields.map((f) => `<th class="n">${esc(f.toUpperCase())}</th>`).join('')}<th></th></tr></thead><tbody>
+        ${c.people.filter((p) => !p.matched).map((p) => `<tr><td class="mono">${esc(p.code)}</td><td>${esc(p.name)}</td>${p.missing ? `<td colspan="${c.fields.length}" class="fd-warn">${esc(p.missing)}</td>`
+          : c.fields.map((f) => { const d = p.diffs.find((x) => x.field === f)!; return `<td class="n">${Math.abs(d.diff) > 100 ? `<span class="fd-warn" title="system ${money(d.system)}, current ${money(d.theirs)}">${d.diff > 0 ? '+' : ''}${money(d.diff)}</span>` : '✓'}</td>` }).join('')}<td></td></tr>`).join('') || `<tr><td colspan="${c.fields.length + 3}" class="empty">Everyone matches.</td></tr>`}
       </tbody></table></div>`
   }
 
@@ -64,6 +110,7 @@ export class PayrollView implements View {
     if (r.status === 'paid' && h.can('payroll.pay')) acts.push(btn('bank', 'Bank transfer file'))
     if (h.can('payroll.run', 'payroll.pay')) acts.push(btn('ecr', 'EPFO ECR file'), btn('esi', 'ESIC file'))
     acts.push(btn('slips', 'Payslips'))
+    if (h.can('payroll.run', 'payroll.view')) acts.push(btn('compare', 'Compare with current payroll'))
     const who = [r.people.createdBy && `prepared by ${r.people.createdBy}`, r.people.submittedBy && `submitted by ${r.people.submittedBy}`, r.people.checkedBy && `checked by ${r.people.checkedBy}`, r.people.approvedBy && `approved by ${r.people.approvedBy}`,
       r.paid_on && `paid on ${r.paid_on}${r.pay_reference ? ` (${r.pay_reference})` : ''}`].filter(Boolean).join(' · ')
     const warned = r.lines.filter((l) => needsLook(l).length).length
@@ -82,7 +129,8 @@ export class PayrollView implements View {
         ${r.lines.map((l) => `<tr${needsLook(l).length ? ' class="pay-warn"' : ''}><td class="mono">${esc(l.code)}</td><td><button type="button" class="linkish" data-pl="${esc(l.employee_id)}">${esc(l.name)}</button>${needsLook(l).length ? ` <span class="fd-warn" title="${esc(needsLook(l).join('\n'))}">⚠</span>` : ''}</td><td>${esc(dep(l.department))}</td>
           <td class="n">${l.paid_days}${l.lop_days ? ` <small class="muted">(${l.lop_days} LOP)</small>` : ''}</td><td class="n">${l.ot_hours ? `${l.ot_hours} h` : ''}</td><td class="n">${money(l.gross_paise)}</td><td class="n">${money(l.pf_employee_paise)}</td>
           <td class="n">${l.esi_covered ? money(l.esi_employee_paise) : '—'}</td><td class="n">${l.pt_paise ? money(l.pt_paise) : ''}</td><td class="n">${l.lwf_employee_paise ? money(l.lwf_employee_paise) : ''}</td><td class="n"><b>${money(l.net_paise)}</b></td></tr>`).join('') || '<tr><td colspan="11" class="empty">Nobody.</td></tr>'}
-      </tbody><tfoot><tr><td colspan="5">Total</td><td class="n">${money(t.gross)}</td><td class="n">${money(t.pf_employee)}</td><td class="n">${money(t.esi_employee)}</td><td class="n">${money(t.pt)}</td><td class="n">${money(t.lwf_employee)}</td><td class="n"><b>${money(t.net)}</b></td></tr></tfoot></table></div>`
+      </tbody><tfoot><tr><td colspan="5">Total</td><td class="n">${money(t.gross)}</td><td class="n">${money(t.pf_employee)}</td><td class="n">${money(t.esi_employee)}</td><td class="n">${money(t.pt)}</td><td class="n">${money(t.lwf_employee)}</td><td class="n"><b>${money(t.net)}</b></td></tr></tfoot></table></div>
+      ${this.compare ? this.compared(this.compare) : ''}`
   }
 
   private lineDetail(r: Run, l: Line) {
@@ -99,23 +147,6 @@ export class PayrollView implements View {
         <p class="muted small">Leave blank to use what attendance and leave say.</p>` : ''}`
   }
 
-  private payslips(r: Run) {
-    const rows = (pairs: [string, number][]) => pairs.filter(([, v]) => v).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="n">${(v / 100).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td></tr>`).join('')
-    const slip = (l: Line) => `<section class="slip"><header><b>${esc(r.employer.name)}</b><div>${esc(r.employer.address)}</div><h2>Payslip for ${esc(r.monthName)}</h2></header>
-      <table class="who"><tr><td>Name</td><td>${esc(l.name)}</td><td>Code</td><td>${esc(l.code)}</td></tr><tr><td>Designation</td><td>${esc(l.designation)}</td><td>Department</td><td>${esc(this.h.cfg.departments[l.department]?.name ?? l.department)}</td></tr>
-        <tr><td>UAN</td><td>${esc(l.uan ?? '—')}</td><td>ESIC IP</td><td>${esc(l.esic_ip ?? '—')}</td></tr><tr><td>PAN</td><td>${esc(l.pan ?? '—')}</td><td>Bank</td><td>${esc(l.bank_account ? `••••${l.bank_account.slice(-4)}` : '—')}</td></tr>
-        <tr><td>Days in month</td><td>${r.days_in_month}</td><td>Paid days</td><td>${l.paid_days}${l.lop_days ? ` (leave without pay ${l.lop_days})` : ''}</td></tr></table>
-      <div class="cols"><table><thead><tr><th>Earnings</th><th class="n">₹</th></tr></thead>${rows([['Basic', l.basic_paise], ['DA', l.da_paise], ['HRA', l.hra_paise], ['Conveyance', l.conveyance_paise], ['Special allowance', l.special_paise], ['Other allowance', l.other_paise], [`Overtime (${l.ot_hours} h)`, l.overtime_paise], [l.note ?? 'Other earnings', l.other_earnings_paise]])}<tr class="t"><td>Gross</td><td class="n">${(l.gross_paise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td></tr></table>
-        <table><thead><tr><th>Deductions</th><th class="n">₹</th></tr></thead>${rows([['Provident fund', l.pf_employee_paise], ['ESI', l.esi_employee_paise], ['Professional tax', l.pt_paise], ['Labour welfare fund', l.lwf_employee_paise], ['Income tax', l.tds_paise]])}<tr class="t"><td>Total</td><td class="n">${((l.gross_paise - l.net_paise) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td></tr></table></div>
-      <p class="net">Net pay ₹${(l.net_paise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2 })} · ${esc(l.net_words)}</p>
-      <p class="foot">Employer's PF ${(l.eps_paise + l.pf_employer_paise) / 100} (pension ${l.eps_paise / 100}) · ESI ${l.esi_employer_paise / 100}. Computer-generated; no signature needed.</p></section>`
-    const w = window.open('', '_blank')
-    if (!w) { toast('Allow pop-ups to print the payslips.'); return }
-    w.document.write(`<!doctype html><title>Payslips ${esc(r.month)}</title><style>body{font:12px system-ui;margin:16px;color:#111}.slip{border:1px solid #333;padding:10px 14px;margin-bottom:14px;page-break-inside:avoid}header{text-align:center}h2{font-size:14px;margin:6px 0}table{border-collapse:collapse;width:100%}td,th{padding:3px 6px;border-bottom:1px solid #ddd;text-align:left}.n{text-align:right}.who td:nth-child(odd){color:#555;width:16%}.cols{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px}.t td{font-weight:700;border-top:1px solid #333}.net{font-size:14px;font-weight:700;margin:10px 0 4px}.foot{color:#555;font-size:11px;margin:0}@media print{.slip{page-break-after:always}}</style>
-      ${r.lines.map(slip).join('')}<script>print()</script>`)
-    w.document.close()
-  }
-
   async click(el: HTMLElement) {
     const api = this.h.api
     const runId = el.closest<HTMLElement>('[data-run]')?.dataset.run
@@ -129,8 +160,44 @@ export class PayrollView implements View {
       toast(r.missing.length ? `${r.missing.length} without a pay structure left out` : 'Worked out: check each person, then submit')
       return true
     }
+    if (a === '24q') {
+      const root = document.querySelector('.ws:not([hidden])')!
+      const fy = root.querySelector<HTMLSelectElement>('[data-q24fy]')!.value, q = root.querySelector<HTMLSelectElement>('[data-q24q]')!.value
+      download(`24Q_${fy}_Q${q}.csv`, await api.req<string>('GET', `/api/payroll/24q?fy=${fy}&quarter=${q}&format=csv`), 'text/csv'); return false
+    }
+    const adv = el.closest<HTMLElement>('[data-adv]')?.dataset.adv
+    if (adv) {
+      const [id, what] = adv.split('|')
+      if (what !== 'issue') { await api.post(`/api/payroll/advances/${id}/decide`, { decision: what }); toast(what === 'approve' ? 'Approved: accounts pays it' : 'Turned down'); await this.load(); return true }
+      const x = this.advances.find((y) => y.id === id)!
+      this.h.modal.open(`Salary ${x.kind} to ${x.name} paid`, `<p class="muted small">${money(x.amount_paise)}, recovered at ${money(x.instalment_paise)} a month from the payroll.</p><div class="form-grid"><label>Paid on<input name="on" type="date" value="${new Date().toISOString().slice(0, 10)}"></label><label>Reference<input name="ref" maxlength="80"></label></div>`, 'Save', async (f) => {
+        await api.post(`/api/payroll/advances/${id}/issue`, { issuedOn: val(f, 'on'), reference: val(f, 'ref') }); await this.reload(); return 'Recorded'
+      })
+      return false
+    }
+    const fnf = el.closest<HTMLElement>('[data-fnf]')?.dataset.fnf
+    if (fnf) {
+      const [id, what] = fnf.split('|')
+      if (what !== 'pay') { await api.post(`/api/payroll/settlements/${id}/${what}`); toast(what === 'approve' ? 'Approved and posted' : 'Cancelled'); await this.load(); return true }
+      const x = this.settlements.find((y) => y.id === id)!
+      this.h.modal.open(`Settlement paid to ${x.name}`, `<p class="muted small">${money(x.net_paise)} · ${esc(x.net_words)}</p><div class="form-grid"><label>Paid on<input name="on" type="date" value="${new Date().toISOString().slice(0, 10)}"></label><label>Reference<input name="ref" maxlength="80"></label></div>`, 'Save', async (f) => {
+        await api.post(`/api/payroll/settlements/${id}/pay`, { paidOn: val(f, 'on'), reference: val(f, 'ref') }); await this.reload(); return 'Recorded'
+      })
+      return false
+    }
     const r = this.run
     if (!r) return false
+    if (a === 'compare') {
+      this.h.modal.open(`Compare ${r.monthName} with the current payroll`, `<p class="muted small">Paste the month from the payroll the resort runs today as CSV, or choose its file. A header row with <b>code</b> and <b>net</b>, and any of gross, pf, esi, pt, lwf, tds (in rupees):</p>
+        <pre class="small muted">code,gross,pf,esi,pt,lwf,tds,net\nE0001,16000,1080,120,1250,0,0,13550</pre>
+        <div class="form-grid"><label class="span2">File<input type="file" name="file" accept=".csv,text/csv"></label><label class="span2">Or paste<textarea name="csv" rows="6"></textarea></label></div>`, 'Compare', async (f) => {
+        const file = (f.elements.namedItem('file') as HTMLInputElement).files?.[0]
+        const csv = file ? await file.text() : val(f, 'csv')
+        this.compare = await api.post<Compare>(`/api/payroll/runs/${r.id}/compare`, { csv }); this.h.render()
+        return this.compare.allMatch ? 'Every figure matches' : `${this.compare.matched} of ${this.compare.total} people match`
+      })
+      return false
+    }
     const base = `/api/payroll/runs/${r.id}`
     const step = async (path: string, msg: string) => { await api.post(`${base}/${path}`); toast(msg); await this.load(); return true }
     if (a === 'recalc') { const x = await api.post<{ missing: unknown[] }>(`${base}/recalculate`); toast(`Worked out again${x.missing.length ? `; ${x.missing.length} without a pay structure` : ''}`); await this.load(); return true }
@@ -144,7 +211,7 @@ export class PayrollView implements View {
     if (a === 'ecr') { download(`ECR_${r.month}.txt`, await api.req<string>('GET', `${base}/ecr`), 'text/plain'); return false }
     if (a === 'esi') { download(`ESI_${r.month}.csv`, await api.req<string>('GET', `${base}/esi`), 'text/csv'); return false }
     if (a === 'bank') { download(`Salaries_${r.month}.csv`, await api.req<string>('GET', `${base}/bank`), 'text/csv'); return false }
-    if (a === 'slips') { this.payslips(r); return false }
+    if (a === 'slips') { printPayslips(r.lines.map((l) => ({ ...l, monthName: r.monthName, days_in_month: r.days_in_month, department: this.h.cfg.departments[l.department]?.name ?? l.department })), r.employer, `Payslips ${r.month}`); return false }
     const bankSel = () => r.banks.length > 1 ? `<label>From<select name="bank">${r.banks.map((b) => `<option value="${esc(b.account_code)}">${esc(b.name)}</option>`).join('')}</select></label>` : ''
     const noBank = r.lines.filter((l) => !l.bank_account || !l.ifsc)
     if (a === 'pay') this.h.modal.open(`Salaries for ${r.monthName} paid`, `<p class="muted small">${money(r.totals.net)} to ${r.lines.length} people: by the bank transfer file${noBank.length ? `, and by cheque to ${noBank.map((l) => esc(l.name)).join(', ')} (no bank account)` : ''}.</p><div class="form-grid"><label>Paid on<input name="on" type="date" value="${esc(r.today)}"></label>${bankSel()}<label class="span2">Bank reference<input name="ref" maxlength="80"></label></div>`, 'Save', async (f) => {

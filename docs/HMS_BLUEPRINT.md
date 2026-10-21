@@ -790,7 +790,7 @@ Status and steps: [Phase 7 plan](phase-7/README.md). Steps 7.1 (banquets: venue 
 
 ### Phase 8 · HR & payroll Weeks 41–46
 
-Status and steps: [Phase 8 plan](phase-8/README.md). Steps 8.1 (employee records, pay structures, onboarding, ID cards, leave with approval on the phone, holidays, training) and 8.2 (the monthly payroll from attendance and leave with PF, ESI, professional tax and welfare fund, GM check and MD approval, payslips, bank, ECR and ESIC files, the books, statutory dues) are built; salary TDS, Form 16, advances, settlements and the parallel run (8.3) follow.
+Status and steps: [Phase 8 plan](phase-8/README.md). Steps 8.1 (employee records, pay structures, onboarding, ID cards, leave with approval on the phone, holidays, training) and 8.2 (the monthly payroll from attendance and leave with PF, ESI, professional tax and welfare fund, GM check and MD approval, payslips, bank, ECR and ESIC files, the books, statutory dues) and 8.3 (salary TDS with declarations, 24Q figures, Form 16, advances and loans, full and final settlement, payslips and tax in the staff app, the parallel-run comparison) are built: every step of Phase 8. The done-when needs two real months run beside the current payroll.
 
 - Employee records, rosters, leave
 - Payroll with PF, ESI, professional tax, labour welfare fund and salary TDS

@@ -917,3 +917,10 @@ button.link { background: none; border: 0; padding: 0; color: var(--accent); fon
 .pay-table tfoot td { font-weight: 700; border-top: 2px solid var(--line); }
 .pay-table tr.pay-warn td:first-child { box-shadow: inset 3px 0 0 var(--marigold); }
 .ws-toolbar label.inline { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
+/* Two-column rows keep their columns on a phone, where the generic row grid narrows the first column. */
+@media (max-width: 640px) {
+  .m-table > .m-row.pay-kv:not(.m-row-fc) { grid-template-columns: minmax(0, 1fr) auto; }
+  .m-table > .m-row.ml-hol:not(.m-row-fc) { grid-template-columns: 110px minmax(0, 1fr); }
+  .m-table > .m-row.hr-hol:not(.m-row-fc) { grid-template-columns: 96px minmax(0, 1fr) auto; }
+  .m-table > .m-row.hr-hol:not(.m-row-fc) > :nth-child(5) { display: block; }
+}

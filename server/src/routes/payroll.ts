@@ -7,7 +7,7 @@ import { newId } from '../eng-core'
 import { businessDate } from '../fo-core'
 import { loadPayrollConfig, monthEndOf, type PayrollConfig } from '../hr'
 import { defaultBankCode, postPending } from '../ledger'
-import { calculate, duesOf, EMPLOYEE_COLS, payLine, pfAdmin, runTotals, saveLine, type PayEmployee } from '../payroll'
+import { calculate, closeRecovered, duesOf, EMPLOYEE_COLS, payLine, pfAdmin, runTotals, saveLine, type PayEmployee } from '../payroll'
 import { requireCaller } from './auth'
 
 // The monthly payroll. HR runs it for a month (worked out from pay structures, attendance and leave), may set
@@ -179,6 +179,7 @@ export function payrollRoutes(app: FastifyInstance, ctx: Ctx, cfg: PayrollConfig
       const r = await load(t, idOf(req), true)
       inStatus(r, 'submitted', 'checked')
       await t.query(`update payroll_run set status = 'approved', approved_by = $2, approved_at = $3 where id = $1`, [r.id, who.userId, now()])
+      for (const { employee_id } of await t.query<{ employee_id: string }>('select employee_id from payroll_line where run_id = $1 and advance_recovery_paise > 0', [r.id])) await closeRecovered(t, employee_id)
       await audit(t, who, 'payroll.approved', r, { totals: await runTotals(t, r.id), gmChecked: r.status === 'checked' })
       return { ok: true }
     })
@@ -232,12 +233,12 @@ export function payrollRoutes(app: FastifyInstance, ctx: Ctx, cfg: PayrollConfig
     const who = await need(req, 'payroll.pay')
     const b = (req.body ?? {}) as { month?: string; kind?: string; amount?: number; paidOn?: string; reference?: string; bankCode?: string }
     if (!MONTH.test(b.month ?? '')) throw new HttpError(400, 'Month as YYYY-MM.')
-    if (!['pf', 'esi', 'pt', 'lwf'].includes(b.kind ?? '')) throw new HttpError(400, 'pf, esi, pt or lwf.')
+    if (!['pf', 'esi', 'pt', 'lwf', 'tds'].includes(b.kind ?? '')) throw new HttpError(400, 'pf, esi, pt, lwf or tds.')
     const amount = Math.round(Number(b.amount) * 100)
     if (!(amount > 0)) throw new HttpError(400, 'The amount paid.')
     if (!DATE.test(b.paidOn ?? '')) throw new HttpError(400, 'The date it was paid.')
     const reference = str(b.reference, 60)
-    if (!reference) throw new HttpError(400, b.kind === 'pf' ? 'The TRRN from the EPFO challan.' : 'The challan or receipt number.')
+    if (!reference) throw new HttpError(400, b.kind === 'pf' ? 'The TRRN from the EPFO challan.' : b.kind === 'tds' ? 'The challan: BSR code, date and serial number.' : 'The challan or receipt number.')
     const res = await db.tx(async (t) => {
       const [r] = await t.query<{ id: string }>(`select id from payroll_run where month = $1 and status in ('approved', 'paid')`, [b.month])
       if (!r) throw new HttpError(409, `The payroll for ${monthName(b.month!)} is not approved yet.`)

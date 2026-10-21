@@ -117,6 +117,8 @@ gratuity:
 # Salary TDS (Income-tax Act, 2025, from 1 April 2026). Annual slabs, ₹. CA check
 salary_tds:
   cess_percent: 4
+  no_pan_rate: 20                   # at least this % of the month's pay when the employee has given no PAN
+  hra_metro: false                  # HRA exemption at 40% of basic and DA outside the four metro cities
   new:
     standard_deduction: 75000
     slabs: [{ up_to: 400000, rate: 0 }, { up_to: 800000, rate: 5 }, { up_to: 1200000, rate: 10 }, { up_to: 1600000, rate: 15 }, { up_to: 2000000, rate: 20 }, { up_to: 2400000, rate: 25 }, { up_to: null, rate: 30 }]
@@ -127,5 +129,11 @@ salary_tds:
     rebate_income_up_to: 500000
     rebate_max: 12500
     deduction_caps: { section_80c: 150000, section_80d: 25000, home_loan_interest: 200000 }
+
+# Full and final settlement. CA check
+settlement:
+  leave_encashment_days_divisor: 26   # a day's pay for each earned leave day left: (basic + DA) / 26
+  gratuity_days_per_year: 15          # 15 days' wages for each completed year (six months or more counts as a year)
+  gratuity_days_divisor: 26
 
 minimum_wage_per_month: null      # Tamil Nadu hotels and restaurants schedule, by class of work: HR to fill

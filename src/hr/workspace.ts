@@ -7,7 +7,9 @@ import { val } from '../ui/form-modal'
 import { Workspace, type View, type WorkspaceHost } from '../ui/workspace'
 import { money } from '../acc/books'
 import { LEAVE_TONE } from '../staff/leave'
-import { PayrollView } from './payroll'
+import { PAY_TONE, PayrollView, type Advance, type Settlement } from './payroll'
+import { printForm16, type Form16 } from './payslip'
+import { declarationBody, declarationForm, fyOptions, taxSummary, type TaxView } from './tax'
 
 // People: employee records (pay structure, statutory IDs, onboarding, documents, training, leaving), the
 // monthly payroll, leave waiting for approval, the holiday calendar and certificates running out.
@@ -32,9 +34,16 @@ class PeopleView implements View {
   selected: string | null = null
   private rows: Row[] = []
   private d: Detail | null = null
+  private advances: Advance[] = []
+  private settlements: Settlement[] = []
   private q = ''
   constructor(private h: Host) {}
-  async load() { if (this.selected) this.d = await this.h.cached(`/api/hr/employees/${this.selected}`); else this.rows = await this.h.cached('/api/hr/employees') }
+  private payroll() { return this.h.can('payroll.run', 'payroll.view', 'payroll.approve', 'payroll.pay', 'hr.manage') }
+  async load() {
+    if (!this.selected) { this.rows = await this.h.cached('/api/hr/employees'); return }
+    this.d = await this.h.cached(`/api/hr/employees/${this.selected}`)
+    if (this.payroll()) [this.advances, this.settlements] = await Promise.all([this.h.cached<Advance[]>(`/api/payroll/advances?employeeId=${this.selected}`), this.h.cached<Settlement[]>(`/api/payroll/settlements?employeeId=${this.selected}`)])
+  }
   private async reload() { await this.load(); this.h.render() }
   html() { return this.selected && this.d ? this.detail(this.d) : this.list() }
   onInput(el: HTMLElement) { if (el.matches('[data-hrq]')) { this.q = (el as HTMLInputElement).value; this.h.render() } }
@@ -57,6 +66,8 @@ class PeopleView implements View {
     const kv = (k: string, v: unknown) => `<dt>${esc(k)}</dt><dd>${v == null || v === '' ? '<span class="muted">—</span>' : esc(v)}</dd>`
     return `<div class="ws-toolbar"><button type="button" class="btn ghost" data-hr="back">← Everyone</button>
         ${manage ? '<button type="button" class="btn" data-hr="edit">Edit</button><button type="button" class="btn" data-hr="salary">Pay structure</button><button type="button" class="btn" data-hr="training">Add training</button><button type="button" class="btn" data-hr="grant">Grant leave</button>' : ''}
+        ${this.payroll() ? '<button type="button" class="btn" data-hr="tax">Income tax</button><button type="button" class="btn" data-hr="form16">Form 16</button>' : ''}${this.h.can('payroll.run', 'hr.manage') && d.status !== 'exited' ? '<button type="button" class="btn" data-hr="advance">Salary advance…</button>' : ''}
+        ${this.h.can('payroll.run') && d.exit_on && !this.settlements.length ? '<button type="button" class="btn" data-hr="fnf">Full and final…</button>' : ''}
         <button type="button" class="btn" data-hr="idcard">ID card</button>${manage && d.status !== 'exited' ? '<button type="button" class="btn ghost" data-hr="exit">Leaving…</button>' : ''}</div>
       <div class="bq-head"><div><div class="muted mono small">${esc(d.code)} · ${esc(d.departmentName)}</div><h2>${esc(d.name)}</h2><div class="small">${esc(d.designation)} · ${esc(d.employment_type.replace('_', ' '))} · joined ${esc(d.joined_on)}${d.exit_on ? ` · last day ${esc(d.exit_on)} (${esc(d.exit_reason ?? '')})` : ''}</div></div>
         <div class="rc-right">${d.status !== 'active' ? tonePill(d.status === 'notice' ? 'Serving notice' : 'Left', '--marigold') : ''}${d.user_id ? tonePill('Uses the app', '--st-vacant') : ''}</div></div>
@@ -71,6 +82,9 @@ class PeopleView implements View {
       <div class="hr-checks">${d.onboarding.map((o) => `<label class="check"><input type="checkbox" data-onb="${esc(o.item)}" ${o.done_at ? 'checked' : ''} ${manage ? '' : 'disabled'}> ${esc(o.item)}${o.by ? ` <small class="muted">${esc(o.by)}</small>` : ''}</label>`).join('')}</div>
       <div class="sec-title">Training</div>
       <div class="m-table">${d.training.map((t) => `<div class="m-row bq-ins"><span>${esc(t.done_on)}</span><span>${esc(t.title)}${t.valid_until ? ` · valid to ${esc(t.valid_until)}${t.valid_until < d.today ? ' <b class="fd-warn">lapsed</b>' : ''}` : ''}</span></div>`).join('') || '<p class="empty">None recorded.</p>'}</div>
+      ${this.settlements.map((x) => `<div class="sec-title">Full and final settlement ${tonePill(x.status, PAY_TONE[x.status === 'draft' ? 'submitted' : x.status] ?? '--muted')}</div>
+        <div class="m-table">${x.items.map((i) => `<div class="m-row pay-kv"><span>${esc(i.label)}${i.detail ? ` <small class="muted">${esc(i.detail)}</small>` : ''}</span><span class="mono">${money(i.amount_paise)}</span></div>`).join('')}<div class="m-row pay-kv"><b>${x.net_paise >= 0 ? 'Due to them' : 'They owe'}</b><b class="mono">${money(Math.abs(x.net_paise))}</b></div></div>`).join('')}
+      ${this.advances.length ? `<div class="sec-title">Salary advances and loans</div><div class="m-table">${this.advances.map((a) => `<div class="m-row pay-kv"><span>${esc(a.kind)} of ${money(a.amount_paise)}, ${money(a.instalment_paise)} a month · ${esc(a.reason)}${a.issued_on ? ` · paid ${esc(a.issued_on)}` : ''}</span><span>${a.status === 'active' ? `<span class="mono">${money(a.outstandingPaise)}</span> left` : tonePill(a.status, a.status === 'closed' ? '--muted' : '--marigold')}</span></div>`).join('')}</div>` : ''}
       <div class="sec-title">Leave taken and asked for</div>
       <div class="m-table">${d.leave.applications.map((a) => `<div class="m-row bq-ins"><span>${esc(a.from_date)}</span><span>${esc(this.h.cfg.leaveTypes[a.leave_type]?.name ?? a.leave_type)}, ${Number(a.days)} days ${tonePill(a.status, LEAVE_TONE[a.status])}</span></div>`).join('') || '<p class="empty">None.</p>'}</div>`
   }
@@ -140,6 +154,38 @@ class PeopleView implements View {
     })
     if (a === 'exit') this.h.modal.open(`${d.name} is leaving`, `<div class="form-grid"><label>Last working day<input name="day" type="date"></label><label>Reason<select name="why">${opt([['Resigned', 'Resigned'], ['Retired', 'Retired'], ['Contract ended', 'Contract ended'], ['Dismissed', 'Dismissed'], ['Absconding', 'Absconding'], ['Deceased', 'Deceased']])}</select></label></div>
         <p class="muted small">The full and final settlement is worked out in payroll.</p>`, 'Save', async (f) => { await api.post(`${base}/exit`, { lastDay: val(f, 'day'), reason: val(f, 'why') }); await this.reload(); return 'Saved' })
+    if (a === 'tax') {
+      const tv = await api.get<TaxView>(`/api/payroll/declarations/${d.id}`)
+      const hr = this.h.can('payroll.run', 'hr.manage')
+      this.h.modal.open(`Income tax ${tv.fy} · ${d.name}`, taxSummary(tv) + (hr ? declarationBody(tv, true) : ''), hr ? 'Save' : 'Done', async (f) => {
+        if (!hr) return ''
+        await api.req('PUT', `/api/payroll/declarations/${d.id}`, declarationForm(f, tv.fy, true)); return 'Saved: next month\'s tax follows it'
+      })
+    }
+    if (a === 'form16') {
+      this.h.modal.open(`Form 16 Part B · ${d.name}`, `<div class="form-grid"><label>Year<select name="fy">${fyOptions()}</select></label></div>`, 'Open', async (f) => {
+        printForm16(await api.get<Form16>(`/api/payroll/form16/${d.id}?fy=${val(f, 'fy')}`)); return ''
+      })
+    }
+    if (a === 'advance') this.h.modal.open(`Salary advance or loan for ${d.name}`, `<div class="form-grid"><label>Kind<select name="kind"><option value="advance">Advance</option><option value="loan">Loan</option></select></label><label>Amount (₹)<input name="amt" type="number" min="1"></label>
+        <label>Recovered a month (₹)<input name="inst" type="number" min="1"></label><label>For<input name="why" maxlength="200" placeholder="School fees, medical…"></label></div>
+        <p class="muted small">Above your limit it waits for the GM; accounts pays it and the payroll recovers it each month.</p>`, 'Ask', async (f) => {
+      const x = await api.post<{ status: string }>('/api/payroll/advances', { employeeId: d.id, kind: val(f, 'kind'), amount: Number(val(f, 'amt')), instalment: Number(val(f, 'inst')), reason: val(f, 'why') })
+      await this.reload(); return x.status === 'pending' ? 'Sent to the GM' : 'Approved: accounts pays it'
+    })
+    if (a === 'fnf') {
+      const body = (p?: { items: Settlement['items']; netPaise: number }) => `${p ? `<div class="m-table">${p.items.map((i) => `<div class="m-row pay-kv"><span>${esc(i.label)}${i.detail ? ` <small class="muted">${esc(i.detail)}</small>` : ''}</span><span class="mono">${money(i.amount_paise)}</span></div>`).join('')}
+          <div class="m-row pay-kv"><b>${p.netPaise >= 0 ? 'Due to them' : 'They owe'}</b><b class="mono">${money(Math.abs(p.netPaise))}</b></div></div>` : ''}
+        <p class="muted small">Their last month's pay comes in that month's payroll. Add what else is owed either way:</p>
+        <div class="form-grid"><label>Notice not served (₹ to recover)<input name="notice" type="number" min="0"></label><span></span><label>Other<input name="olabel" maxlength="120" placeholder="Uniform not returned"></label><label>Amount (₹, minus to recover)<input name="oamt" type="number"></label>
+        <label class="span2">Note<input name="note" maxlength="300"></label></div>`
+      const preview = await api.post<{ items: Settlement['items']; netPaise: number }>('/api/payroll/settlements/preview', { employeeId: d.id })
+      this.h.modal.open(`Full and final · ${d.name}`, body(preview), 'Prepare for approval', async (f) => {
+        const other = val(f, 'olabel') ? [{ label: val(f, 'olabel'), amount: Number(val(f, 'oamt') || 0) }] : []
+        const x = await api.post<{ netPaise: number }>('/api/payroll/settlements', { employeeId: d.id, notice: Number(val(f, 'notice') || 0), other, note: val(f, 'note') })
+        await this.reload(); return `${money(x.netPaise)}: sent for approval`
+      })
+    }
     if (a === 'idcard') {
       const q = qrcode(0, 'M'); q.addData(`SATHYA-EMP:${d.code}`); q.make()
       const w = window.open('', '_blank')

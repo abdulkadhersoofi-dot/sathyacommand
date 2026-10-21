@@ -5,6 +5,7 @@ import { Workspace, type View } from '../ui/workspace'
 import { t } from './i18n'
 import { LoginsView } from './logins'
 import { MyLeaveView } from './leave'
+import { MyPayView } from './pay'
 import { RostersView, StaffSettingsView } from './rosters'
 import { MyAttendanceView, TeamView } from './team'
 import { MessagesView, TodayView, type StaffHost } from './today'
@@ -13,7 +14,7 @@ import { Tracker } from './tracker'
 // The staff app, the same on a phone and a desk: clock in and out, SOS, the person's work and messages,
 // their own attendance; for managers the team on duty, rosters and the resort boundary.
 
-type Tab = 'today' | 'messages' | 'mine' | 'leave' | 'team' | 'rosters' | 'settings' | 'logins'
+type Tab = 'today' | 'messages' | 'mine' | 'leave' | 'pay' | 'team' | 'rosters' | 'settings' | 'logins'
 
 export interface StaffLinks {
   /** Opens a piece of work from the inbox in its own workspace (a room to clean, food to pick up). */
@@ -29,12 +30,12 @@ export class StaffWorkspace extends Workspace<Tab> implements StaffHost {
   constructor(api: Api, me: Me, outbox: Outbox, private links: StaffLinks, onClose: () => void) {
     super(api, me, outbox, 'Staff', onClose)
     this.tracker = new Tracker(api)
-    this.views = { today: new TodayView(this), messages: new MessagesView(this), mine: new MyAttendanceView(this), leave: new MyLeaveView(this), team: new TeamView(this), rosters: new RostersView(this), settings: new StaffSettingsView(this), logins: new LoginsView(this) }
+    this.views = { today: new TodayView(this), messages: new MessagesView(this), mine: new MyAttendanceView(this), leave: new MyLeaveView(this), pay: new MyPayView(this), team: new TeamView(this), rosters: new RostersView(this), settings: new StaffSettingsView(this), logins: new LoginsView(this) }
     this.tab = 'today'
   }
 
   tabs(): [Tab, string][] {
-    const tabs: [Tab, string][] = [['today', t('Today')], ['messages', t('Messages')], ['mine', t('My attendance')], ['leave', t('My leave')]]
+    const tabs: [Tab, string][] = [['today', t('Today')], ['messages', t('Messages')], ['mine', t('My attendance')], ['leave', t('My leave')], ['pay', t('My pay')]]
     if (this.can('staff.track', 'attendance.view')) tabs.push(['team', t('Team')])
     if (this.can('roster.manage')) tabs.push(['rosters', t('Rosters')])
     if (this.can('staff.settings')) tabs.push(['settings', t('Settings')])

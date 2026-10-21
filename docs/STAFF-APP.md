@@ -8,6 +8,7 @@ The staff app is the same HMS web app, opened on a phone. Everyone signs in with
 | Messages | everyone | messages from managers, by role; urgent ones are marked |
 | My attendance | everyone | their own days and hours, and where the app placed them today |
 | My leave | everyone whose login HR has linked to their employee record | leave balances, **Ask for leave** (type, dates, half day, reason), what was approved or turned down and why, cancelling, the holidays to come |
+| My pay | everyone whose login HR has linked to their employee record | payslips for each approved month (open and print), the year's income tax under the new and old regimes, **My declaration** (regime, rent, investments, salary earlier in the year) until HR checks the proofs, Form 16 Part B for each year |
 | Team | managers, security | SOS alerts (I'm going / resolve), who is on duty and where, who is rostered but not in, today's attendance with selfies |
 | Rosters | HR, managers | shifts (morning, evening, night…) and the weekly roster; copy last week |
 | Settings | GM, MD | the resort boundary, lining up GPS with the 3D map, selfie at clock-in, indoor beacons |
