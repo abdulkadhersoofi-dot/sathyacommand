@@ -96,7 +96,7 @@ export function vatAssetRoutes(app: FastifyInstance, ctx: Ctx) {
       due: `${addDays(to, 1).slice(0, 7)}-20`, filed: f ?? null,
     }
   }
-  const periodOf = (req: FastifyRequest) => { const p = (req.params as { period: string }).period; if (!PERIOD.test(p)) throw new HttpError(400, 'The month as YYYY-MM.'); return p }
+  const periodOf = (req: FastifyRequest) => { const p = (req.params as { period: string }).period; if (!PERIOD.test(p)) throw new HttpError(400, 'Enter the month as YYYY-MM.'); return p }
 
   app.get('/api/vat/:period', async (req) => {
     await need(req, 'vat.file', 'accounts.view', 'tax.vat')
@@ -118,12 +118,12 @@ export function vatAssetRoutes(app: FastifyInstance, ctx: Ctx) {
   app.post('/api/vat/returns', async (req, reply) => {
     const who = await need(req, 'vat.file')
     const b = (req.body ?? {}) as { period?: string; ackNo?: string; filedOn?: string }
-    if (!PERIOD.test(b.period ?? '')) throw new HttpError(400, 'The month as YYYY-MM.')
-    if (!b.ackNo?.trim()) throw new HttpError(400, 'The acknowledgement number from the TN VAT portal.')
+    if (!PERIOD.test(b.period ?? '')) throw new HttpError(400, 'Enter the month as YYYY-MM.')
+    if (!b.ackNo?.trim()) throw new HttpError(400, 'Enter the acknowledgement number from the TN VAT portal.')
     return db.tx(async (t) => {
       const today = await businessDate(t)
       const filedOn = b.filedOn ?? today
-      if (!DATE.test(filedOn) || filedOn > today) throw new HttpError(400, 'The filing date: today or earlier.')
+      if (!DATE.test(filedOn) || filedOn > today) throw new HttpError(400, 'Enter the filing date: today or earlier.')
       if (monthEnd(b.period!) >= today) throw new HttpError(409, `${b.period} is not over yet.`)
       const v = await vatMonth(t, b.period!)
       if (v.filed) throw new HttpError(409, `The VAT return for ${b.period} is already filed.`)
@@ -193,7 +193,7 @@ export function vatAssetRoutes(app: FastifyInstance, ctx: Ctx) {
   app.post('/api/assets/depreciation', async (req, reply) => {
     const who = await need(req, 'assets.manage')
     const month = (req.body as { month?: string } | null)?.month ?? ''
-    if (!PERIOD.test(month)) throw new HttpError(400, 'The month as YYYY-MM.')
+    if (!PERIOD.test(month)) throw new HttpError(400, 'Enter the month as YYYY-MM.')
     await postPending(db, now())
     return db.tx(async (t) => {
       if (monthEnd(month) >= await businessDate(t)) throw new HttpError(409, `${month} is not over yet.`)
@@ -240,7 +240,7 @@ export function vatAssetRoutes(app: FastifyInstance, ctx: Ctx) {
   app.get('/api/assets/it-depreciation', async (req) => {
     await need(req, 'assets.manage', 'accounts.view')
     const fy = (req.query as { fy?: string }).fy ?? financialYear(await businessDate(db))
-    if (!/^\d{4}-\d{2}$/.test(fy)) throw new HttpError(400, 'The year as 2026-27.')
+    if (!/^\d{4}-\d{2}$/.test(fy)) throw new HttpError(400, 'Enter the year as 2026-27.')
     const rows = await assets(db)
     const fyStart = (y: number) => `${y}-04-01`
     const startYear = Math.min(Number(fy.slice(0, 4)), ...rows.map((a) => Number(financialYear(a.put_to_use).slice(0, 4))))
@@ -272,9 +272,9 @@ export function vatAssetRoutes(app: FastifyInstance, ctx: Ctx) {
   app.put('/api/budgets', async (req) => {
     const who = await need(req, 'budget.manage')
     const b = (req.body ?? {}) as { fy?: string; dept?: string; kind?: string; annual?: number; months?: Record<string, number> }
-    if (!/^\d{4}-\d{2}$/.test(b.fy ?? '')) throw new HttpError(400, 'The year as 2026-27.')
+    if (!/^\d{4}-\d{2}$/.test(b.fy ?? '')) throw new HttpError(400, 'Enter the year as 2026-27.')
     if (!DEPTS[b.dept ?? '']) throw new HttpError(400, 'Which department?')
-    if (!['revenue', 'cost'].includes(b.kind ?? '')) throw new HttpError(400, 'Revenue or cost.')
+    if (!['revenue', 'cost'].includes(b.kind ?? '')) throw new HttpError(400, 'Say whether it is revenue or a cost.')
     const y = Number(b.fy!.slice(0, 4))
     const months = Array.from({ length: 12 }, (_, i) => { const m = ((i + 3) % 12) + 1; return `${m <= 3 ? y + 1 : y}-${String(m).padStart(2, '0')}` })
     let amounts: Record<string, number>
@@ -282,7 +282,7 @@ export function vatAssetRoutes(app: FastifyInstance, ctx: Ctx) {
       amounts = {}
       for (const [m, v] of Object.entries(b.months)) { if (!months.includes(m) || !(Number(v) >= 0)) throw new HttpError(400, `${m}: a month of ${b.fy} and an amount.`); amounts[m] = rupees(Number(v)) }
     } else {
-      if (!(Number(b.annual) >= 0)) throw new HttpError(400, 'The amount for the year (₹), or month by month.')
+      if (!(Number(b.annual) >= 0)) throw new HttpError(400, 'Enter the amount for the year (₹), or month by month.')
       const total = rupees(Number(b.annual)), each = Math.floor(total / 12)
       amounts = Object.fromEntries(months.map((m, i) => [m, i === 11 ? total - each * 11 : each]))
     }

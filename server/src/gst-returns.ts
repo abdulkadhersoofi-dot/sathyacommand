@@ -10,7 +10,7 @@ export const monthEnd = (p: string) => addDays(addDays(`${p}-01`, 32).slice(0, 7
 const HOME = '33'
 /** Supplies taxed without input tax credit: rooms up to ₹7,500 and restaurant service at 5%. CA check */
 const NO_ITC_SAC = ['996311', '996331', '996334']
-const SAC_DESC: Record<string, string> = { '996311': 'Room or unit accommodation services', '996331': 'Services provided by restaurants', '996334': 'Event catering services', '999794': 'Agreeing to do an act (damage recovery)' }
+const SAC_DESC: Record<string, string> = { '996311': 'Room or unit accommodation services', '996331': 'Services provided by restaurants', '996334': 'Event catering services', '999794': 'Agreeing to do an act (damage recovery)', '997212': 'Rental of non-residential property (halls, lawns)', '998596': 'Event and convention assistance services', '999799': 'Other services' }
 
 interface Line { description: string; sac: string | null; gstRate: number; taxable: number; cgst: number; sgst: number; total: number }
 interface Doc { id: string; doc_type: string; number: string; issue_date: string; b2b: boolean; recipient: { name: string; gstin: string | null }; lines: Line[]; tax_summary: { rate: number; taxable: number; cgst: number; sgst: number }[]; taxable_paise: string; cgst_paise: string; sgst_paise: string; total_paise: string; irn_status: string; reservation_id: string | null; event_id: string | null; original_id: string | null; advance_adjusted_paise: string }

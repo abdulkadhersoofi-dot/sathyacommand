@@ -24,7 +24,7 @@ export class VatView {
     return `<div class="ws-toolbar"><label class="inline">Month <input type="month" data-period value="${esc(this.period)}"></label>
         <button type="button" class="btn" data-vt="sales.csv">Sales register (CSV)</button><button type="button" class="btn" data-vt="purchases.csv">Purchase register (CSV)</button>
         ${this.h.can('vat.file') && !d.filed ? '<button type="button" class="btn primary" data-vt="file">Return filed…</button>' : ''}
-        ${d.filed ? tonePill(`Filed ${d.filed.filed_on} · ${d.filed.ack_no}`, '--st-vacant') : tonePill(`Due ${d.due}`, '--marigold')}</div>
+        ${d.filed ? tonePill(`Filed ${d.filed.filed_on} · ${d.filed.ack_no}`, '--st-vacant') : tonePill(`Due ${showDate(d.due)}`, '--marigold')}</div>
       <div class="sec-title">Liquor sold (${d.invoices.length} VAT invoices)</div>
       <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Class</th><th class="n">Rate</th><th class="n">Value</th><th class="n">VAT</th></tr></thead><tbody>
         ${d.byRate.map((r) => `<tr><td>${esc(r.liquorClass)}</td><td class="n">${r.rate}%</td><td class="n">${money(r.taxable)}</td><td class="n">${money(r.vat)}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">No liquor sold this month.</td></tr>'}
@@ -69,7 +69,7 @@ export class AssetsView {
       <p class="muted small">Assets bought on a vendor bill are put in the books by charging the bill's line to the asset account; add them here too, so they are depreciated. Depreciation in the books is straight line over the Companies Act lives; the income-tax figure below is by block.</p>
       <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Asset</th><th>Class</th><th>In use from</th><th class="n">Cost</th><th class="n">Depreciation</th><th class="n">Book value</th><th></th></tr></thead><tbody>
         ${d.assets.map((a) => `<tr class="${a.disposed_on ? 'retired' : ''}"><td><span class="mono">${esc(a.code)}</span> ${esc(a.name)}${a.dept ? ` <small class="muted">${esc(d.departments[a.dept] ?? a.dept)}</small>` : ''}</td>
-          <td>${esc(d.classes[a.category]?.label ?? a.category)} <small class="muted">${Number(a.life_years)} yrs</small></td><td>${esc(a.put_to_use)}</td><td class="n">${money(a.cost_paise)}</td><td class="n">${money(a.accumulatedPaise)}</td>
+          <td>${esc(d.classes[a.category]?.label ?? a.category)} <small class="muted">${Number(a.life_years)} yrs</small></td><td>${esc(showDate(a.put_to_use))}</td><td class="n">${money(a.cost_paise)}</td><td class="n">${money(a.accumulatedPaise)}</td>
           <td class="n">${a.disposed_on ? `sold ${esc(showDate(a.disposed_on))}` : money(a.bookValuePaise)}</td><td>${manage && !a.disposed_on ? `<button type="button" class="btn small" data-dispose="${esc(a.id)}">Sold / scrapped…</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">No assets yet.</td></tr>'}
       </tbody></table></div>
       ${d.runs.length ? `<p class="small muted">Depreciation posted: ${d.runs.slice(0, 6).map((r) => `${esc(r.month)} ${money(Number(r.amount_paise))}`).join(' · ')}</p>` : ''}

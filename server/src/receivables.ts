@@ -57,7 +57,8 @@ export const BUCKETS = ['0–30', '31–60', '61–90', 'over 90'] as const
 export async function openItems(t: Db, debtorId: string, asOf: string, termsDays: number) {
   // Line by line: each bill a company is charged for is its own item, named by its invoice.
   const rows = await t.query<{ date: string; number: string; narration: string; ref: string | null; amt: string }>(
-    `select v.date::text, v.number, v.narration, l.ref, l.debit_paise - l.credit_paise as amt from voucher_line l join voucher v on v.id = l.voucher_id
+    `select v.date::text, v.number, v.narration, -- a stay billed to a company before its invoice was issued: name the invoice now
+              coalesce((select x.number from tax_document x where l.ref like 'Booking %' and x.reservation_id = substr(l.ref, 9) and x.doc_type = 'invoice' order by x.issued_at desc limit 1), l.ref) as ref, l.debit_paise - l.credit_paise as amt from voucher_line l join voucher v on v.id = l.voucher_id
       where l.account_code = '1310' and l.party_type = 'company' and l.party_id = $1 and v.date <= $2 order by v.date, v.created_at, l.line`, [debtorId, asOf])
   const charges: OpenItem[] = []
   let credit = 0

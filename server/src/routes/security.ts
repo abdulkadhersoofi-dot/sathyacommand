@@ -113,7 +113,7 @@ export function securityRoutes(app: FastifyInstance, ctx: Ctx) {
     if (b.kind === 'guest_vehicle' && !b.reservationId) throw new HttpError(400, 'Choose the guest the vehicle belongs to.')
     if (['guest_vehicle', 'taxi', 'staff_vehicle'].includes(b.kind!) && !plate(b.vehicleNo)) throw new HttpError(400, 'Enter the vehicle number.')
     if (['visitor', 'vendor', 'delivery'].includes(b.kind!) && !b.name?.trim()) throw new HttpError(400, 'Enter the name (person or company).')
-    if (b.mobile && !/^[6-9]\d{9}$/.test(b.mobile.replace(/\D/g, '').slice(-10))) throw new HttpError(400, 'Mobile: 10 digits.')
+    if (b.mobile && !/^[6-9]\d{9}$/.test(b.mobile.replace(/\D/g, '').slice(-10))) throw new HttpError(400, 'Enter a 10-digit Indian mobile number (with or without +91).')
     const id = newId('GE')
     return db.tx(async (t) => {
       const pos = await place(t, b)

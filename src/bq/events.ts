@@ -36,7 +36,7 @@ interface Pkg { id: string; name: string; kind: string; price_paise: number; per
 
 const KINDS: [string, string][] = [['wedding', 'Wedding'], ['reception', 'Reception'], ['engagement', 'Engagement'], ['birthday', 'Birthday'], ['corporate', 'Corporate'], ['conference', 'Conference'], ['social', 'Social'], ['other', 'Other']]
 const SOURCES: [string, string][] = [['walk_in', 'Walk-in'], ['phone', 'Phone'], ['website', 'Website'], ['referral', 'Referral'], ['planner', 'Wedding planner'], ['repeat', 'Repeat client'], ['corporate', 'Corporate account']]
-const FILTERS: [string, string, string[]][] = [['open', 'Open', ['enquiry', 'quoted', 'hold']], ['definite', 'Definite', ['definite']], ['billed', 'Billed', ['billed']], ['done', 'Closed', ['closed']], ['gone', 'Lost & cancelled', ['lost', 'cancelled']], ['all', 'All', []]]
+const FILTERS: [string, string, string[]][] = [['live', 'Coming up', ['enquiry', 'quoted', 'hold', 'definite', 'billed']], ['open', 'Enquiries & holds', ['enquiry', 'quoted', 'hold']], ['definite', 'Definite', ['definite']], ['billed', 'Billed', ['billed']], ['done', 'Closed', ['closed']], ['gone', 'Lost & cancelled', ['lost', 'cancelled']], ['all', 'All', []]]
 const DOC: Record<string, string> = { receipt_voucher: 'Receipt voucher', refund_voucher: 'Refund voucher', invoice: 'Tax invoice', credit_note: 'Credit note' }
 const CHECK_LABEL: Record<string, string> = { pending: 'Pending', applied: 'Applied for', received: 'Received', not_needed: 'Not needed' }
 const MS_TONE: Record<string, string> = { paid: '--st-vacant', part: '--marigold', due: '--muted', overdue: '--st-departing' }
@@ -46,7 +46,7 @@ const num = (f: HTMLFormElement, k: string) => (val(f, k) === '' ? undefined : N
 
 export class EventsView {
   selected: string | null = null
-  private filter = 'open'
+  private filter = 'live'
   private rows: Row[] = []
   private d: Detail | null = null
   private venues: Venue[] = []
@@ -79,7 +79,7 @@ export class EventsView {
         <div class="rc-title"><span class="mono muted">${esc(r.number)}</span> ${esc(r.title)}</div>
         <div class="rc-sub">${esc(r.company ?? r.client)} · ${r.date ? esc(r.date === r.lastDate || !r.lastDate ? r.date : `${r.date} to ${r.lastDate}`) : 'no date yet'}${r.venues.length ? ` · ${esc(r.venues.join(', '))}` : ''}${r.pax ? ` · ${r.pax} guests` : ''}${r.owner ? ` · ${esc(r.owner)}` : ''}
           ${r.status === 'lost' && r.lostReason ? ` · lost: ${esc(r.lostReason)}` : ''}</div>
-        <div class="rc-right">${pill(r.status)}${r.status === 'hold' && r.holdUntil ? `<small class="muted">until ${esc(r.holdUntil)}</small>` : ''}
+        <div class="rc-right">${pill(r.status)}${r.status === 'hold' && r.holdUntil ? `<small class="muted">until ${esc(showDate(r.holdUntil))}</small>` : ''}
           ${r.quotePaise ? `<small class="mono">${money(r.billedPaise ?? r.quotePaise)}${r.paidPaise ? ` · paid ${money(r.paidPaise)}` : ''}</small>` : ''}
           ${r.overdue ? tonePill(`${r.overdue} instalment${r.overdue > 1 ? 's' : ''} overdue`, '--st-departing') : ''}${r.quoteStatus === 'awaiting_approval' ? tonePill('Discount awaits approval', '--marigold') : ''}</div></div>`).join('') || '<p class="empty">No events here.</p>'}`
   }
@@ -116,7 +116,7 @@ export class EventsView {
         <div class="small">${esc(d.client.name)}${d.client.company ? `, ${esc(d.client.company)}` : ''}${d.client.mobile ? ` · <a href="tel:${esc(d.client.mobile)}">${esc(d.client.mobile)}</a>` : ''}${d.client.email ? ` · ${esc(d.client.email)}` : ''}${d.client.gstin ? ` · GSTIN <span class="mono">${esc(d.client.gstin)}</span>` : ''}</div>
         ${d.account ? `<div class="small">Account: <b>${esc(d.account.name)}</b></div>` : ''}
         <div class="muted small">${esc(SOURCES.find((s) => s[0] === d.source)?.[1] ?? d.source)}${d.owner ? ` · handled by ${esc(d.owner)}` : ''}${d.siteVisitOn ? ` · site visit ${esc(showDate(d.siteVisitOn))}` : ''}${d.contractSignedOn ? ` · contract signed ${esc(showDate(d.contractSignedOn))}` : ''}</div></div>
-        <div class="rc-right">${pill(d.status)}${d.status === 'hold' && d.holdUntil ? `<small>held until ${esc(d.holdUntil)}</small>` : ''}</div></div>
+        <div class="rc-right">${pill(d.status)}${d.status === 'hold' && d.holdUntil ? `<small>held until ${esc(showDate(d.holdUntil))}</small>` : ''}</div></div>
       ${d.lostReason ? `<p class="fd-warn">Lost: ${esc(d.lostReason)}${d.lostTo ? ` (to ${esc(d.lostTo)})` : ''}</p>` : ''}${d.cancelReason ? `<p class="fd-warn">Cancelled: ${esc(d.cancelReason)}</p>` : ''}
       ${d.feedback ? `<p>Feedback: <b>${'★'.repeat(d.feedback.score)}${'☆'.repeat(5 - d.feedback.score)}</b> ${esc(d.feedback.note ?? '')}</p>` : ''}
       ${d.notes ? `<p class="small">${esc(d.notes)}</p>` : ''}
@@ -349,7 +349,7 @@ export class EventsView {
       case 'hold':
         this.h.modal.open('Hold the dates', `<p class="small">While held, no other event can hold or book these venues and times. The hold lapses by itself.</p><div class="form-grid"><label>Days<input name="days" type="number" min="1" max="${d.limits.holdDays ?? 60}" value="${Math.min(7, d.limits.holdDays ?? 7)}"></label></div>`, 'Hold', async (f) => {
           const r = await api.post<{ holdUntil: string }>(`${base}/hold`, { days: Number(val(f, 'days')) })
-          return done(`Held until ${r.holdUntil}`)
+          return done(`Held until ${showDate(r.holdUntil)}`)
         })
         break
       case 'release': await api.post(`${base}/release`); toast('Hold released'); await this.load(); return true

@@ -98,7 +98,7 @@ export async function bookStay(ctx: Ctx, t: Db, who: Caller, b: BookingInput) {
   if (!b.roomTypeId || !b.plan) throw new HttpError(400, 'Choose the room type and the meal plan.')
   if (!DATE.test(b.arrival ?? '') || !DATE.test(b.departure ?? '')) throw new HttpError(400, 'Give the arrival date and the number of nights.')
   if (b.departure! <= b.arrival!) throw new HttpError(400, 'A stay is at least one night.')
-  if (b.adults !== undefined && !(Number.isInteger(b.adults) && b.adults >= 1)) throw new HttpError(400, 'At least one adult.')
+  if (b.adults !== undefined && !(Number.isInteger(b.adults) && b.adults >= 1)) throw new HttpError(400, 'A booking needs at least one adult.')
   if (b.children !== undefined && !(Number.isInteger(b.children) && b.children >= 0)) throw new HttpError(400, 'Children: 0 or more.')
   if (b.guest.mobile) {
     const digits = b.guest.mobile.replace(/\D/g, '')

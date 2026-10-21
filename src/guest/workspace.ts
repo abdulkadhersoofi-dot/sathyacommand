@@ -2,7 +2,7 @@ import qrcode from 'qrcode-generator'
 import type { Api } from '../live/api'
 import type { Me } from '../live/signin'
 import type { Outbox } from '../live/outbox'
-import { esc, toast, tonePill } from '../ui/dom'
+import { esc, toast, tonePill, showDate } from '../ui/dom'
 import { val } from '../ui/form-modal'
 import { Workspace, type View, type WorkspaceHost } from '../ui/workspace'
 import { money } from '../acc/books'
@@ -99,7 +99,7 @@ class ActivitiesView implements View {
         ${d.activities.filter((a) => a.active).map((a) => `<tr><td><b>${esc(a.name)}</b>${a.notes ? ` <small class="muted">${esc(a.notes)}</small>` : ''}</td><td>${esc(a.place_name ?? '')}</td><td>${esc(a.opens ?? '')}${a.closes ? `–${esc(a.closes)}` : ''}</td>
           <td class="n">${a.price_paise ? `${money(a.price_paise)} / ${esc(a.per)}` : 'free'}</td><td class="n">${a.capacity ?? '—'}</td><td><button type="button" class="btn small primary" data-actbook="${esc(a.id)}">Book</button></td></tr>`).join('')}
       </tbody></table></div>
-      <div class="sec-title">Booked for ${esc(d.day)} <span>${d.bookings.length}</span></div>
+      <div class="sec-title">Booked for ${esc(showDate(d.day))} <span>${d.bookings.length}</span></div>
       <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Time</th><th>Activity</th><th>Guest</th><th class="n">How many</th><th class="n">Amount</th></tr></thead><tbody>
         ${d.bookings.map((b) => `<tr><td class="mono">${esc(b.at)}</td><td>${esc(b.activity)}</td><td>${esc(b.guest_name)}${b.room_no ? ` · room ${esc(b.room_no)}` : ''}</td><td class="n">${b.qty}</td><td class="n">${money(b.amount_paise)}${b.on_bill ? ' <small class="muted">on bill</small>' : ''}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">Nothing booked.</td></tr>'}
       </tbody></table></div>`

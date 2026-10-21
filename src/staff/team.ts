@@ -1,4 +1,4 @@
-import { esc, toast, tonePill } from '../ui/dom'
+import { esc, toast, tonePill, showDate } from '../ui/dom'
 import { val } from '../ui/form-modal'
 import { hydratePhotos } from '../ui/photo'
 import { t } from './i18n'
@@ -28,7 +28,7 @@ export class MyAttendanceView {
     const total = this.rows.reduce((a, r) => a + r.minutes, 0)
     return `<div class="sec-title">${t('My attendance')} <span>${hours(total)}</span></div>
       <div class="m-table"><div class="m-row att-row head"><span>Day</span><span>Shift</span><span>In</span><span>Out</span><span>Hours</span></div>
-      ${this.rows.slice().reverse().map((r) => `<div class="m-row att-row"><b>${esc(r.day)}</b><span>${esc(r.shift ?? '—')}</span>
+      ${this.rows.slice().reverse().map((r) => `<div class="m-row att-row"><b>${esc(showDate(r.day))}</b><span>${esc(r.shift ?? '—')}</span>
         <span>${hhmm(r.clock_in_at)}${r.late_minutes ? ` <small class="fd-warn">+${r.late_minutes}m</small>` : ''}</span><span>${hhmm(r.clock_out_at)}</span><span class="mono">${hours(r.minutes)}</span></div>`).join('') || '<div class="empty">No attendance yet.</div>'}</div>
       <div class="sec-title">Where the app saw me today <span>${this.pings.length}</span></div>
       <p class="muted small">Only while on duty. Kept for 90 days.</p>

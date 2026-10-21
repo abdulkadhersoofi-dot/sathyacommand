@@ -526,8 +526,8 @@ button.row-card { width: 100%; text-align: left; font: inherit; background: var(
   .ord, .kds-wrap { grid-template-columns: minmax(0, 1fr); }
   .ord-ticket, .kds-allday { position: static; }
   .kds-board { grid-template-columns: minmax(0, 1fr); }
-  .m-row:not(.m-row-4):not(.m-row-fc) { grid-template-columns: 56px minmax(0, 1fr) 70px 56px; }
-  .m-row:not(.m-row-4):not(.m-row-fc) > :nth-child(4), .m-row:not(.m-row-4):not(.m-row-fc) > :nth-child(5) { display: none; }
+  .m-row:not(.m-row-4):not(.m-row-fc):not(.meter-row) { grid-template-columns: 56px minmax(0, 1fr) 70px 56px; }
+  .m-row:not(.m-row-4):not(.m-row-fc):not(.meter-row) > :nth-child(4), .m-row:not(.m-row-4):not(.m-row-fc):not(.meter-row) > :nth-child(5) { display: none; }
   .ws-head { padding: 8px 12px; gap: 8px; }
   .ws-title { display: none; }
 }
@@ -965,3 +965,6 @@ button.link { background: none; border: 0; padding: 0; color: var(--accent); fon
 .ap-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; width: 100%; }
 .ap-actions input { flex: 1 1 140px; min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--fg); font: inherit; font-size: 13px; }
 @media (max-width: 720px) { .icon-btn.ap-btn b { display: none; } }
+.ap-card { flex-wrap: wrap; }
+.ap-card .ap-actions { flex-basis: 100%; }
+.ap-actions input { letter-spacing: normal; text-align: left; font-family: var(--f-body); }

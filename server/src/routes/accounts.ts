@@ -68,7 +68,7 @@ export function accountsRoutes(app: FastifyInstance, ctx: Ctx) {
   app.post('/api/accounts/chart', async (req, reply) => {
     const who = await need(req, 'accounts.post')
     const b = (req.body ?? {}) as { code?: string; name?: string; type?: string; grp?: string; dept?: string | null }
-    if (!/^\d{4}$/.test(b.code ?? '')) throw new HttpError(400, 'The account code: four digits.')
+    if (!/^\d{4}$/.test(b.code ?? '')) throw new HttpError(400, 'Enter the account code: four digits.')
     if (!b.name?.trim()) throw new HttpError(400, 'Name the account.')
     if (!TYPES.includes(b.type as never)) throw new HttpError(400, 'Asset, liability, equity, income or expense.')
     if (b.dept && !DEPTS[b.dept]) throw new HttpError(400, 'No such department.')
@@ -203,7 +203,13 @@ export function accountsRoutes(app: FastifyInstance, ctx: Ctx) {
       `select sum(l.credit_paise - l.debit_paise) filter (where v.date >= $2) as year, sum(l.credit_paise - l.debit_paise) filter (where v.date < $2) as before
          from voucher_line l join voucher v on v.id = l.voucher_id join account a on a.code = l.account_code where a.type in ('income', 'expense') and v.date <= $1`, [asOf, start])
     const side = (type: string, sign: number) => rows.filter((r) => r.type === type).map((r) => ({ code: r.code, name: r.name, grp: r.grp, amountPaise: sign * Number(r.b) }))
-    const assets = side('asset', 1), liabilities = side('liability', -1), equity = side('equity', -1)
+    // Guest, banquet and company ledgers in credit are money received ahead of the bill: shown as advances owed, not negative assets.
+    const advances = new Set(['1300', '1310', '1340'])
+    const allAssets = side('asset', 1)
+    const assets = allAssets.filter((a) => !(advances.has(a.code) && a.amountPaise < 0))
+    const liabilities = [...side('liability', -1), ...allAssets.filter((a) => advances.has(a.code) && a.amountPaise < 0)
+      .map((a) => ({ ...a, name: `Advances received (${a.name})`, grp: 'Current liabilities', amountPaise: -a.amountPaise }))]
+    const equity = side('equity', -1)
     if (Number(pl.before ?? 0)) equity.push({ code: '', name: 'Profit of earlier years (not yet transferred)', grp: 'Equity', amountPaise: Number(pl.before) })
     equity.push({ code: '', name: `Profit for the year to ${asOf}`, grp: 'Equity', amountPaise: Number(pl.year ?? 0) })
     const total = (xs: { amountPaise: number }[]) => xs.reduce((a, x) => a + x.amountPaise, 0)
@@ -226,7 +232,7 @@ export function accountsRoutes(app: FastifyInstance, ctx: Ctx) {
     return db.tx(async (t) => {
       const today = await businessDate(t)
       const date = b.date ?? today
-      if (!DATE.test(date) || date > today) throw new HttpError(400, 'The date: today or earlier.')
+      if (!DATE.test(date) || date > today) throw new HttpError(400, 'Enter the date: today or earlier.')
       const v = await wrap(() => postVoucher(t, { kind: 'journal', date, narration: b.narration!.trim(), lines, userId: who.userId, now: now(), manual: true }))
       if (!v) throw new HttpError(400, 'Nothing to post.')
       await appendAudit(t, { actor: who, action: 'voucher.journal', entity: { type: 'voucher', id: v.id }, amount: lines.reduce((a, l) => a + Math.max(0, l.amount), 0), after: { number: v.number, date, narration: b.narration } }, now())
@@ -242,7 +248,7 @@ export function accountsRoutes(app: FastifyInstance, ctx: Ctx) {
     const b = (req.body ?? {}) as { kind?: string; date?: string; money?: string; account?: string; to?: string; amount?: number; dept?: string; partyName?: string; reference?: string; narration?: string }
     if (!['payment', 'receipt', 'contra'].includes(b.kind ?? '')) throw new HttpError(400, 'A payment, a receipt or money between cash and bank.')
     const amount = rupees(Number(b.amount))
-    if (!(amount > 0)) throw new HttpError(400, 'The amount.')
+    if (!(amount > 0)) throw new HttpError(400, 'Enter the amount.')
     const narration = (b.narration ?? '').trim()
     if (!narration) throw new HttpError(400, b.kind === 'payment' ? 'What was paid for?' : b.kind === 'receipt' ? 'What was the money for?' : 'Say what it was (cash deposited, withdrawn…).')
     if (b.dept && !DEPTS[b.dept]) throw new HttpError(400, 'No such department.')
@@ -250,7 +256,7 @@ export function accountsRoutes(app: FastifyInstance, ctx: Ctx) {
     return db.tx(async (t) => {
       const today = await businessDate(t)
       const date = b.date || today
-      if (!DATE.test(date) || date > today) throw new HttpError(400, 'The date: today or earlier.')
+      if (!DATE.test(date) || date > today) throw new HttpError(400, 'Enter the date: today or earlier.')
       const money = await moneyAccounts(t)
       if (!money.includes(b.money ?? '')) throw new HttpError(400, b.kind === 'receipt' ? 'Which cash or bank account it came into.' : 'Which cash or bank account it was paid from.')
       const other = b.kind === 'contra' ? b.to : b.account
@@ -339,7 +345,7 @@ export function accountsRoutes(app: FastifyInstance, ctx: Ctx) {
   app.post('/api/accounts/periods', async (req, reply) => {
     const who = await need(req, 'accounts.lock')
     const b = (req.body ?? {}) as { month?: string; note?: string }
-    if (!MONTH.test(b.month ?? '')) throw new HttpError(400, 'The month as YYYY-MM.')
+    if (!MONTH.test(b.month ?? '')) throw new HttpError(400, 'Enter the month as YYYY-MM.')
     await fresh()
     return db.tx(async (t) => {
       const today = await businessDate(t)

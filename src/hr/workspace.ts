@@ -233,7 +233,7 @@ class HolidaysView implements View {
     return `<div class="ws-toolbar"><button type="button" class="btn small" data-hy="-1">◀</button><b>${d.year}</b><button type="button" class="btn small" data-hy="1">▶</button>${this.h.can('hr.manage') ? '<button type="button" class="btn primary" data-hol="add">Add a holiday</button>' : ''}
         ${d.festivalChosen < d.festivalRequired ? tonePill(`${d.festivalRequired - d.festivalChosen} festival holiday${d.festivalRequired - d.festivalChosen > 1 ? 's' : ''} still to choose`, '--marigold') : tonePill('Festival holidays chosen', '--st-vacant')}</div>
       <p class="muted small">Tamil Nadu law: the four national holidays and five festival holidays a year. Leave does not count holidays.</p>
-      <div class="m-table">${d.holidays.map((h) => `<div class="m-row hr-hol"><span class="mono">${esc(h.day)}</span><span>${esc(new Date(`${h.day}T00:00:00Z`).toLocaleDateString('en-IN', { weekday: 'long', timeZone: 'UTC' }))}</span><b>${esc(h.name)}</b><span>${esc(h.kind)}</span>
+      <div class="m-table">${d.holidays.map((h) => `<div class="m-row hr-hol"><span class="mono">${esc(showDate(h.day))}</span><span>${esc(new Date(`${h.day}T00:00:00Z`).toLocaleDateString('en-IN', { weekday: 'long', timeZone: 'UTC' }))}</span><b>${esc(h.name)}</b><span>${esc(h.kind)}</span>
         <span class="rc-right">${this.h.can('hr.manage') && h.kind !== 'national' ? `<button type="button" class="btn small ghost" data-holdel="${esc(h.day)}">Remove</button>` : ''}</span></div>`).join('')}</div>`
   }
   async click(el: HTMLElement) {

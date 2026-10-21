@@ -50,7 +50,7 @@ export function channelRoutes(app: FastifyInstance, ctx: Ctx) {
     const who = await need(req, 'revenue.manage')
     const b = (req.body ?? {}) as { roomTypeIds?: string[]; from?: string; to?: string; weekdays?: number[]; stopSell?: boolean; minStay?: number | null; cta?: boolean; ctd?: boolean }
     if (!b.roomTypeIds?.length) throw new HttpError(400, 'Which room types?')
-    if (!DATE.test(b.from ?? '') || !DATE.test(b.to ?? '') || b.to! < b.from!) throw new HttpError(400, 'From and to dates.')
+    if (!DATE.test(b.from ?? '') || !DATE.test(b.to ?? '') || b.to! < b.from!) throw new HttpError(400, 'Choose the from and to dates.')
     const days = nightsOf(b.from!, addDays(b.to!, 1)).filter((d) => !b.weekdays?.length || b.weekdays.includes(new Date(`${d}T00:00:00Z`).getUTCDay()))
     if (days.length > 366) throw new HttpError(400, 'A year at most.')
     if (b.minStay != null && !(Number.isInteger(b.minStay) && b.minStay >= 1 && b.minStay <= 30)) throw new HttpError(400, 'Minimum stay: 1 to 30 nights.')
@@ -81,7 +81,7 @@ export function channelRoutes(app: FastifyInstance, ctx: Ctx) {
     const who = await need(req, 'revenue.manage')
     const b = (req.body ?? {}) as { channel?: string; code?: string; roomTypeId?: string; plan?: string; remove?: boolean }
     const channel = String(b.channel ?? '').trim().toLowerCase(), code = String(b.code ?? '').trim()
-    if (!channel || !code) throw new HttpError(400, 'The channel and its room code.')
+    if (!channel || !code) throw new HttpError(400, 'Enter the channel and its room code.')
     return db.tx(async (t) => {
       if (b.remove) await t.query('delete from channel_map where channel = $1 and code = $2', [channel, code])
       else {

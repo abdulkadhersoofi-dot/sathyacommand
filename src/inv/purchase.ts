@@ -58,7 +58,7 @@ export class IndentsView {
       ${this.list.map((i) => `<div class="row-card ind-card">
         <div class="rc-title">${canOrder && i.status === 'approved' ? `<input type="checkbox" data-pick="${esc(i.id)}" ${this.picked.has(i.id) ? 'checked' : ''} aria-label="Order ${esc(i.number)}"> ` : ''}${esc(i.number)} · ${esc(i.store)}</div>
         <div class="rc-sub">${i.lines.map((l) => `${esc(l.item)} ${qty(l.purchaseQty)} ${esc(l.purchase_unit)}${l.po_number ? ` <small>(${esc(l.po_number)})</small>` : ''}`).join(' · ')}</div>
-        <div class="rc-sub">${esc(i.requested_by)}, ${when(i.requested_at)}${i.needed_by ? ` · needed by ${esc(i.needed_by)}` : ''}${i.estimatePaise ? ` · about ${rupees(i.estimatePaise)}` : ''}${i.note ? ` · ${esc(i.note)}` : ''}${i.decision_note ? ` · ${esc(i.decided_by ?? '')}: ${esc(i.decision_note)}` : ''}</div>
+        <div class="rc-sub">${esc(i.requested_by)}, ${when(i.requested_at)}${i.needed_by ? ` · needed by ${esc(showDate(i.needed_by))}` : ''}${i.estimatePaise ? ` · about ${rupees(i.estimatePaise)}` : ''}${i.note ? ` · ${esc(i.note)}` : ''}${i.decision_note ? ` · ${esc(i.decided_by ?? '')}: ${esc(i.decision_note)}` : ''}</div>
         <div class="rc-right">${tonePill(...(IND_STATE[i.status] ?? [i.status, '--muted']))}
           ${i.status === 'submitted' && this.h.can('indent.approve') && i.requester_id !== this.h.me.id ? `<button type="button" class="btn small primary" data-in="approve:${esc(i.id)}">Approve</button><button type="button" class="btn small" data-in="reject:${esc(i.id)}">Turn down…</button>` : ''}
           ${['approved', 'ordered'].includes(i.status) && this.h.can('stores.issue') ? `<button type="button" class="btn small" data-in="issue:${esc(i.id)}">Issue from stock…</button>` : ''}

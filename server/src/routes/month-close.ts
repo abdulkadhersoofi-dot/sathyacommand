@@ -131,7 +131,7 @@ export function monthCloseRoutes(app: FastifyInstance, ctx: Ctx) {
   async function monthOf(t: Db, m: string | undefined) {
     const today = await businessDate(t)
     const month = m ?? addDays(`${today.slice(0, 7)}-01`, -1).slice(0, 7)     // the month just gone
-    if (!MONTH.test(month)) throw new HttpError(400, 'The month as YYYY-MM.')
+    if (!MONTH.test(month)) throw new HttpError(400, 'Enter the month as YYYY-MM.')
     return { month, today }
   }
   const stores = (t: Db, id?: string) => t.query<StoreRow>(`select id, name, kind, ledger, active, variance_limit_percent from store where ($1::text is null or id = $1) order by kind = 'main' desc, name`, [id ?? null])
@@ -208,7 +208,7 @@ export function monthCloseRoutes(app: FastifyInstance, ctx: Ctx) {
     const who = await need(req, 'stock.approve')
     const { id } = req.params as { id: string }
     const pct = Number((req.body as { percent?: number } | null)?.percent)
-    if (!(pct >= 0 && pct <= 100)) throw new HttpError(400, 'The limit as a percentage, 0 to 100.')
+    if (!(pct >= 0 && pct <= 100)) throw new HttpError(400, 'Enter the limit as a percentage, 0 to 100.')
     return db.tx(async (t) => {
       const [before] = await t.query<{ variance_limit_percent: string }>('select variance_limit_percent from store where id = $1 for update', [id])
       if (!before) throw new HttpError(404, 'No such store.')

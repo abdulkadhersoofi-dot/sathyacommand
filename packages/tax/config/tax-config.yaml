@@ -52,9 +52,9 @@ gst:
     warn_text: 'This rate is above ₹7,500. The restaurant would move from 5% to 18% GST next financial year.'
 
   banquets:
-    hall_and_lawn_rental: { sac: null, rate: 18, itc: true, ca_status: pending }   # CA to give SAC
+    hall_and_lawn_rental: { sac: '997212', rate: 18, itc: true, ca_status: pending }   # rental of non-residential property; CA to confirm
     event_catering:       { sac: "996334", rate_follows: restaurant_premises_status, ca_status: pending }
-    event_services:       { sac: null, rate: 18, ca_status: pending }   # decor, sound and lights sold by the resort; CA to give SAC
+    event_services:       { sac: '998596', rate: 18, ca_status: pending }   # events and conventions assistance (decor, sound, lights); CA to confirm
     # Each line of an event bill is taxed at its own rate (hall 18%, food at the restaurant rate). CA to confirm
     # whether a hall-with-food package is instead one composite supply at the rate of its principal supply.
     composite_packages:   { treatment: principal_supply, principal: accommodation, ca_status: pending }

@@ -240,7 +240,7 @@ export function payrollRoutes(app: FastifyInstance, ctx: Ctx, cfg: PayrollConfig
     if (!MONTH.test(b.month ?? '')) throw new HttpError(400, 'Month as YYYY-MM.')
     if (!['pf', 'esi', 'pt', 'lwf', 'tds'].includes(b.kind ?? '')) throw new HttpError(400, 'pf, esi, pt, lwf or tds.')
     const amount = Math.round(Number(b.amount) * 100)
-    if (!(amount > 0)) throw new HttpError(400, 'The amount paid.')
+    if (!(amount > 0)) throw new HttpError(400, 'Enter the amount paid.')
     if (!DATE.test(b.paidOn ?? '')) throw new HttpError(400, 'The date it was paid.')
     const reference = str(b.reference, 60)
     if (!reference) throw new HttpError(400, b.kind === 'pf' ? 'The TRRN from the EPFO challan.' : b.kind === 'tds' ? 'The challan: BSR code, date and serial number.' : 'The challan or receipt number.')

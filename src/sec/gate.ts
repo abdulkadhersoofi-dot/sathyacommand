@@ -54,7 +54,7 @@ export class GateView {
         <label>Vehicle number<input name="vehicle" maxlength="14" autocapitalize="characters" placeholder="TN 38 AB 1234"></label>
         <label data-for="guest_vehicle">Tag given<input name="tag" maxlength="10" placeholder="G-07"></label>
         <label data-for="visitor vendor delivery taxi staff_vehicle">Name / company<input name="name" maxlength="80"></label>
-        <label data-for="visitor vendor delivery taxi">Mobile<input name="mobile" inputmode="tel" maxlength="14"></label>
+        <label data-for="visitor vendor delivery taxi">Mobile<input name="mobile" inputmode="tel" maxlength="20" placeholder="98400 12345"></label>
         <label data-for="visitor vendor delivery">Purpose<input name="purpose" maxlength="80" placeholder="e.g. meeting, vegetables, gas cylinders"></label>
         <label data-for="visitor vendor delivery">Meeting / for<input name="host" maxlength="60" placeholder="e.g. GM, Kitchen, room 204"></label>
         <label>People<input name="pax" type="number" min="0" max="200"></label><label>Parking<input name="parking" maxlength="20" placeholder="e.g. P1, basement"></label>

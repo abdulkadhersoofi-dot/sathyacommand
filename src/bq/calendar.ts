@@ -1,4 +1,4 @@
-import { esc } from '../ui/dom'
+import { esc, showDate } from '../ui/dom'
 import type { BqHost } from './workspace'
 
 // Venues down the side, days across: every function on its venue and day, pencilled, held or booked.
@@ -33,7 +33,7 @@ export class CalendarView {
     const rows = this.venues.map((v) => `<div class="bq-venue"><b>${esc(v.name)}</b><small>${v.capacity ? `up to ${v.capacity}` : esc(v.kind)}</small></div>${days.map((d) => {
       const here = this.bookings.filter((b) => b.venueId === v.id && b.date === d)
       return `<div class="bq-cell" ${manage ? `data-cal="${esc(v.id)}|${d}" title="Book ${esc(v.name)} on ${d}"` : ''}>${here.map((b) =>
-        `<button type="button" class="bq-chip ${b.firm ? (b.status === 'hold' ? 'hold' : 'firm') : 'pencil'}" data-ev="${esc(b.eventId)}" title="${esc(`${b.title} · ${b.name} ${b.from}–${b.to} · ${b.pax} guests · ${STATUS_LABEL[b.status]}${b.holdUntil ? ` until ${b.holdUntil}` : ''}`)}">
+        `<button type="button" class="bq-chip ${b.firm ? (b.status === 'hold' ? 'hold' : 'firm') : 'pencil'}" data-ev="${esc(b.eventId)}" title="${esc(`${b.title} · ${b.name} ${b.from}–${b.to} · ${b.pax} guests · ${STATUS_LABEL[b.status]}${b.holdUntil ? ` until ${showDate(b.holdUntil)}` : ''}`)}">
           <span class="mono">${esc(b.from)}</span> ${esc(b.title)}<small>${esc(b.name)} · ${b.pax}</small></button>`).join('')}</div>`
     }).join('')}`).join('')
     return `<div class="ws-toolbar"><button type="button" class="btn" data-cal-nav="-7">◀ Week</button>

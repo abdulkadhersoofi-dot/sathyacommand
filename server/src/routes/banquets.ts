@@ -215,7 +215,7 @@ export function banquetRoutes(app: FastifyInstance, ctx: Ctx) {
     const out: Record<string, unknown> = {}
     const set = (k: string, col: string, max = 120) => { if (b[k] !== undefined) out[col] = str(b[k], max) }
     if (!partial || b.title !== undefined) { const t = str(b.title, 120); if (!t) throw new HttpError(400, 'A name for the event, e.g. "Ravi and Priya wedding".'); out.title = t }
-    if (!partial || b.clientName !== undefined) { const c = str(b.clientName, 120); if (!c) throw new HttpError(400, 'The client\'s name.'); out.client_name = c }
+    if (!partial || b.clientName !== undefined) { const c = str(b.clientName, 120); if (!c) throw new HttpError(400, 'Enter the client\'s name.'); out.client_name = c }
     if (!partial || b.kind !== undefined) { const k = b.kind ?? 'wedding'; if (!KINDS.includes(String(k))) throw new HttpError(400, `Kind: ${KINDS.join(', ')}.`); out.kind = k }
     if (b.source !== undefined) { if (!SOURCES.includes(String(b.source))) throw new HttpError(400, `Source: ${SOURCES.join(', ')}.`); out.source = b.source }
     if (b.clientMobile !== undefined) {
@@ -269,7 +269,7 @@ export function banquetRoutes(app: FastifyInstance, ctx: Ctx) {
       action?: 'book' | 'hold' | 'enquiry'; discountPercent?: number; advance?: { method?: string; amount?: number; reference?: string } }
     const action = b.action ?? 'book'
     if (!['book', 'hold', 'enquiry'].includes(action)) throw new HttpError(400, 'Book it, hold the dates, or keep it as an enquiry.')
-    if (!str(b.clientName)) throw new HttpError(400, 'The client\'s name.')
+    if (!str(b.clientName)) throw new HttpError(400, 'Enter the client\'s name.')
     if (!b.functions?.length) throw new HttpError(400, 'At least one function: the venue, day and times.')
     // The venue first (free, and big enough), so nothing is saved for a booking that cannot be made.
     for (const f of b.functions) {
@@ -428,7 +428,7 @@ export function banquetRoutes(app: FastifyInstance, ctx: Ctx) {
     }
     if (b.date !== undefined || b.from !== undefined || b.to !== undefined || !cur) {
       const date = (b.date ?? (cur && istDate(cur.starts_at))) as string, from = (b.from ?? (cur && istTime(cur.starts_at))) as string, to = (b.to ?? (cur && istTime(cur.ends_at))) as string
-      if (!DATE.test(date ?? '') || !TIME.test(from ?? '') || !TIME.test(to ?? '')) throw new HttpError(400, 'The day, and from and to as HH:MM.')
+      if (!DATE.test(date ?? '') || !TIME.test(from ?? '') || !TIME.test(to ?? '')) throw new HttpError(400, 'Enter the day, and from and to as HH:MM.')
       const { starts, ends } = functionTimes(date, from, to)
       out.starts_at = starts; out.ends_at = ends
     }
@@ -787,7 +787,7 @@ ${beo.functions.filter((f) => f.menu).map((f) => `<p><b>${esc(f.menu!.name)}</b>
     const b = (req.body ?? {}) as { vendorId?: string; service?: string; agreed?: number; notes?: string }
     const service = str(b.service, 120)
     if (!service) throw new HttpError(400, 'What do they supply? (decor, DJ, photography…)')
-    if (!(n(b.agreed ?? 0) >= 0)) throw new HttpError(400, 'The agreed amount: ₹0 or more.')
+    if (!(n(b.agreed ?? 0) >= 0)) throw new HttpError(400, 'Enter the agreed amount: ₹0 or more.')
     return db.tx(async (t) => {
       const e = await loadEvent(t, idOf(req), true)
       open(e)
@@ -820,7 +820,7 @@ ${beo.functions.filter((f) => f.menu).map((f) => `<p><b>${esc(f.menu!.name)}</b>
     const { item } = req.params as { item: string }
     const b = (req.body ?? {}) as { status?: string; ref?: string }
     if (!['pending', 'applied', 'received', 'not_needed'].includes(b.status ?? '')) throw new HttpError(400, 'Status: pending, applied, received or not_needed.')
-    if (b.status === 'received' && !str(b.ref)) throw new HttpError(400, 'The permission\'s number or reference.')
+    if (b.status === 'received' && !str(b.ref)) throw new HttpError(400, 'Enter the permission\'s number or reference.')
     return db.tx(async (t) => {
       const e = await loadEvent(t, idOf(req), true)
       const r = await t.query(`update event_check set status = $3, ref = $4, updated_by = $5, updated_at = $6 where event_id = $1 and item = $2 returning item`, [e.id, item, b.status, str(b.ref, 80), who.userId, now()])
@@ -921,7 +921,7 @@ ${beo.functions.filter((f) => f.menu).map((f) => `<p><b>${esc(f.menu!.name)}</b>
       if (refund < 0 || refund > held) throw new HttpError(400, `Refund up to the ${inr(held)} held.`)
       if (refund > 0) {
         if (!METHODS.includes(b.method ?? '')) throw new HttpError(400, `How is it refunded? (${METHODS.join(', ')})`)
-        if (b.method !== 'cash' && !str(b.reference)) throw new HttpError(400, 'The refund\'s reference (UTR or cheque number).')
+        if (b.method !== 'cash' && !str(b.reference)) throw new HttpError(400, 'Enter the refund\'s reference (UTR or cheque number).')
         const v = await eventRefundVoucher(ctx, t, who, e.id, refund)
         await t.query(`insert into event_payment (id, event_id, kind, method, amount_paise, reference, voucher_id, business_date, received_by, received_at) values ($1,$2,'refund',$3,$4,$5,$6,$7,$8,$9)`,
           [newId('EP'), e.id, b.method, -refund, str(b.reference, 80), v?.id ?? null, await businessDate(t), who.userId, now()])

@@ -239,7 +239,7 @@ export function staffRoutes(app: FastifyInstance, ctx: Ctx) {
         const [s] = await t.query<{ name: string }>('select name from space where id = $1', [b.spaceId]); place = s?.name ?? null
         pos = await spacePosition(t, b.spaceId)
       } else {
-        if (!validFix(b)) throw new HttpError(400, 'Send lat and lng.')
+        if (!validFix(b)) throw new HttpError(400, 'Turn on location on this phone so the place can be recorded.')
         pos = toMap(g, b.lat!, b.lng!)
         if (g.lat != null) inside = distanceM(b.lat!, b.lng!, g.lat, g.lng!) <= g.radiusM + Math.min(b.accuracy ?? 0, 100)
       }

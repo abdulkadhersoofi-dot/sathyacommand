@@ -1,4 +1,4 @@
-import { esc, toast, tonePill } from '../ui/dom'
+import { esc, toast, tonePill, showDate } from '../ui/dom'
 import { checked, val } from '../ui/form-modal'
 import { takePhoto, uploadPhoto } from '../ui/photo'
 import type { WorkspaceHost } from '../ui/workspace'
@@ -51,7 +51,7 @@ export async function roomActions(h: HkHost, r: Room) {
     <dl class="kv"><dt>Section</dt><dd>${esc(r.section)}</dd>${r.room_type ? `<dt>Type</dt><dd>${esc(r.room_type)}</dd>` : ''}
       ${r.guest ? `<dt>Guest</dt><dd>${esc(r.guest)}${r.departing ? ' · leaving today' : ''}</dd>` : ''}${r.arriving ? '<dt>Arrival</dt><dd>Guest arriving today</dd>' : ''}
       ${r.task ? `<dt>Task</dt><dd>${esc(TASK[r.task.kind] ?? r.task.kind)} · ${esc(TASK_STATE[r.task.status]?.[0] ?? r.task.status)}${r.task.attendant ? ` · ${esc(r.task.attendant)}` : ''}</dd>` : ''}
-      ${r.ooo_reason ? `<dt>Out of order</dt><dd>${esc(r.ooo_reason)}${r.ooo_to ? ` until ${esc(r.ooo_to)}` : ''}</dd>` : ''}</dl>
+      ${r.ooo_reason ? `<dt>Out of order</dt><dd>${esc(r.ooo_reason)}${r.ooo_to ? ` until ${esc(showDate(r.ooo_to))}` : ''}</dd>` : ''}</dl>
     <div class="actions room-actions">${actions.join('')}</div>`, 'Done', async () => '')
   const done = async (msg: string) => { await h.loadRooms(); h.render(); return msg }
   h.modal.el.querySelector('.room-actions')!.addEventListener('click', async (e) => {

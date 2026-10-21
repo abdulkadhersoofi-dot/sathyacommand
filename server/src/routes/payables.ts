@@ -116,6 +116,8 @@ export function payablesRoutes(app: FastifyInstance, ctx: Ctx) {
         if (lineItc === 'full') itc += tax
         lines.push({ line: n, item_id: item?.id ?? null, description: item?.name ?? l.description!, qty, rate, amount, tax })
       }
+      // A service or other line on a bill raised against a PO is not on that PO (POs carry stock items only).
+      if (poId) for (const l of lines.filter((x) => !x.item_id)) differences.push(`${l.description}: ₹${((l.amount + l.tax) / 100).toLocaleString('en-IN')} not on the purchase order`)
       // Three-way match: each item against the PO's rate and against what was received and not yet billed.
       for (const l of lines.filter((x) => x.item_id)) {
         if (poId) {

@@ -65,13 +65,15 @@ export class Billing {
   /** Bill form: one bill, equal split, or item by item; discount; service charge; company details. */
   billForm(o: OrderRef) {
     const items = o.items.filter((i) => i.status !== 'void')
+    // Changing the split keeps the discount and service charge already on the bill; takeaway and room service have no service charge to start with.
+    const cur = this.bills.find((b) => b.status === 'open')
     this.ws.modal.open(`Bill order ${o.number}`, `<div class="form-grid">
       <label class="span2">Split<select name="split"><option value="1">One bill</option>${[2, 3, 4, 5, 6].map((n) => `<option value="${n}">Split equally in ${n}</option>`).join('')}<option value="items">Item by item…</option></select></label>
       <div class="span2" data-items hidden>${items.map((i) => `<label class="split-row"><span>${i.qty} × ${esc(i.name)} <span class="mono">${rs(i.price_paise * i.qty)}</span></span>
         <select name="g_${esc(i.id)}">${[1, 2, 3, 4].map((n) => `<option value="${n}">Bill ${n}</option>`).join('')}</select></label>`).join('')}</div>
-      <label>Discount %<input name="discount" type="number" min="0" max="100" step="0.5" value="0"></label>
-      <label>Reason<input name="reason" maxlength="120" placeholder="e.g. regular guest"></label>
-      ${this.serviceCharge ? `<label class="check span2"><input type="checkbox" name="service" checked> Service charge ${this.serviceCharge}% (remove if the guest asks)</label>` : ''}
+      <label>Discount %<input name="discount" type="number" min="0" max="100" step="0.5" value="${cur ? Number(cur.discount_percent) : 0}"></label>
+      <label>Reason<input name="reason" maxlength="120" placeholder="e.g. regular guest" value="${esc(cur?.discount_reason ?? '')}"></label>
+      ${this.serviceCharge ? `<label class="check span2"><input type="checkbox" name="service" ${(cur ? Number(cur.service_percent) > 0 : o.kind === 'dine_in') ? 'checked' : ''}> Service charge ${this.serviceCharge}% (remove if the guest asks)</label>` : ''}
       <label class="check span2"><input type="checkbox" name="company"> Company bill (GST invoice in the company's name)</label>
       <div class="span2 form-grid" data-company hidden>
         <label class="span2">Company name<input name="cname" maxlength="100"></label>

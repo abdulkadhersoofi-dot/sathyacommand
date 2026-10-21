@@ -153,7 +153,7 @@ export class BanksView {
         ${r ? `<div class="mc-figs"><span><small>Books on ${esc(r.asOf)}</small><b class="mono">${money(r.bookPaise)}</b></span>
           <span><small>Statement${r.statementDate ? ` on ${esc(r.statementDate)}` : ''}</small><b class="mono">${r.statementPaise == null ? '—' : money(r.statementPaise)}</b></span>
           <span><small>In the books, not the bank</small><b class="mono">${r.inBooksNotBank.length}</b></span><span><small>In the bank, not the books</small><b class="mono">${r.inBankNotBooks.length}</b></span>
-          <span><small>Difference</small><b class="mono ${r.differencePaise ? 'fd-warn' : ''}">${r.differencePaise == null ? '—' : money(r.differencePaise)}</b></span></div>
+          <span><small>Unexplained difference</small><b class="mono ${r.differencePaise ? 'fd-warn' : ''}">${r.differencePaise == null ? '—' : money(r.differencePaise)}</b></span></div>
           ${r.inBooksNotBank.length ? `<div class="rc-sub">Not yet through the bank: ${r.inBooksNotBank.slice(0, 6).map((x) => `${esc(showDate(x.date))} ${esc(x.number)} ${money(x.amt)}`).join(' · ')}${r.inBooksNotBank.length > 6 ? ' …' : ''}</div>` : ''}` : ''}</div>` : '<div class="empty">No bank account yet.</div>'}
       <p class="muted small">Import the statement from the bank's website as CSV. Lines with one book entry of the same amount (or bearing its UTR) match by themselves; post the rest from here: card and UPI settlements (the fee and its GST taken out), money from a company, charges, interest.</p>
       ${this.lines.map((l) => {

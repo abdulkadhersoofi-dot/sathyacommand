@@ -1,4 +1,4 @@
-import { esc, tonePill } from '../ui/dom'
+import { esc, tonePill, showDate } from '../ui/dom'
 import { val } from '../ui/form-modal'
 import { money } from '../acc/books'
 import { STATUS_LABEL } from './calendar'
@@ -28,7 +28,7 @@ export function doneForm(h: BqHost, a: { id: string; subject: string }, after: (
 export function activityRows(list: Activity[], today: string, withTarget = true) {
   return list.map((a) => `<div class="row-card"><div class="rc-title">${esc(ACT_KINDS.find((k) => k[0] === a.kind)?.[1] ?? a.kind)}: ${esc(a.subject)}</div>
       <div class="rc-sub">${withTarget ? `${a.account ? esc(a.account) : ''}${a.event ? `${esc(a.event_number ?? '')} ${esc(a.event)}` : ''} · ` : ''}${esc(a.owner)}</div>
-      <div class="rc-right">${a.due_on ? tonePill(a.due_on < today ? `Overdue ${a.due_on}` : a.due_on === today ? 'Today' : a.due_on, a.due_on < today ? '--st-departing' : a.due_on === today ? '--marigold' : '--muted') : ''}
+      <div class="rc-right">${a.due_on ? tonePill(a.due_on < today ? `Overdue ${showDate(a.due_on)}` : a.due_on === today ? 'Today' : a.due_on, a.due_on < today ? '--st-departing' : a.due_on === today ? '--marigold' : '--muted') : ''}
         <button type="button" class="btn small" data-actdone="${esc(a.id)}">Done…</button></div></div>`).join('')
 }
 

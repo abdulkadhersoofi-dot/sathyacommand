@@ -66,10 +66,10 @@ export function hrRoutes(app: FastifyInstance, ctx: Ctx, cfg: PayrollConfig = lo
   function fields(b: Record<string, unknown>, partial: boolean) {
     const out: Record<string, unknown> = {}
     const req = (k: string) => !partial || b[k] !== undefined
-    if (req('name')) { const v = str(b.name, 120); if (!v) throw new HttpError(400, 'The employee\'s name.'); out.name = v }
+    if (req('name')) { const v = str(b.name, 120); if (!v) throw new HttpError(400, 'Enter the employee\'s name.'); out.name = v }
     if (req('department')) { if (!cfg.departments[String(b.department)]) throw new HttpError(400, `Department: ${Object.keys(cfg.departments).join(', ')}.`); out.department = b.department }
-    if (req('designation')) { const v = str(b.designation, 80); if (!v) throw new HttpError(400, 'The designation (e.g. Room attendant).'); out.designation = v }
-    if (req('joinedOn')) { if (!DATE.test(String(b.joinedOn ?? ''))) throw new HttpError(400, 'Date of joining.'); out.joined_on = b.joinedOn }
+    if (req('designation')) { const v = str(b.designation, 80); if (!v) throw new HttpError(400, 'Enter the designation (e.g. Room attendant).'); out.designation = v }
+    if (req('joinedOn')) { if (!DATE.test(String(b.joinedOn ?? ''))) throw new HttpError(400, 'Enter the date of joining.'); out.joined_on = b.joinedOn }
     if (b.employmentType !== undefined) { if (!['permanent', 'probation', 'fixed_term', 'contract', 'trainee'].includes(String(b.employmentType))) throw new HttpError(400, 'Permanent, probation, fixed term, contract or trainee.'); out.employment_type = b.employmentType }
     for (const [k, col] of [['confirmedOn', 'confirmed_on'], ['fixedTermUntil', 'fixed_term_until'], ['dob', 'dob']] as const) {
       if (b[k] !== undefined) { if (b[k] && !DATE.test(String(b[k]))) throw new HttpError(400, `${k}: a date.`); out[col] = b[k] || null }
@@ -226,7 +226,7 @@ export function hrRoutes(app: FastifyInstance, ctx: Ctx, cfg: PayrollConfig = lo
   app.post('/api/hr/employees/:id/exit', async (req) => {
     const who = await need(req, 'hr.manage')
     const b = (req.body ?? {}) as { lastDay?: string; reason?: string }
-    if (!DATE.test(b.lastDay ?? '')) throw new HttpError(400, 'The last working day.')
+    if (!DATE.test(b.lastDay ?? '')) throw new HttpError(400, 'Enter the last working day.')
     const reason = str(b.reason, 200)
     if (!reason) throw new HttpError(400, 'Why are they leaving? (resigned, retired, contract ended…)')
     return db.tx(async (t) => {
@@ -264,7 +264,7 @@ export function hrRoutes(app: FastifyInstance, ctx: Ctx, cfg: PayrollConfig = lo
   async function apply(who: Caller, e: EmployeeRow, b: { leaveType?: string; from?: string; to?: string; halfDay?: boolean; reason?: string }, byHr: boolean) {
     const rule = cfg.leave_types[b.leaveType ?? '']
     if (!rule) throw new HttpError(400, `Leave type: ${Object.keys(cfg.leave_types).join(', ')}.`)
-    if (!DATE.test(b.from ?? '') || !DATE.test(b.to ?? '') || b.to! < b.from!) throw new HttpError(400, 'From and to dates.')
+    if (!DATE.test(b.from ?? '') || !DATE.test(b.to ?? '') || b.to! < b.from!) throw new HttpError(400, 'Choose the from and to dates.')
     if (b.halfDay && b.from !== b.to) throw new HttpError(400, 'A half day is one day.')
     if (e.status === 'exited') throw new HttpError(409, 'This employee has left.')
     return db.tx(async (t) => {
@@ -382,14 +382,16 @@ export function hrRoutes(app: FastifyInstance, ctx: Ctx, cfg: PayrollConfig = lo
 
   app.put('/api/hr/holidays', async (req) => {
     const who = await need(req, 'hr.manage')
-    const b = (req.body ?? {}) as { day?: string; name?: string; kind?: string; remove?: boolean }
-    if (!DATE.test(b.day ?? '')) throw new HttpError(400, 'The date.')
+    const b = (req.body ?? {}) as { day?: string; name?: string; kind?: string; remove?: boolean; replace?: boolean }
+    if (!DATE.test(b.day ?? '')) throw new HttpError(400, 'Choose the date of the holiday.')
     if (b.remove) {
       const [h] = await db.query<{ kind: string }>('select kind from holiday where day = $1', [b.day])
       if (h?.kind === 'national') throw new HttpError(409, 'National holidays are required by law.')
       await db.query('delete from holiday where day = $1', [b.day])
     } else {
-      if (!str(b.name) || !['festival', 'optional'].includes(b.kind ?? '')) throw new HttpError(400, 'A name, and festival or optional.')
+      if (!str(b.name) || !['festival', 'optional'].includes(b.kind ?? '')) throw new HttpError(400, 'Give the holiday a name, and say whether it is a festival or an optional holiday.')
+      const [have] = await db.query<{ name: string }>('select name from holiday where day = $1', [b.day])
+      if (have && !b.replace) throw new HttpError(409, `${b.day!.split('-').reverse().join('/')} is already a holiday (${have.name}). Remove it first to put another in its place.`)
       await db.query('insert into holiday (day, name, kind) values ($1,$2,$3) on conflict (day) do update set name = excluded.name, kind = excluded.kind', [b.day, str(b.name, 80), b.kind])
     }
     await appendAudit(db, { actor: who, action: b.remove ? 'hr.holiday_removed' : 'hr.holiday_set', entity: { type: 'holiday', id: b.day! }, note: b.name }, now())

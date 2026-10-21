@@ -66,10 +66,10 @@ export function tdsRoutes(app: FastifyInstance, ctx: Ctx) {
   app.post('/api/ldc', async (req, reply) => {
     const who = await need(req, 'tds.manage', 'vendors.manage')
     const b = (req.body ?? {}) as { vendorId?: string; certNo?: string; section?: string; rate?: number; limit?: number; validFrom?: string; validTo?: string }
-    if (!b.certNo?.trim()) throw new HttpError(400, 'The certificate number (from TRACES).')
+    if (!b.certNo?.trim()) throw new HttpError(400, 'Enter the certificate number (from TRACES).')
     if (!/^19[0-9][A-Z-]*/.test((b.section ?? '').trim().toUpperCase())) throw new HttpError(400, 'The section it is for (194C, 194J…).')
-    if (!(Number(b.rate) >= 0 && Number(b.rate) <= 30)) throw new HttpError(400, 'The lower rate on the certificate (%).')
-    if (!(Number(b.limit) > 0)) throw new HttpError(400, 'The amount the certificate covers (₹).')
+    if (!(Number(b.rate) >= 0 && Number(b.rate) <= 30)) throw new HttpError(400, 'Enter the lower rate on the certificate (%).')
+    if (!(Number(b.limit) > 0)) throw new HttpError(400, 'Enter the amount the certificate covers (₹).')
     if (!DATE.test(b.validFrom ?? '') || !DATE.test(b.validTo ?? '') || b.validTo! < b.validFrom!) throw new HttpError(400, 'Valid from and to (YYYY-MM-DD).')
     return db.tx(async (t) => {
       const [v] = await t.query<{ name: string; pan: string | null }>('select name, pan from vendor where id = $1', [b.vendorId])
@@ -88,7 +88,7 @@ export function tdsRoutes(app: FastifyInstance, ctx: Ctx) {
     await need(req, ...VIEW)
     const today = await businessDate(db)
     const fy = (req.query as { fy?: string }).fy ?? financialYear(today)
-    if (!FY.test(fy)) throw new HttpError(400, 'The year as 2026-27.')
+    if (!FY.test(fy)) throw new HttpError(400, 'Enter the year as 2026-27.')
     const { from, to } = fyRange(fy)
     const rows = await db.query<{ month: string; deducted: string; deposited: string; open: string; entries: number }>(
       `select to_char(deducted_on, 'YYYY-MM') as month, sum(tds_paise) as deducted, coalesce(sum(tds_paise) filter (where challan_id is not null), 0) as deposited,
@@ -110,8 +110,8 @@ export function tdsRoutes(app: FastifyInstance, ctx: Ctx) {
     const who = await need(req, 'tds.manage')
     const b = (req.body ?? {}) as { month?: string; bsrCode?: string; challanNo?: string; paidOn?: string; tax?: number; interest?: number; lateFee?: number; bankAccountId?: string }
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(b.month ?? '')) throw new HttpError(400, 'Which month\'s deductions it deposits (YYYY-MM).')
-    if (!/^\d{7}$/.test(b.bsrCode ?? '')) throw new HttpError(400, 'The bank\'s BSR code: 7 digits, on the challan.')
-    if (!/^\d{5}$/.test(b.challanNo ?? '')) throw new HttpError(400, 'The challan serial number: 5 digits.')
+    if (!/^\d{7}$/.test(b.bsrCode ?? '')) throw new HttpError(400, 'Enter the bank\'s BSR code: 7 digits, on the challan.')
+    if (!/^\d{5}$/.test(b.challanNo ?? '')) throw new HttpError(400, 'Enter the challan serial number: 5 digits.')
     if (!DATE.test(b.paidOn ?? '')) throw new HttpError(400, 'The date it was paid.')
     await postPending(db, now())
     return db.tx(async (t) => {
@@ -206,11 +206,11 @@ export function tdsRoutes(app: FastifyInstance, ctx: Ctx) {
     const who = await need(req, 'tds.manage')
     const b = (req.body ?? {}) as { fy?: string; quarter?: number; tokenNo?: string; filedOn?: string }
     if (!FY.test(b.fy ?? '') || !(Number(b.quarter) >= 1 && Number(b.quarter) <= 4)) throw new HttpError(400, 'fy (2026-27) and quarter (1–4).')
-    if (!/^\d{15}$/.test(b.tokenNo?.trim() ?? '')) throw new HttpError(400, 'The 15-digit token number of the provisional receipt.')
+    if (!/^\d{15}$/.test(b.tokenNo?.trim() ?? '')) throw new HttpError(400, 'Enter the 15-digit token number of the provisional receipt.')
     return db.tx(async (t) => {
       const today = await businessDate(t)
       const filedOn = b.filedOn ?? today
-      if (!DATE.test(filedOn) || filedOn > today) throw new HttpError(400, 'The filing date: today or earlier.')
+      if (!DATE.test(filedOn) || filedOn > today) throw new HttpError(400, 'Enter the filing date: today or earlier.')
       const s = await statement26q(t, b.fy!, Number(b.quarter))
       if (s.filed) throw new HttpError(409, `26Q for ${b.fy} Q${b.quarter} is already filed.`)
       if (s.deductees.some((d) => !d.challan)) throw new HttpError(409, 'Deposit every deduction of the quarter by challan before the statement is filed.')
@@ -289,7 +289,7 @@ export function tdsRoutes(app: FastifyInstance, ctx: Ctx) {
     const who = await need(req, 'tds.manage')
     const b = (req.body ?? {}) as { amount?: number; bsrCode?: string; challanNo?: string; paidOn?: string; bankAccountId?: string }
     if (!(Number(b.amount) > 0)) throw new HttpError(400, 'How much was paid?')
-    if (!/^\d{7}$/.test(b.bsrCode ?? '') || !/^\d{5}$/.test(b.challanNo ?? '') || !DATE.test(b.paidOn ?? '')) throw new HttpError(400, 'The BSR code (7 digits), challan serial (5 digits) and date paid.')
+    if (!/^\d{7}$/.test(b.bsrCode ?? '') || !/^\d{5}$/.test(b.challanNo ?? '') || !DATE.test(b.paidOn ?? '')) throw new HttpError(400, 'Enter the BSR code (7 digits), challan serial (5 digits) and date paid.')
     const amount = rupees(Number(b.amount))
     return db.tx(async (t) => {
       if (b.paidOn! > await businessDate(t)) throw new HttpError(400, 'The date it was paid: today or earlier.')

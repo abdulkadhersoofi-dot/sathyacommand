@@ -39,7 +39,7 @@ const now = () => ctx.now()
   if (tds && !b.tdsSection?.trim()) throw new HttpError(400, 'Under which section did they deduct TDS (194-I, 194C…)?')
   const today = await businessDate(t)
   const date = b.date ?? today
-  if (!DATE.test(date) || date > today) throw new HttpError(400, 'The date: today or earlier.')
+  if (!DATE.test(date) || date > today) throw new HttpError(400, 'Enter the date: today or earlier.')
   let bankCode = '1100', bankId: string | null = null
   if (b.mode === 'cash') {
     const [{ cash }] = await t.query<{ cash: string }>(`select coalesce(sum(amount_paise - tds_paise), 0) as cash from ar_receipt where debtor_id = $1 and date = $2 and mode = 'cash'`, [d.id, date])
@@ -80,7 +80,7 @@ export function receivablesRoutes(app: FastifyInstance, ctx: Ctx) {
   /** Checks and tidies what was sent for an account. */
   function fields(b: Record<string, unknown>) {
     const out: Record<string, unknown> = {}
-    if (b.name !== undefined) { if (!String(b.name).trim()) throw new HttpError(400, 'The company\'s name.'); out.name = String(b.name).trim() }
+    if (b.name !== undefined) { if (!String(b.name).trim()) throw new HttpError(400, 'Enter the company\'s name.'); out.name = String(b.name).trim() }
     if (b.kind !== undefined) { if (!KINDS.includes(String(b.kind))) throw new HttpError(400, 'Company, travel agent, OTA, government or other.'); out.kind = b.kind }
     if (b.gstin !== undefined) {
       if (!b.gstin) out.gstin = null
@@ -125,7 +125,7 @@ export function receivablesRoutes(app: FastifyInstance, ctx: Ctx) {
     const who = await need(req, 'receivables.manage', 'sales.manage')
     const b = (req.body ?? {}) as Record<string, unknown>
     const f = fields(b)
-    if (!f.name) throw new HttpError(400, 'The company\'s name.')
+    if (!f.name) throw new HttpError(400, 'Enter the company\'s name.')
     let limit: number | null = null
     if (b.creditLimit != null && b.creditLimit !== '') {
       if (!can(who, 'credit.limit')) throw new HttpError(403, 'The GM sets credit limits: open the account, then ask the GM.')
@@ -167,7 +167,8 @@ export function receivablesRoutes(app: FastifyInstance, ctx: Ctx) {
     const [o] = await db.query<{ b: string | null }>(
       `select sum(l.debit_paise - l.credit_paise) as b from voucher_line l join voucher v on v.id = l.voucher_id where l.account_code = '1310' and l.party_type = 'company' and l.party_id = $1 and v.date < $2`, [id, from])
     const rows = await db.query<{ date: string; number: string; narration: string; ref: string | null; debit: string; credit: string }>(
-      `select v.date::text, v.number, v.narration, l.ref, l.debit_paise as debit, l.credit_paise as credit from voucher_line l join voucher v on v.id = l.voucher_id
+      `select v.date::text, v.number, v.narration, -- a stay billed to a company before its invoice was issued: name the invoice now
+              coalesce((select x.number from tax_document x where l.ref like 'Booking %' and x.reservation_id = substr(l.ref, 9) and x.doc_type = 'invoice' order by x.issued_at desc limit 1), l.ref) as ref, l.debit_paise as debit, l.credit_paise as credit from voucher_line l join voucher v on v.id = l.voucher_id
         where l.account_code = '1310' and l.party_type = 'company' and l.party_id = $1 and v.date between $2 and $3 order by v.date, v.created_at, l.line`, [id, from, to])
     let bal = Number(o.b ?? 0)
     const lines = rows.map((r) => ({ date: r.date, voucher: r.number, narration: r.ref && Number(r.debit) > 0 ? `Bill ${r.ref}` : r.narration, debitPaise: Number(r.debit), creditPaise: Number(r.credit), balancePaise: (bal += Number(r.debit) - Number(r.credit)) }))
@@ -215,7 +216,7 @@ export function receivablesRoutes(app: FastifyInstance, ctx: Ctx) {
     const who = await need(req, 'receivables.manage')
     const b = (req.body ?? {}) as { debtorId?: string; amount?: number; tds?: number; tdsSection?: string; mode?: string; reference?: string; bankAccountId?: string; date?: string; note?: string; bankLineId?: string }
     if (!MODES.includes(b.mode as never)) throw new HttpError(400, 'How was it paid: bank, UPI, cheque or cash?')
-    if (b.mode !== 'cash' && !b.reference?.trim()) throw new HttpError(400, 'The UTR, UPI reference or cheque number.')
+    if (b.mode !== 'cash' && !b.reference?.trim()) throw new HttpError(400, 'Enter the UTR, UPI reference or cheque number.')
     return db.tx(async (t) => reply.status(201).send(await receiveFromDebtor(ctx, t, who, b)))
   })
 

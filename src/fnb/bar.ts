@@ -92,7 +92,7 @@ export class BarView {
         ${this.ws.can('bar.settings', 'licences.edit') ? '<div class="ws-toolbar"><button type="button" class="btn" data-b="measure">Add measure</button></div>' : ''}
         ${this.measures.filter((m) => m.active).map((m) => `<div class="row-card${m.due_on && m.due_on <= today ? ' late' : ''}"><div class="rc-title">${esc(m.name)}</div>
           <div class="rc-sub">${esc([m.capacity, m.location, m.stamp_no && `stamp ${m.stamp_no}`].filter(Boolean).join(' · '))}${m.stamped_on ? ` · stamped ${esc(showDate(m.stamped_on))}` : ''}</div>
-          <div class="rc-right">${m.due_on ? tonePill(`due ${m.due_on}`, m.due_on <= today ? '--st-departing' : '--muted') : tonePill('no date', '--marigold')}${this.ws.can('bar.settings', 'licences.edit') ? `<button type="button" class="btn small" data-measure="${esc(m.id)}">Restamped…</button>` : ''}</div></div>`).join('') || '<div class="empty">No measures registered.</div>'}`
+          <div class="rc-right">${m.due_on ? tonePill(`due ${showDate(m.due_on)}`, m.due_on <= today ? '--st-departing' : '--muted') : tonePill('no date', '--marigold')}${this.ws.can('bar.settings', 'licences.edit') ? `<button type="button" class="btn small" data-measure="${esc(m.id)}">Restamped…</button>` : ''}</div></div>`).join('') || '<div class="empty">No measures registered.</div>'}`
     }
     return bar + (this.manager ? '<div class="ws-toolbar"><button type="button" class="btn primary" data-b="add-brand">Add brand</button></div>' : '')
       + `<div class="m-table">${this.brands.map((b) => `<div class="m-row m-row-4${b.active ? '' : ' retired'}"><b>${esc(b.name)}</b><span>${esc(b.class_label)}</span><span class="mono">${b.bottle_ml} ml${b.placeholder ? ' · sample' : ''}</span>
@@ -147,9 +147,10 @@ export class BarView {
       })
     }
     if (act === 'breakage') {
-      modal.open('Report breakage or spillage', `<div class="form-grid"><label class="span2">Brand<select name="brand">${brandOpts}</select></label>
+      modal.open('Report breakage or spillage', `<div class="form-grid"><label class="span2">Brand<select name="brand" required><option value="">Choose the brand…</option>${brandOpts}</select></label>
         <label>Lost (ml)<input name="ml" type="number" min="1" step="1" placeholder="750"></label><label>Reason<input name="reason" maxlength="120" placeholder="Bottle dropped"></label></div>
         <p class="muted small">Keep the broken bottle for the manager. Above the role's limit the GM approves.</p>`, 'Report', async (f) => {
+        if (!val(f, 'brand')) throw new Error('Choose the brand that was lost.')
         const r = await api.post<{ pending?: boolean }>('/api/bar/breakage', { brandId: val(f, 'brand'), ml: Number(val(f, 'ml')), reason: val(f, 'reason') })
         await this.load(); this.ws.render(); return r.pending ? 'Sent for approval' : 'Breakage recorded'
       })

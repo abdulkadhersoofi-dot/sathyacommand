@@ -62,7 +62,7 @@ export class AccountsView {
         <span class="rc-right">${manage ? `<button type="button" class="btn small ghost" data-acdel="${esc(c.id)}">Remove</button>` : ''}</span></div>`).join('') || '<p class="empty">No contacts yet.</p>'}</div>
       <div class="sec-title">Contracted room rates</div>
       <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Room</th><th>Plan</th><th>From</th><th>To</th><th class="n">Per night</th><th>Set by</th><th></th></tr></thead><tbody>
-        ${d.rates.map((r) => `<tr class="${r.current ? '' : 'retired'}"><td>${esc(r.room_type)}</td><td>${esc(r.plan_code)}</td><td>${esc(r.valid_from)}</td><td>${esc(r.valid_to)}</td><td class="n">${money(r.rate_paise)}</td><td>${esc(r.by)}</td>
+        ${d.rates.map((r) => `<tr class="${r.current ? '' : 'retired'}"><td>${esc(r.room_type)}</td><td>${esc(r.plan_code)}</td><td>${esc(showDate(r.valid_from))}</td><td>${esc(showDate(r.valid_to))}</td><td class="n">${money(r.rate_paise)}</td><td>${esc(r.by)}</td>
           <td>${rates ? `<button type="button" class="btn small ghost" data-rtdel="${esc(r.id)}">Remove</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">Rack rates apply.</td></tr>'}
       </tbody></table></div>
       <div class="sec-title">Follow-ups</div>
@@ -78,13 +78,14 @@ export class AccountsView {
   onInput(el: HTMLElement) { if (el.matches('[data-acq]')) { this.q = (el as HTMLInputElement).value; this.h.render() } }
 
   private accountForm(title: string, a?: Detail['account']) {
-    return this.h.api.get<{ id: string; name: string; roles: string[] }[]>('/api/users').catch(() => []).then((users) => {
-      const sellers = users.filter((u) => u.roles?.some((r) => ['sales_banquets', 'general_manager', 'front_office_manager', 'managing_director'].includes(r)))
+    return this.h.api.get<{ id: string; name: string }[]>('/api/sales/people').catch(() => []).then((sellers) => {
+      // A new account is looked after by whoever opens it, if they sell.
+      const mine = a ? a.owner_id : sellers.find((u) => u.id === this.h.me.id)?.id
       this.h.modal.open(title, `<div class="form-grid"><label class="span2">Name<input name="name" maxlength="120" value="${esc(a?.name ?? '')}"></label>
           <label>Kind<select name="kind">${['company', 'travel_agent', 'government', 'other'].map((k) => `<option value="${k}" ${a?.kind === k ? 'selected' : ''}>${esc(KIND[k])}</option>`).join('')}</select></label>
           <label>GSTIN<input name="gstin" maxlength="15" value="${esc(a?.gstin ?? '')}"></label><label>City<input name="city" value="${esc(a?.city ?? '')}"></label>
           <label>Phone<input name="phone" value="${esc(a?.phone ?? '')}"></label><label>Email<input name="email" value="${esc(a?.email ?? '')}"></label>
-          ${sellers.length ? `<label>Handled by<select name="owner"><option value="">—</option>${sellers.map((u) => `<option value="${esc(u.id)}" ${a?.owner_id === u.id ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}</select></label>` : ''}
+          ${sellers.length ? `<label>Handled by<select name="owner"><option value="">—</option>${sellers.map((u) => `<option value="${esc(u.id)}" ${mine === u.id ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}</select></label>` : ''}
           <label class="span2">Address<input name="address" value="${esc(a?.address ?? '')}"></label><label class="span2">Notes<textarea name="notes" rows="2">${esc(a?.notes ?? '')}</textarea></label></div>`, 'Save', async (f) => {
         const body = { name: val(f, 'name'), kind: val(f, 'kind'), gstin: val(f, 'gstin').toUpperCase(), city: val(f, 'city'), phone: val(f, 'phone'), email: val(f, 'email'), address: val(f, 'address'), notes: val(f, 'notes'), ...(sellers.length ? { ownerId: val(f, 'owner') || null } : {}) }
         if (a) await this.h.api.req('PATCH', `/api/debtors/${a.id}`, body)

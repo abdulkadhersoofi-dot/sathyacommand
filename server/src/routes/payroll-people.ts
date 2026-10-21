@@ -102,7 +102,7 @@ export function payrollPeopleRoutes(app: FastifyInstance, ctx: Ctx, cfg: Payroll
     const { e } = await selfOr(req, (req.params as { employeeId: string }).employeeId)
     const today = await businessDate(db)
     const fy = (req.query as { fy?: string }).fy ?? fyOf(today.slice(0, 7)).fy
-    if (!FY.test(fy)) throw new HttpError(400, 'The year as 2026-27.')
+    if (!FY.test(fy)) throw new HttpError(400, 'Enter the year as 2026-27.')
     return { fy, ...(await projection(db, e, fy, today)), compare: await regimeCompare(db, e, fy, today) }
   })
 
@@ -116,7 +116,7 @@ export function payrollPeopleRoutes(app: FastifyInstance, ctx: Ctx, cfg: Payroll
     const hr = can(who, 'payroll.run') || can(who, 'hr.manage')
     if (!self && !hr) throw new HttpError(403, 'Only HR or the employee changes the declaration.')
     const b = (req.body ?? {}) as { fy?: string; regime?: string; rent?: number; sec80c?: number; sec80d?: number; homeLoan?: number; other?: number; previousIncome?: number; previousTds?: number; proofsChecked?: boolean }
-    if (!FY.test(b.fy ?? '')) throw new HttpError(400, 'The year as 2026-27.')
+    if (!FY.test(b.fy ?? '')) throw new HttpError(400, 'Enter the year as 2026-27.')
     if (!['new', 'old'].includes(b.regime ?? '')) throw new HttpError(400, 'Regime: new or old.')
     return db.tx(async (t) => {
       const [cur] = await t.query<{ proofs_checked: boolean }>('select proofs_checked from tax_declaration where employee_id = $1 and fy = $2', [e.id, b.fy])
@@ -155,7 +155,7 @@ export function payrollPeopleRoutes(app: FastifyInstance, ctx: Ctx, cfg: Payroll
     const b = (req.body ?? {}) as { employeeId?: string; kind?: string; amount?: number; instalment?: number; reason?: string }
     if (!['advance', 'loan'].includes(b.kind ?? '')) throw new HttpError(400, 'An advance or a loan?')
     const amount = paise(b.amount, 'Amount', 500_000), instalment = paise(b.instalment, 'Instalment', 500_000)
-    if (!amount || !instalment) throw new HttpError(400, 'The amount and the monthly instalment.')
+    if (!amount || !instalment) throw new HttpError(400, 'Enter the amount and the monthly instalment.')
     if (instalment > amount) throw new HttpError(400, 'The instalment is more than the amount.')
     const reason = str(b.reason, 200)
     if (!reason) throw new HttpError(400, 'What is it for?')
@@ -346,7 +346,7 @@ export function payrollPeopleRoutes(app: FastifyInstance, ctx: Ctx, cfg: Payroll
   app.get('/api/payroll/form16/:employeeId', async (req) => {
     const { e } = await selfOr(req, (req.params as { employeeId: string }).employeeId)
     const fy = (req.query as { fy?: string }).fy ?? ''
-    if (!FY.test(fy)) throw new HttpError(400, 'The year as 2026-27.')
+    if (!FY.test(fy)) throw new HttpError(400, 'Enter the year as 2026-27.')
     const y = await yearAsPaid(db, e, fy)
     if (!y.months.length) throw new HttpError(404, `No salary paid to them in ${fy} through the system.`)
     const deposits = await db.query<{ month: string; reference: string; paid_on: string }>(`select month, reference, paid_on::text from statutory_payment where kind = 'tds' and month = any($1) order by paid_on`, [fyMonths(fy)])

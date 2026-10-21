@@ -44,7 +44,9 @@ export class CaptainView {
   private get outlet() { return this.ws.outlets.find((o) => o.id === this.outletId) }
 
   async load() {
-    if (!this.ws.outlets.some((o) => o.id === this.outletId)) this.outletId = (this.ws.outlets.find((o) => o.kind === 'restaurant') ?? this.ws.outlets[0])?.id ?? ''
+    // Bar staff start on the bar; everyone else on the restaurant.
+    const barRole = this.ws.me.roles?.some((r) => r === 'bartender' || r === 'bar_manager')
+    if (!this.ws.outlets.some((o) => o.id === this.outletId)) this.outletId = (this.ws.outlets.find((o) => o.kind === (barRole ? 'bar' : 'restaurant')) ?? this.ws.outlets[0])?.id ?? ''
     if (!this.outletId) return
     const queuedFor = (id: string) => this.ws.outbox.queue.some((q) => q.path.includes(id) || (q.body as { id?: string })?.id === id)
     if (this.order && !(this.order.offline && queuedFor(this.order.id))) {
@@ -167,7 +169,7 @@ export class CaptainView {
         ${k.status === 'ready' ? `<button type="button" class="btn small primary" data-served="${esc(k.id)}">Served</button>` : ''}
         <button type="button" class="btn small ghost" data-reprint="${esc(k.id)}" title="Reprint (marked COPY)">Reprint</button></div>
         ${lines.map((l) => `<div class="ord-line${l.status === 'void' ? ' void' : ''}"><span>${l.qty} × ${esc(l.name)}${l.note ? ` <i>${esc(l.note)}</i>` : ''}${l.void_reason && l.status === 'void' ? ` <i>(${esc(l.void_reason)})</i>` : ''}</span>
-          <span class="mono">${rs(l.price_paise * l.qty)}</span>${l.status === 'sent' ? `<button type="button" class="x" data-void="${esc(l.id)}" aria-label="Cancel ${esc(l.name)}">✕</button>` : '<span></span>'}</div>`).join('')}</div>`
+          <span class="mono">${rs(l.price_paise * l.qty)}</span>${l.status === 'sent' && o.status === 'open' ? `<button type="button" class="x" data-void="${esc(l.id)}" aria-label="Cancel ${esc(l.name)}">✕</button>` : '<span></span>'}</div>`).join('')}</div>`
     }
     for (const l of pendingServer) h += `<div class="ord-line pending"><span>${l.qty} × ${esc(l.name)} <i>not sent</i></span><span class="mono">${rs(l.price_paise * l.qty)}</span><button type="button" class="x" data-void="${esc(l.id)}" aria-label="Remove">✕</button></div>`
     const waiting = this.ws.outbox.queue.filter((q) => q.path === `/api/fnb/orders/${o.id}/items`).flatMap((q) => (q.body as { items: { itemId: string; qty: number }[] }).items)

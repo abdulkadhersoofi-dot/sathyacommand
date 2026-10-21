@@ -1,4 +1,4 @@
-import { esc, toast, tonePill } from '../ui/dom'
+import { esc, toast, tonePill, showDate } from '../ui/dom'
 import { checked, val } from '../ui/form-modal'
 import type { WorkspaceHost } from '../ui/workspace'
 import { CATEGORY, rupees, type Item } from './items'
@@ -107,7 +107,7 @@ export class RatesView {
       <div class="m-table"><div class="m-row rate-row head"><span>Item</span><span>Vendor</span><span>Rate</span><span>Valid</span><span></span></div>
       ${shown.map((r) => `<div class="m-row rate-row"><b>${esc(r.item)}</b><span>${esc(r.vendor)}</span>
         <span class="mono">${rupees(Number(r.rate_paise))} <small class="muted">/ ${esc(r.purchase_unit)}</small> ${r.current && best.get(r.item_id) === Number(r.rate_paise) ? tonePill('Best', '--st-vacant') : ''}</span>
-        <span class="small">${esc(r.valid_from)} → ${esc(r.valid_to)}${r.current ? '' : ' <span class="muted">(from)</span>'}</span>
+        <span class="small">${esc(showDate(r.valid_from))} → ${esc(showDate(r.valid_to))}${r.current ? '' : ' <span class="muted">(from)</span>'}</span>
         ${this.h.can('vendors.manage', 'stores.manage') ? `<button type="button" class="btn small" data-rt="end:${esc(r.id)}">End…</button>` : '<span></span>'}</div>`).join('') || '<div class="empty">No current rates.</div>'}</div>`
   }
 

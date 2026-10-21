@@ -42,19 +42,27 @@ export function reportFault(h: WorkspaceHost, at: { spaceId?: string; assetId?: 
       <label class="span2">What is wrong?<input name="title" maxlength="120" placeholder="e.g. AC not cooling, tap leaking, light not working"></label>
       <label class="span2">More detail (optional)<textarea name="detail" rows="2" maxlength="500"></textarea></label>
       <label>How urgent<select name="priority"><option value="normal">Normal: within the day</option><option value="high">High: guest affected</option><option value="urgent">Urgent: safety, water, power</option><option value="low">Low: when free</option></select></label>
-      ${at.spaceId || at.assetId ? '' : '<label class="check"><input type="checkbox" name="here" checked> I am standing at the fault (use my location)</label>'}
+      ${at.spaceId || at.assetId ? '' : '<label>Where<select name="space" data-where><option value="">Here: use my location</option></select></label>'}
     </div>
     <div class="actions"><button type="button" class="btn" data-photo>Take a photo</button><span class="muted small" data-photo-state></span></div>
     <p class="muted small">Engineering is told at once. You can follow it under Engineering → Tickets.</p>`, 'Report', async (f) => {
-    const here = !at.spaceId && !at.assetId && (f.elements.namedItem('here') as HTMLInputElement | null)?.checked
-    const fix = here ? await currentFix(8000) : null
+    const chosen = val(f, 'space')
+    const here = !at.spaceId && !at.assetId && !chosen
+    const fix = here ? await currentFix(5000) : null
     const photoIds = photo ? [await uploadPhoto(h.api, 'fault', photo)] : []
     const r = await h.api.post<{ id: string; located: boolean }>('/api/eng/tickets', {
-      title: val(f, 'title'), detail: val(f, 'detail') || undefined, priority: val(f, 'priority'), spaceId: at.spaceId, assetId: at.assetId, lat: fix?.lat, lng: fix?.lng, photoIds,
+      title: val(f, 'title'), detail: val(f, 'detail') || undefined, priority: val(f, 'priority'), spaceId: at.spaceId ?? (chosen || undefined), assetId: at.assetId, lat: fix?.lat, lng: fix?.lng, photoIds,
     })
     done?.(r.id)
     return r.located ? 'Fault reported' : 'Fault reported (no location: say where in the detail)'
   })
+  // Rooms and areas to choose from, so a fault can be reported from anywhere.
+  const where = h.modal.el.querySelector<HTMLSelectElement>('[data-where]')
+  if (where) void h.api.get<{ id: string; kind: string; name: string | null; room_no: string | null; building: string | null }[]>('/api/spaces').then((sp) => {
+    const rooms = sp.filter((x) => x.room_no), areas = sp.filter((x) => !x.room_no)
+    where.insertAdjacentHTML('beforeend', `${rooms.length ? `<optgroup label="Rooms">${rooms.map((x) => `<option value="${esc(x.id)}">Room ${esc(x.room_no)}${x.building ? ` · ${esc(x.building)}` : ''}</option>`).join('')}</optgroup>` : ''}
+      ${areas.length ? `<optgroup label="Areas">${areas.map((x) => `<option value="${esc(x.id)}">${esc(x.name ?? x.id)}</option>`).join('')}</optgroup>` : ''}`)
+  }).catch(() => {})
   h.modal.el.querySelector('[data-photo]')!.addEventListener('click', async () => {
     photo = await takePhoto()
     h.modal.el.querySelector('[data-photo-state]')!.textContent = photo ? 'Photo ready' : ''

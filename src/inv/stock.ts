@@ -180,13 +180,14 @@ export class CountsView {
     this.h.modal.open('Record breakage', `<div class="form-grid">
         <label>From store<select name="store">${stores.map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('')}</select></label>
         <label>In<select name="dept">${DEPARTMENTS.map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></label>
-        <label class="span2">Item<select name="item">${items.map((i) => `<option value="${esc(i.id)}">${esc(i.name)} (${esc(i.unit)})</option>`).join('')}</select></label>
-        <label>How many<input name="qty" type="number" min="1" step="1" value="1"></label>
+        <label class="span2">Item<select name="item" required><option value="">Choose the item…</option>${items.map((i) => `<option value="${esc(i.id)}">${esc(i.name)} (counted in ${esc(i.unit)})</option>`).join('')}</select></label>
+        <label>How many, in that unit<input name="qty" type="number" min="1" step="1" value="1"></label>
         <label>Who bears it<select name="to" data-to><option value="house">The house</option><option value="guest">The guest (on their bill)</option><option value="staff">A member of staff</option></select></label>
         <label class="span2" data-for="guest">Guest<select name="res">${guests.filter((g) => g.status === 'in_house').map((g) => `<option value="${esc(g.id)}">${esc(g.name)}${g.room_no ? ` · room ${esc(g.room_no)}` : ''}</option>`).join('')}</select></label>
         <label data-for="guest">Charge (₹, before GST)<input name="charge" type="number" min="0" step="1"></label>
         <label class="span2" data-for="staff">Staff name<input name="staff" maxlength="60"></label>
         <label class="span2">Note<input name="note" maxlength="200" placeholder="e.g. dropped while clearing table 4"></label></div>`, 'Record', async (f) => {
+      if (!val(f, 'item')) throw new Error('Choose the item that broke.')
       const r = await this.h.api.post<{ valuePaise: number; chargedPaise: number }>('/api/stock/breakage', {
         storeId: val(f, 'store'), department: val(f, 'dept'), itemId: val(f, 'item'), qty: Number(val(f, 'qty')), chargeTo: val(f, 'to'), reservationId: val(f, 'res') || undefined,
         charge: val(f, 'charge') ? Number(val(f, 'charge')) : undefined, staffName: val(f, 'staff') || undefined, note: val(f, 'note') || undefined,

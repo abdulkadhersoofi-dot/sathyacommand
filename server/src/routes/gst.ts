@@ -28,7 +28,7 @@ export function gstRoutes(app: FastifyInstance, ctx: Ctx) {
   }
   const periodOf = (req: FastifyRequest) => {
     const p = (req.params as { period: string }).period
-    if (!PERIOD.test(p)) throw new HttpError(400, 'The month as YYYY-MM.')
+    if (!PERIOD.test(p)) throw new HttpError(400, 'Enter the month as YYYY-MM.')
     return p
   }
   const filed = (t: Db, period: string) => t.query<{ form: string; arn: string; filed_on: string; filed_by_name: string; figures: unknown }>(
@@ -120,15 +120,15 @@ export function gstRoutes(app: FastifyInstance, ctx: Ctx) {
   app.post('/api/gst/returns', async (req, reply) => {
     const who = await need(req, 'gst.file')
     const b = (req.body ?? {}) as { period?: string; form?: string; arn?: string; filedOn?: string }
-    if (!PERIOD.test(b.period ?? '')) throw new HttpError(400, 'The month as YYYY-MM.')
+    if (!PERIOD.test(b.period ?? '')) throw new HttpError(400, 'Enter the month as YYYY-MM.')
     if (!['GSTR1', 'GSTR3B'].includes(b.form ?? '')) throw new HttpError(400, 'GSTR1 or GSTR3B.')
     const arn = b.arn?.trim().toUpperCase()
-    if (!arn || !/^[A-Z0-9]{10,20}$/.test(arn)) throw new HttpError(400, 'The ARN the portal gave on filing.')
+    if (!arn || !/^[A-Z0-9]{10,20}$/.test(arn)) throw new HttpError(400, 'Enter the ARN the portal gave on filing.')
     await postPending(db, now())
     return db.tx(async (t) => {
       const today = await businessDate(t)
       const filedOn = b.filedOn ?? today
-      if (!DATE.test(filedOn) || filedOn > today) throw new HttpError(400, 'The filing date: today or earlier.')
+      if (!DATE.test(filedOn) || filedOn > today) throw new HttpError(400, 'Enter the filing date: today or earlier.')
       if (monthEnd(b.period!) >= today) throw new HttpError(409, `${b.period} is not over yet.`)
       if ((await filed(t, b.period!)).some((r) => r.form === b.form)) throw new HttpError(409, `${b.form} for ${b.period} is already filed.`)
       const id = newId('GR')

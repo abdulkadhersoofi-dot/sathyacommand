@@ -1,4 +1,4 @@
-import { esc, toast, tonePill } from '../ui/dom'
+import { esc, toast, tonePill, showDate } from '../ui/dom'
 import { val } from '../ui/form-modal'
 import { money } from '../acc/books'
 import type { BqHost } from './workspace'
@@ -72,7 +72,7 @@ export class BlocksView {
         eventId, debtorId: val(f, 'acc') || undefined, lines })
       this.selected = r.id
       await this.reload()
-      return `${r.number}: rooms held until ${r.cutoff}`
+      return `${r.number}: rooms held until ${showDate(r.cutoff)}`
     })
   }
 

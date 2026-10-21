@@ -139,14 +139,14 @@ export function otaRoutes(app: FastifyInstance, ctx: Ctx) {
     if (b.csv) { try { lines = parsePayout(b.csv) } catch (e) { throw new HttpError(400, (e as Error).message) } }
     if (!lines.length) throw new HttpError(400, 'Which bookings does the payout settle?')
     const utr = b.reference?.trim()
-    if (!utr) throw new HttpError(400, 'The payout\'s UTR (as on the bank statement).')
+    if (!utr) throw new HttpError(400, 'Enter the payout\'s UTR (as on the bank statement).')
     await postPending(db, now())
     return db.tx(async (t) => {
       const [d] = await t.query<{ id: string; name: string; gstin: string | null; tan: string | null; commission_percent: string | null }>(`select id, name, gstin, tan, commission_percent from debtor where id = $1 and kind = 'ota'`, [b.debtorId])
       if (!d) throw new HttpError(404, 'No such OTA.')
       const today = await businessDate(t)
       const date = b.date ?? today
-      if (!DATE.test(date) || date > today) throw new HttpError(400, 'The payout date: today or earlier.')
+      if (!DATE.test(date) || date > today) throw new HttpError(400, 'Enter the payout date: today or earlier.')
       const [ba] = b.bankAccountId ? await t.query<{ id: string; account_code: string }>('select id, account_code from bank_account where id = $1 and active', [b.bankAccountId])
         : await t.query<{ id: string; account_code: string }>('select id, account_code from bank_account where is_default and active')
       if (!ba) throw new HttpError(400, 'Which bank account did it come into?')
@@ -234,7 +234,7 @@ export function otaRoutes(app: FastifyInstance, ctx: Ctx) {
     await need(req, 'accounts.view', 'receivables.view')
     const today = await businessDate(db)
     const fy = (req.query as { fy?: string }).fy ?? financialYear(today)
-    if (!/^\d{4}-\d{2}$/.test(fy)) throw new HttpError(400, 'The financial year as 2026-27.')
+    if (!/^\d{4}-\d{2}$/.test(fy)) throw new HttpError(400, 'Enter the financial year as 2026-27.')
     const exp = await expected(db, fy)
     const lines = (await db.query<{ id: string; kind: string; deductor: string; tan: string | null; section: string | null; date: string; quarter: number; paid_paise: string; tax_paise: string }>(
       'select id, kind, deductor, tan, section, date::text as date, quarter, paid_paise, tax_paise from form26as_line where fy = $1 order by 6', [fy])).map((l) => ({ ...l, tax_paise: Number(l.tax_paise), paid_paise: Number(l.paid_paise) }))

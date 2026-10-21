@@ -64,6 +64,13 @@ export function salesRoutes(app: FastifyInstance, ctx: Ctx) {
     return { from, accounts: rows.map((r) => ({ ...r, nights: n(r.nights), roomRevenuePaise: n(r.room_rev), eventRevenuePaise: n(r.event_rev), creditLimitPaise: r.credit_limit_paise == null ? null : n(r.credit_limit_paise) })) }
   })
 
+  // Who can look after a company account: the selling roles, for the "Handled by" choice.
+  app.get('/api/sales/people', async (req) => {
+    await need(req, ...VIEW, 'front_desk')
+    return db.query(`select distinct u.id, u.name from app_user u join user_role ur on ur.user_id = u.id
+                      where u.active and u.id <> 'system' and ur.role_id = any($1) order by u.name`, [['sales_banquets', 'general_manager', 'front_office_manager', 'managing_director']])
+  })
+
   app.get('/api/sales/accounts/:id', async (req) => {
     await need(req, ...VIEW, 'front_desk')
     const [d] = await db.query<Record<string, unknown> & { id: string; owner_id: string | null }>(
@@ -87,7 +94,7 @@ export function salesRoutes(app: FastifyInstance, ctx: Ctx) {
     const who = await need(req, 'sales.manage')
     const b = (req.body ?? {}) as { name?: string; role?: string; mobile?: string; email?: string }
     const name = str(b.name, 120)
-    if (!name) throw new HttpError(400, 'The contact\'s name.')
+    if (!name) throw new HttpError(400, 'Enter the contact\'s name.')
     return db.tx(async (t) => {
       const [d] = await t.query<{ name: string }>('select name from debtor where id = $1', [idOf(req)])
       if (!d) throw new HttpError(404, 'No such account.')
@@ -114,7 +121,7 @@ export function salesRoutes(app: FastifyInstance, ctx: Ctx) {
     const who = await need(req, 'rates.contract')
     const b = (req.body ?? {}) as { roomTypeId?: string; plan?: string; validFrom?: string; validTo?: string; rate?: number }
     if (!DATE.test(b.validFrom ?? '') || !DATE.test(b.validTo ?? '') || b.validTo! < b.validFrom!) throw new HttpError(400, 'Valid from and to (YYYY-MM-DD).')
-    if (!(n(b.rate) > 0)) throw new HttpError(400, 'The rate per night (₹).')
+    if (!(n(b.rate) > 0)) throw new HttpError(400, 'Enter the rate per night (₹).')
     const amount = rupees(n(b.rate))
     // A contracted rate above ₹7,500 would move the restaurant to 18% next year, as any other rate would.
     const guard = priceGuard(ctx.tax, amount)

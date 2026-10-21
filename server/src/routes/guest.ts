@@ -246,7 +246,7 @@ export function guestRoutes(app: FastifyInstance, ctx: Ctx) {
     const b = (req.body ?? {}) as { reservationId?: string; guestName?: string; day?: string; at?: string; qty?: number }
     const qty = Math.round(n(b.qty ?? 1))
     if (!(qty > 0 && qty <= 50)) throw new HttpError(400, 'How many: 1 to 50.')
-    if (!TIME.test(b.at ?? '')) throw new HttpError(400, 'The time, as HH:MM.')
+    if (!TIME.test(b.at ?? '')) throw new HttpError(400, 'Enter the time, as HH:MM.')
     return db.tx(async (t) => {
       const [a] = await t.query<{ name: string; price_paise: string; capacity: number | null; opens: string | null; closes: string | null; active: boolean; per: string }>('select * from activity where id = $1', [idOf(req)])
       if (!a?.active) throw new HttpError(404, 'No such activity.')
@@ -262,7 +262,7 @@ export function guestRoutes(app: FastifyInstance, ctx: Ctx) {
         if (r?.status !== 'in_house') throw new HttpError(409, 'Only a guest staying now can charge it to the room.')
         guest = r.guest
       }
-      if (!guest) throw new HttpError(400, 'The guest\'s name, or their room.')
+      if (!guest) throw new HttpError(400, 'Enter the guest\'s name, or their room.')
       const amount = n(a.price_paise) * qty
       const rate = Number(ctx.tax.gst.other_services?.activities_and_sports?.rate ?? 18)
       const id = newId('AB')

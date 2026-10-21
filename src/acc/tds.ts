@@ -7,7 +7,7 @@ import { money, type Host } from './books'
 
 interface Month { month: string; entries: number; deductedPaise: number; depositedPaise: number; openPaise: number; due: string; status: string; interestNowPaise: number; challans: { bsr_code: string; challan_no: string; paid_on: string; total_paise: string }[] }
 interface Deductee { sr: number; name: string; pan: string; sectionCode: string; section: string; paidOn: string; amountPaise: number; tdsPaise: number; rate: number; reason: string | null; certificate: string | null; challan: string | null }
-interface Q26 { fy: string; quarter: number; due: string; filed: { token_no: string; filed_on: string } | null; deductor: { tan: string | null; name: string; responsible: string | null }; deductees: Deductee[]; totals: { amountPaise: number; tdsPaise: number; deductees: number }; late: { daysLate: number; feePaise: number }; problems: string[] }
+interface Q26 { fy: string; quarter: number; due: string; filed: { token_no: string; filed_on: string } | null; deductor: { tan: string | null; name: string; responsible: string | null; designation?: string | null }; deductees: Deductee[]; totals: { amountPaise: number; tdsPaise: number; deductees: number }; late: { daysLate: number; feePaise: number }; problems: string[] }
 interface Ldc { id: string; vendor: string; cert_no: string; section: string; rate: string; limit_paise: string; used_paise: string; valid_from: string; valid_to: string }
 interface Adv { estimatePaise: number; instalments: { due: string; percent: number; requiredPaise: number; paidByThenPaise: number; shortfallPaise: number }[]; paidPaise: number }
 interface Due { due: string; what: string; amountPaise: number | null; status: string }
@@ -65,7 +65,7 @@ export class TdsView {
 
       <div class="sec-title">Lower-deduction certificates (section 197)</div>
       ${manage ? '<div class="ws-toolbar"><button type="button" class="btn" data-td="ldc">Add a certificate…</button></div>' : ''}
-      ${this.ldc.length ? `<div class="acc-scroll"><table class="acc-table"><tbody>${this.ldc.map((l) => `<tr><td class="mono">${esc(l.cert_no)}</td><td>${esc(l.vendor)}</td><td>${esc(l.section)} at ${Number(l.rate)}%</td><td class="n">${money(Number(l.used_paise))} of ${money(Number(l.limit_paise))}</td><td>${esc(l.valid_from)} to ${esc(l.valid_to)}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">None.</div>'}
+      ${this.ldc.length ? `<div class="acc-scroll"><table class="acc-table"><tbody>${this.ldc.map((l) => `<tr><td class="mono">${esc(l.cert_no)}</td><td>${esc(l.vendor)}</td><td>${esc(l.section)} at ${Number(l.rate)}%</td><td class="n">${money(Number(l.used_paise))} of ${money(Number(l.limit_paise))}</td><td>${esc(showDate(l.valid_from))} to ${esc(showDate(l.valid_to))}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">None.</div>'}
 
       <div class="sec-title">Advance income tax ${esc(this.fy)}</div>
       ${manage ? '<div class="ws-toolbar"><button type="button" class="btn" data-td="estimate">Estimate for the year…</button><button type="button" class="btn" data-td="advance">Advance tax paid…</button></div>' : ''}
@@ -111,7 +111,7 @@ export class TdsView {
       return done(r.lateFeePaise ? `Recorded; late fee ${money(r.lateFeePaise)} to pay` : 'Recorded')
     })
     if (a === 'deductor') this.h.modal.open('The resort as deductor', `<div class="form-grid"><label>TAN<input name="tan" maxlength="10" value="${esc(this.s?.deductor.tan ?? '')}"></label>
-        <label>Person responsible<input name="who" maxlength="60" value="${esc(this.s?.deductor.responsible ?? '')}"></label><label>Designation<input name="des" maxlength="60"></label></div>`, 'Save', async (f) => {
+        <label>Person responsible<input name="who" maxlength="120" value="${esc(this.s?.deductor.responsible ?? '')}"></label><label>Designation<input name="des" maxlength="80" value="${esc(this.s?.deductor.designation ?? '')}"></label></div>`, 'Save', async (f) => {
       await this.h.api.req('PATCH', '/api/tds/deductor', { tan: val(f, 'tan'), responsible: val(f, 'who'), designation: val(f, 'des') || undefined })
       return done('Saved')
     })

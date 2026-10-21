@@ -228,6 +228,8 @@ export function barRoutes(app: FastifyInstance, ctx: Ctx) {
     return db.tx(async (t) => {
       const [br] = await t.query<{ name: string; bottle_ml: number }>('select name, bottle_ml from liquor_brand where id = $1', [b.brandId])
       if (!br) throw new HttpError(404, 'No such brand.')
+      const book = await bookMl(t, b.brandId!)
+      if (b.ml! > book) throw new HttpError(409, book > 0 ? `The book shows only ${book} ml of ${br.name}. Check the brand, or count the bar first.` : `The book shows no ${br.name} in the bar. Check the brand chosen.`)
       const value = Math.round((await costPerMl(t, b.brandId!, br.bottle_ml)) * b.ml!)
       const day = await businessDate(t)
       if (value > rupees(await roleLimit(t, who, 'breakage_per_entry')) || !can(who, 'bar.stock')) {
