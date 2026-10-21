@@ -57,6 +57,13 @@ export const CHART: [string, string, AccountType, string, string | null][] = [
   ['2210', 'TN VAT payable', 'liability', 'Duties and taxes', null],
   ['2220', 'GST payable after set-off', 'liability', 'Duties and taxes', null],
   ['2300', 'TDS payable', 'liability', 'Duties and taxes', null],
+  ['2400', 'Salaries payable', 'liability', 'Other current liabilities', null],
+  ['2410', 'Provident fund payable', 'liability', 'Duties and taxes', null],
+  ['2420', 'ESI payable', 'liability', 'Duties and taxes', null],
+  ['2430', 'Professional tax payable', 'liability', 'Duties and taxes', null],
+  ['2440', 'Labour welfare fund payable', 'liability', 'Duties and taxes', null],
+  ['2450', 'Provision for bonus', 'liability', 'Short-term provisions', null],
+  ['2460', 'Provision for gratuity', 'liability', 'Long-term provisions', null],
   ['2900', 'Suspense (posting differences)', 'liability', 'Other current liabilities', null],
   ['3000', 'Share capital', 'equity', 'Equity', null],
   ['3100', 'Retained earnings', 'equity', 'Equity', null],
@@ -96,6 +103,11 @@ export const CHART: [string, string, AccountType, string, string | null][] = [
   ['6090', 'Input tax credit reversed (rule 42)', 'expense', 'Other expenses', 'admin'],
   ['6095', 'Interest and fees on late taxes', 'expense', 'Other expenses', 'admin'],
   ['6100', 'Salaries and wages', 'expense', 'Employee benefits expense', 'admin'],
+  ['6110', 'Employer\'s provident fund and admin charges', 'expense', 'Employee benefits expense', 'admin'],
+  ['6120', 'Employer\'s ESI', 'expense', 'Employee benefits expense', 'admin'],
+  ['6130', 'Bonus', 'expense', 'Employee benefits expense', 'admin'],
+  ['6140', 'Gratuity', 'expense', 'Employee benefits expense', 'admin'],
+  ['6150', 'Labour welfare fund (employer)', 'expense', 'Employee benefits expense', 'admin'],
   ['6200', 'Depreciation', 'expense', 'Depreciation and amortisation', 'admin'],
 ]
 export const DEPTS: Record<string, string> = {
@@ -455,6 +467,48 @@ export async function postPending(db: Db, now: Date) {
     for (const s of shifts) {
       await post({ kind: 'journal', date: s.business_date, narration: `Cash ${n(s.variance) < 0 ? 'short' : 'over'} at the close of ${s.name}'s shift`, source: { type: 'shift', id: s.id },
         lines: [{ code: '1100', amount: n(s.variance) }, { code: '6070', amount: -n(s.variance) }] })
+    }
+    // ---------- payroll: the month's pay once approved, its payment, and the statutory dues paid ----------
+    const runs = await t.query<{ id: string; month: string; pf_admin_paise: string }>(
+      `select id, month, pf_admin_paise from payroll_run r where status in ('approved', 'paid') and not exists (select 1 from posted_source x where x.source_type = 'payroll_run' and x.source_id = r.id) order by month`)
+    for (const r of runs) {
+      const rows = await t.query<Record<string, string>>('select * from payroll_line where run_id = $1 order by code', [r.id])
+      const lines: PostLine[] = []
+      for (const l of rows) {
+        const dept = l.ledger_dept
+        lines.push(
+          { code: '6100', amount: n(l.gross_paise), dept },
+          { code: '6110', amount: n(l.eps_paise) + n(l.pf_employer_paise) + n(l.edli_paise), dept },
+          { code: '6120', amount: n(l.esi_employer_paise), dept },
+          { code: '6150', amount: n(l.lwf_employer_paise), dept },
+          { code: '6130', amount: n(l.bonus_provision_paise), dept }, { code: '2450', amount: -n(l.bonus_provision_paise) },
+          { code: '6140', amount: n(l.gratuity_provision_paise), dept }, { code: '2460', amount: -n(l.gratuity_provision_paise) },
+          { code: '2410', amount: -(n(l.pf_employee_paise) + n(l.eps_paise) + n(l.pf_employer_paise) + n(l.edli_paise)) },
+          { code: '2420', amount: -(n(l.esi_employee_paise) + n(l.esi_employer_paise)) },
+          { code: '2430', amount: -n(l.pt_paise) },
+          { code: '2440', amount: -(n(l.lwf_employee_paise) + n(l.lwf_employer_paise)) },
+          { code: '2300', amount: -n(l.tds_paise), ref: '192' },
+          { code: '2400', amount: -n(l.net_paise), party: { type: 'staff', id: l.employee_id, name: l.name } })
+      }
+      lines.push({ code: '6110', amount: n(r.pf_admin_paise), dept: 'admin' }, { code: '2410', amount: -n(r.pf_admin_paise) })
+      const end = addDays(addDays(`${r.month}-01`, 32).slice(0, 7) + '-01', -1)
+      await post({ kind: 'journal', date: end, narration: `Payroll for ${r.month}`, source: { type: 'payroll_run', id: r.id }, lines })
+    }
+    const paid = await t.query<{ id: string; month: string; paid_on: string; bank_code: string; pay_reference: string | null }>(
+      `select id, month, paid_on::text, bank_code, pay_reference from payroll_run r where status = 'paid' and not exists (select 1 from posted_source x where x.source_type = 'payroll_pay' and x.source_id = r.id)`)
+    for (const r of paid) {
+      const rows = await t.query<{ employee_id: string; name: string; net_paise: string }>('select employee_id, name, net_paise from payroll_line where run_id = $1', [r.id])
+      const total = rows.reduce((s, l) => s + n(l.net_paise), 0)
+      await post({ kind: 'payment', date: r.paid_on, narration: `Salaries for ${r.month} paid${r.pay_reference ? ` (${r.pay_reference})` : ''}`, source: { type: 'payroll_pay', id: r.id },
+        lines: [...rows.map((l) => ({ code: '2400', amount: n(l.net_paise), party: { type: 'staff' as const, id: l.employee_id, name: l.name } })), { code: r.bank_code, amount: -total, ref: r.pay_reference }] })
+    }
+    const dues = await t.query<{ id: string; month: string; kind: string; amount_paise: string; paid_on: string; reference: string; bank_code: string }>(
+      `select id, month, kind, amount_paise, paid_on::text, reference, bank_code from statutory_payment s where not exists (select 1 from posted_source x where x.source_type = 'statutory_payment' and x.source_id = s.id)`)
+    const DUE_ACCOUNT: Record<string, [string, string]> = { pf: ['2410', 'Provident fund'], esi: ['2420', 'ESI'], pt: ['2430', 'Professional tax'], lwf: ['2440', 'Labour welfare fund'] }
+    for (const d of dues) {
+      const [code, name] = DUE_ACCOUNT[d.kind]
+      await post({ kind: 'payment', date: d.paid_on, narration: `${name} for ${d.month} paid (${d.reference})`, source: { type: 'statutory_payment', id: d.id },
+        lines: [{ code, amount: n(d.amount_paise), ref: d.reference }, { code: d.bank_code, amount: -n(d.amount_paise), ref: d.reference }] })
     }
     return { posted }
   })

@@ -19,8 +19,8 @@ export interface PayrollConfig {
   wages: { exclusions_cap_percent: number; overtime_multiplier: number; working_days_for_hourly_rate: number; hours_per_day: number }
   pf: { wage_ceiling: number; employee_percent: number; employer_percent: number; eps_percent: number; edli_percent: number; admin_percent: number; admin_minimum_per_month: number; eps_age_limit: number; due_day: number }
   esi: { wage_ceiling: number; employee_percent: number; employer_percent: number; exempt_daily_wage_up_to: number; periods: string[]; due_day: number }
-  professional_tax: { deduct_in_months: number[]; half_year_slabs: Slab[] }
-  labour_welfare_fund: { employee: number; employer: number; deduct_in_month: number }
+  professional_tax: { deduct_in_months: number[]; due_day: number; min_days_in_half: number; half_year_slabs: Slab[] }
+  labour_welfare_fund: { employee: number; employer: number; deduct_in_month: number; due: string }
   bonus: { wage_ceiling: number; calculation_wage_cap: number; provision_percent: number }
   gratuity: { provision_percent: number; min_years: number; min_years_fixed_term: number; ceiling: number }
   salary_tds: { cess_percent: number; new: TaxRegime; old: TaxRegime & { rebate_max: number; deduction_caps: Record<string, number> } }

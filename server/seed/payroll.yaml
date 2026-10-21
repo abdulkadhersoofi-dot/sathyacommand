@@ -82,6 +82,8 @@ esi:
 # deducted in the half's last month. Rates of the local body the resort is in. CA check (Coimbatore / local body)
 professional_tax:
   deduct_in_months: [9, 3]
+  due_day: 15                     # of the month after it is deducted. CA check (the local body's own date)
+  min_days_in_half: 60            # employed for at least this many days in the half-year to be liable
   half_year_slabs:
     - { up_to: 21000, tax: 0 }
     - { up_to: 30000, tax: 180 }
@@ -95,6 +97,7 @@ labour_welfare_fund:
   employee: 20
   employer: 40
   deduct_in_month: 12
+  due: "01-31"                    # of the next year
 
 bonus:
   # Code on Wages: those earning up to the ceiling get at least 8.33% of wages (on the higher of ₹7,000 and

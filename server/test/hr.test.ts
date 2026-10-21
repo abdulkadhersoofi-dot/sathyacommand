@@ -35,7 +35,8 @@ describe('employee records', () => {
     const d = (await R.get(`/api/hr/employees/${EMP}`, HR)).json()
     expect(d.onboarding.length).toBe(10)
     expect(d.bank_account).toBe('123456789012')
-    expect((await R.get(`/api/hr/employees/${EMP}`, GM)).json()).toMatchObject({ bank_account: '••••9012', structures: null })
+    expect((await R.get(`/api/hr/employees/${EMP}`, GM)).json()).toMatchObject({ bank_account: '••••9012', structures: [] })   // the GM sees pay (payroll), not bank accounts
+    expect((await R.get(`/api/hr/employees/${EMP}`, EHK)).json()).toMatchObject({ bank_account: '••••9012', structures: null })   // a department head sees neither
     expect((await R.get(`/api/hr/employees/${EMP}`, RA)).statusCode).toBe(403)   // not yet her own record
   })
 
@@ -110,6 +111,7 @@ describe('training and leaving', () => {
     expect((await R.get('/api/hr/training/due', GM)).json().map((t: { name: string; kind: string }) => [t.name, t.kind])).toEqual([['Lakshmi M', 'fssai_food_handler']])
     expect((await R.post(`/api/hr/employees/${EMP}/exit`, HR, { lastDay: '2026-11-30' })).statusCode).toBe(400)
     expect((await R.post(`/api/hr/employees/${EMP}/exit`, HR, { lastDay: '2026-11-30', reason: 'Resigned' })).statusCode).toBe(200)
-    expect((await R.get('/api/hr/employees', GM)).json().find((e: { code: string }) => e.code === 'E0001')).toMatchObject({ status: 'notice', grossPaise: null })
+    expect((await R.get('/api/hr/employees', GM)).json().find((e: { code: string }) => e.code === 'E0001')).toMatchObject({ status: 'notice', grossPaise: 1_700_000 })
+    expect((await R.get('/api/hr/employees', EHK)).json().find((e: { code: string }) => e.code === 'E0001')).toMatchObject({ grossPaise: null })
   })
 })

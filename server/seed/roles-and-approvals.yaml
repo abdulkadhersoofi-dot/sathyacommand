@@ -99,6 +99,10 @@ sign_in:
 #   hr.manage        employee records, pay structures, documents, onboarding, leave for others, holidays, training (seed/payroll.yaml holds the HR rules)
 #   hr.view          employee records (read), without bank accounts
 #   leave.approve    approve or turn down leave (never one's own)
+#   payroll.run      run the month's payroll, set leave without pay, overtime and other earnings, submit it; ECR and ESI files
+#   payroll.view     the payroll runs and pay figures (read)
+#   payroll.approve  check a submitted payroll or send it back (the MD approves it)
+#   payroll.pay      the bank transfer file, salaries paid, PF / ESI / professional tax / welfare fund paid
 #   guest.requests   requests from the QR in each room (housekeeping, food, faults): accept and mark done; messages to guests
 #   feedback.manage  guests' feedback and replies to it
 #   activities.manage  the activities on offer (pool, cricket ground, tours) and their prices
@@ -110,7 +114,7 @@ roles:
     permissions: ['*']
     limits: unlimited
   general_manager:
-    permissions: [inventory.edit, devices.approve, users.manage, front_desk, folio.reverse, discount.approve, night_audit, invoice.view, invoice.credit_note, site.edit, site.publish, fnb.order, fnb.void, fnb.bill, fnb.discount, menu.edit, menu.price, bar.settings, bar.stock, bar.approve, kitchen.stock, kitchen.approve, food_cost.view, printers.manage, licences.edit, hk.view, hk.manage, hk.inspect, staff.track, attendance.view, roster.manage, broadcast.send, staff.settings, eng.manage, eng.approve, compliance.view, security.view, security.manage, emergency.start, stores.view, stores.manage, vendors.manage, vendors.bank, purchase.indent, indent.approve, purchase.order, purchase.approve, payables.view, stock.approve, stores.issue, stores.count, stores.breakage, accounts.view, accounts.lock, receivables.view, credit.limit, gst.view, budget.manage, events.view, events.manage, events.payment, events.bill, venues.manage, beo.view, sales.manage, rates.contract, revenue.manage, guest.requests, feedback.manage, activities.manage, hr.view, leave.approve]
+    permissions: [inventory.edit, devices.approve, users.manage, front_desk, folio.reverse, discount.approve, night_audit, invoice.view, invoice.credit_note, site.edit, site.publish, fnb.order, fnb.void, fnb.bill, fnb.discount, menu.edit, menu.price, bar.settings, bar.stock, bar.approve, kitchen.stock, kitchen.approve, food_cost.view, printers.manage, licences.edit, hk.view, hk.manage, hk.inspect, staff.track, attendance.view, roster.manage, broadcast.send, staff.settings, eng.manage, eng.approve, compliance.view, security.view, security.manage, emergency.start, stores.view, stores.manage, vendors.manage, vendors.bank, purchase.indent, indent.approve, purchase.order, purchase.approve, payables.view, stock.approve, stores.issue, stores.count, stores.breakage, accounts.view, accounts.lock, receivables.view, credit.limit, gst.view, budget.manage, events.view, events.manage, events.payment, events.bill, venues.manage, beo.view, sales.manage, rates.contract, revenue.manage, guest.requests, feedback.manage, activities.manage, hr.view, leave.approve, payroll.view, payroll.approve]
     limits: { package_discount_percent: 25, hold_dates_days: 21, discount_percent: 25, breakage_per_entry: 10000, refund: 50000, comp_room_nights: 5, purchase_order: 500000, rate_override_below_floor: true }
   operations_manager:
     permissions: [front_desk, folio.reverse, discount.approve, site.edit, fnb.order, fnb.void, fnb.bill, fnb.discount, hk.view, hk.manage, hk.inspect, staff.track, attendance.view, roster.manage, broadcast.send, eng.manage, eng.approve, compliance.view, security.view, security.manage, emergency.start, purchase.indent, indent.approve, events.view, beo.view, guest.requests, feedback.manage, activities.manage, hr.view, leave.approve]
@@ -125,7 +129,7 @@ roles:
     permissions: [front_desk, night_audit]
     limits: {}
   accounts:
-    permissions: [invoice.view, invoice.credit_note, einvoice.generate, licences.edit, tax.vat, compliance.view, stores.view, vendors.manage, vendors.bank, purchase.bill, purchase.pay, payables.view, accounts.view, accounts.post, receivables.view, receivables.manage, bank.reconcile, cash.manage, gst.view, gst.file, tds.manage, vat.file, assets.manage, budget.manage, events.view, events.payment, events.bill]
+    permissions: [invoice.view, invoice.credit_note, einvoice.generate, licences.edit, tax.vat, compliance.view, stores.view, vendors.manage, vendors.bank, purchase.bill, purchase.pay, payables.view, accounts.view, accounts.post, receivables.view, receivables.manage, bank.reconcile, cash.manage, gst.view, gst.file, tds.manage, vat.file, assets.manage, budget.manage, events.view, events.payment, events.bill, payroll.view, payroll.pay]
     limits: { vendor_payment_needs_approval_above: 25000, delete_vouchers: false }
   stores:
     permissions: [stores.view, stores.manage, vendors.manage, purchase.indent, purchase.order, stores.receive, stores.issue, stores.count, stores.breakage]
@@ -170,7 +174,7 @@ roles:
     permissions: [staff.track, security.gate, security.view, emergency.start, beo.view]
     limits: {}
   hr_payroll:
-    permissions: [users.manage, attendance.view, roster.manage, broadcast.send, hr.manage, leave.approve]
+    permissions: [users.manage, attendance.view, roster.manage, broadcast.send, hr.manage, leave.approve, payroll.run, payroll.view]
     limits: { salary_advance: 10000, payroll_release_needs: [general_manager, managing_director] }
   employee_self_service:
     limits: {}

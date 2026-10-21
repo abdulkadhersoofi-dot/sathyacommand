@@ -7,11 +7,12 @@ import { val } from '../ui/form-modal'
 import { Workspace, type View, type WorkspaceHost } from '../ui/workspace'
 import { money } from '../acc/books'
 import { LEAVE_TONE } from '../staff/leave'
+import { PayrollView } from './payroll'
 
-// People: employee records (pay structure, statutory IDs, onboarding, documents, training, leaving), leave
-// waiting for approval, the holiday calendar and certificates running out.
+// People: employee records (pay structure, statutory IDs, onboarding, documents, training, leaving), the
+// monthly payroll, leave waiting for approval, the holiday calendar and certificates running out.
 
-type Tab = 'people' | 'leave' | 'holidays' | 'training'
+type Tab = 'people' | 'payroll' | 'leave' | 'holidays' | 'training'
 interface Config { departments: Record<string, { name: string; ledger: string }>; leaveTypes: Record<string, { name: string }>; checklist: string[]; festivalHolidaysRequired: number }
 interface Row { id: string; code: string; name: string; department: string; designation: string; employmentType: string; joinedOn: string; exitOn: string | null; status: string; login: string | null; uan: string | null; esicIp: string | null; grossPaise: number | null }
 interface Detail { id: string; code: string; name: string; department: string; departmentName: string; designation: string; employment_type: string; joined_on: string; confirmed_on: string | null; exit_on: string | null; exit_reason: string | null; status: string
@@ -221,14 +222,15 @@ export class PeopleWorkspace extends Workspace<Tab> implements Host {
   protected views: Record<Tab, View>
   constructor(api: Api, me: Me, outbox: Outbox, onClose: () => void) {
     super(api, me, outbox, 'People', onClose)
-    this.views = { people: new PeopleView(this), leave: new LeaveView(this), holidays: new HolidaysView(this), training: new TrainingView(this) }
+    this.views = { people: new PeopleView(this), payroll: new PayrollView(this), leave: new LeaveView(this), holidays: new HolidaysView(this), training: new TrainingView(this) }
     this.tab = this.tabs()[0][0]
   }
   protected async beforeLoad() { if (!Object.keys(this.cfg.departments).length) this.cfg = await this.cached('/api/hr/config') }
-  static allowed(me: Me) { return ['*', 'hr.manage', 'hr.view', 'leave.approve', 'payroll.view', 'payroll.run'].some((p) => me.permissions.includes(p)) }
+  static allowed(me: Me) { return ['*', 'hr.manage', 'hr.view', 'leave.approve', 'payroll.view', 'payroll.run', 'payroll.approve', 'payroll.pay'].some((p) => me.permissions.includes(p)) }
   tabs(): [Tab, string][] {
     const t: [Tab, string][] = []
     if (this.can('hr.manage', 'hr.view', 'payroll.view', 'payroll.run', 'leave.approve')) t.push(['people', 'Employees'])
+    if (this.can('payroll.run', 'payroll.view', 'payroll.approve', 'payroll.pay')) t.push(['payroll', 'Payroll'])
     if (this.can('leave.approve', 'hr.manage')) t.push(['leave', 'Leave'])
     t.push(['holidays', 'Holidays'])
     if (this.can('hr.manage', 'hr.view')) t.push(['training', 'Training due'])

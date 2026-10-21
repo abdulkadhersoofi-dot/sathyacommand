@@ -909,3 +909,11 @@ button.link { background: none; border: 0; padding: 0; color: var(--accent); fon
 .m-row.hr-hol { grid-template-columns: 110px 100px minmax(0, 1fr) 80px 90px; }
 @media (max-width: 640px) { .m-row.hr-hol { grid-template-columns: 96px minmax(0, 1fr) auto; } .m-row.hr-hol > :nth-child(2), .m-row.hr-hol > :nth-child(4) { display: none; } }
 .m-row.ml-hol { grid-template-columns: 110px minmax(0, 1fr); }
+.pay-kpis { margin: 10px 0 4px; }
+.pay-dues { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 8px; }
+.pay-dues .rc-right { display: flex; gap: 6px; align-items: center; }
+.pay-notes { margin: 0 0 8px; padding-left: 18px; }
+.m-row.pay-kv { grid-template-columns: minmax(0, 1fr) auto; padding-block: 4px; }
+.pay-table tfoot td { font-weight: 700; border-top: 2px solid var(--line); }
+.pay-table tr.pay-warn td:first-child { box-shadow: inset 3px 0 0 var(--marigold); }
+.ws-toolbar label.inline { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }

@@ -15,6 +15,11 @@ The staff app is the same HMS web app, opened on a phone. Everyone signs in with
 | People → Leave | department heads, HR, GM, operations manager | leave waiting for approval (a department head sees their own department's), **Approve** or **Turn down** with a reason |
 | Banquets → Event orders | kitchen, F&B service, housekeeping, engineering, security, front office | each event's sheet for their department (plates to cook, tables and chairs, parking, instructions) from the latest revision, and **Acknowledge**; a new event order arrives as a message |
 
+## Attendance and pay
+
+- A day on the roster with no clock-in, no approved leave and no holiday counts as **leave without pay** in that month's payroll, unless HR corrects it before submitting the payroll. Ask for leave in **My leave** before the day where you can.
+- Time beyond the shift (each day's first half hour over not counted) is put in as **overtime**, paid at twice the hourly wage; HR checks it in the payroll.
+
 ## Location and privacy
 
 - Location is recorded **only between clock-in and clock-out**. The phone shows “📍 Location on: on duty” at the bottom of every screen while it is shared.

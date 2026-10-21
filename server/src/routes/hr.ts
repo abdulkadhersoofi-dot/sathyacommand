@@ -6,6 +6,7 @@ import type { Db } from '../db'
 import { addDays, newId } from '../eng-core'
 import { businessDate } from '../fo-core'
 import { balances, codeWages, ensureCredits, grossOf, IFSC_RE, leaveDays, loadPayrollConfig, PAN_RE, structureOn, type PayrollConfig } from '../hr'
+import { FROZEN, lastFrozenMonth } from '../payroll'
 import { requireCaller } from './auth'
 
 // HR records: employees (with or without a login), their pay structure over time, documents and onboarding,
@@ -40,6 +41,11 @@ export function hrRoutes(app: FastifyInstance, ctx: Ctx, cfg: PayrollConfig = lo
     const [e] = await t.query<EmployeeRow>(`select ${COLS} from employee where id = $1`, [id])
     if (!e) throw new HttpError(404, 'No such employee.')
     return e
+  }
+  /** Leave in a month whose payroll is submitted or later would no longer reach the pay: refused. */
+  async function payrollOpen(t: Db, from: string, to: string) {
+    const [r] = await t.query<{ month: string; status: string }>(`select month, status from payroll_run where status = any($1) and month between $2 and $3 order by month limit 1`, [FROZEN, from.slice(0, 7), to.slice(0, 7)])
+    if (r) throw new HttpError(409, ['submitted', 'checked'].includes(r.status) ? `The payroll for ${r.month} is waiting for approval: it must be sent back before leave in that month changes.` : `The payroll for ${r.month} is ${r.status}: HR puts this right in a later month's payroll.`)
   }
   /** The employee record of the person signed in, if they have one. */
   async function mine(who: Caller) {
@@ -184,6 +190,8 @@ export function hrRoutes(app: FastifyInstance, ctx: Ctx, cfg: PayrollConfig = lo
     return db.tx(async (t) => {
       const e = await load(t, idOf(req))
       if (b.effectiveFrom! < e.joined_on) throw new HttpError(400, 'Not before the date of joining.')
+      const frozen = await lastFrozenMonth(t)
+      if (frozen && b.effectiveFrom!.slice(0, 7) <= frozen) throw new HttpError(409, `The payroll for ${frozen} is already submitted: a new structure can start from ${frozen === b.effectiveFrom!.slice(0, 7) ? 'next month' : 'the month after it'}; arrears go in as other earnings.`)
       await t.query(`insert into salary_structure (employee_id, effective_from, basic_paise, da_paise, hra_paise, conveyance_paise, special_paise, other_paise, pf_on_full_wages, set_by, set_at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
         on conflict (employee_id, effective_from) do update set basic_paise = excluded.basic_paise, da_paise = excluded.da_paise, hra_paise = excluded.hra_paise, conveyance_paise = excluded.conveyance_paise,
           special_paise = excluded.special_paise, other_paise = excluded.other_paise, pf_on_full_wages = excluded.pf_on_full_wages, set_by = excluded.set_by, set_at = excluded.set_at`,
@@ -260,6 +268,7 @@ export function hrRoutes(app: FastifyInstance, ctx: Ctx, cfg: PayrollConfig = lo
     if (b.halfDay && b.from !== b.to) throw new HttpError(400, 'A half day is one day.')
     if (e.status === 'exited') throw new HttpError(409, 'This employee has left.')
     return db.tx(async (t) => {
+      await payrollOpen(t, b.from!, b.to!)
       const days = await leaveDays(t, b.from!, b.to!, !!b.halfDay)
       if (!days) throw new HttpError(400, 'Those days are all holidays.')
       const [clash] = await t.query(`select 1 from leave_application where employee_id = $1 and status in ('pending','approved') and from_date <= $3 and to_date >= $2`, [e.id, b.from, b.to])
@@ -310,13 +319,14 @@ export function hrRoutes(app: FastifyInstance, ctx: Ctx, cfg: PayrollConfig = lo
     if (!['approve', 'reject'].includes(b.decision ?? '')) throw new HttpError(400, 'approve or reject.')
     const scope = await approvesFor(who)
     return db.tx(async (t) => {
-      const [a] = await t.query<{ id: string; employee_id: string; leave_type: string; from_date: string; days: string; status: string }>('select id, employee_id, leave_type, from_date::text, days, status from leave_application where id = $1 for update', [idOf(req)])
+      const [a] = await t.query<{ id: string; employee_id: string; leave_type: string; from_date: string; to_date: string; days: string; status: string }>('select id, employee_id, leave_type, from_date::text, to_date::text, days, status from leave_application where id = $1 for update', [idOf(req)])
       if (!a) throw new HttpError(404, 'No such application.')
       if (a.status !== 'pending') throw new HttpError(409, `Already ${a.status}.`)
       const e = await load(t, a.employee_id)
       if (e.user_id === who.userId) throw new HttpError(403, 'Someone else approves your own leave.')
       if (scope !== 'all' && scope !== e.department) throw new HttpError(403, scope ? 'Only their own department head, HR or the GM decides this leave.' : 'Your login is not linked to your employee record: ask HR.')
       if (b.decision === 'reject' && !str(b.note)) throw new HttpError(400, 'Say why it is turned down.')
+      if (b.decision === 'approve') await payrollOpen(t, a.from_date, a.to_date)
       await t.query('update leave_application set status = $2, decided_by = $3, decided_at = $4, decision_note = $5 where id = $1', [a.id, b.decision === 'approve' ? 'approved' : 'rejected', who.userId, now(), str(b.note, 300)])
       if (b.decision === 'approve' && cfg.leave_types[a.leave_type]?.credit !== 'none') {
         await t.query('insert into leave_entry (id, employee_id, leave_type, year, days, reason, ref, by_user, at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
@@ -330,12 +340,13 @@ export function hrRoutes(app: FastifyInstance, ctx: Ctx, cfg: PayrollConfig = lo
   app.post('/api/hr/leave/applications/:id/cancel', async (req) => {
     const who = await requireCaller(ctx, req)
     return db.tx(async (t) => {
-      const [a] = await t.query<{ id: string; employee_id: string; leave_type: string; from_date: string; days: string; status: string }>('select id, employee_id, leave_type, from_date::text, days, status from leave_application where id = $1 for update', [idOf(req)])
+      const [a] = await t.query<{ id: string; employee_id: string; leave_type: string; from_date: string; to_date: string; days: string; status: string }>('select id, employee_id, leave_type, from_date::text, to_date::text, days, status from leave_application where id = $1 for update', [idOf(req)])
       if (!a) throw new HttpError(404, 'No such application.')
       const e = await load(t, a.employee_id)
       if (e.user_id !== who.userId && !can(who, 'hr.manage')) throw new HttpError(403, 'Only the employee or HR cancels leave.')
       if (!['pending', 'approved'].includes(a.status)) throw new HttpError(409, `Already ${a.status}.`)
       if (a.status === 'approved' && a.from_date < await businessDate(t) && !can(who, 'hr.manage')) throw new HttpError(409, 'Leave already begun is changed by HR.')
+      if (a.status === 'approved') await payrollOpen(t, a.from_date, a.to_date)
       await t.query(`update leave_application set status = 'cancelled' where id = $1`, [a.id])
       if (a.status === 'approved') await t.query('insert into leave_entry (id, employee_id, leave_type, year, days, reason, ref, by_user, at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9) on conflict do nothing',
         [newId('LE'), a.employee_id, a.leave_type, Number(a.from_date.slice(0, 4)), Number(a.days), 'Leave cancelled', `cancel:${a.id}`, who.userId, now()])
