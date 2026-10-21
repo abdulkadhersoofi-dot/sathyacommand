@@ -83,3 +83,81 @@ Prompted by the MD's review on 21 October 2026. Each problem below was reproduce
 
 - Any other screen or step that failed for you: what you tapped and what happened (a phone screenshot is enough).
 - The resort's live address on Render, if you would like me to check it there as well.
+
+## Status (21 October 2026): done
+
+All seven steps are done. Checks:
+- the automated tests pass (440, including a real day on a fresh install);
+- the front desk, approvals and accounts were walked through in a browser on PGlite and on PostgreSQL 16, on a computer and on a phone.
+
+| # | What you saw | Now |
+|---|---|---|
+| 1 | Date stuck on 20 October | The chip shows today's date. A bar says when the hotel day is still open, with **Close the day**. The day closes by itself at 3:00 am (Settings → Resort profile), catching up missed days. Closing a day early asks you to confirm. |
+| 2 | Accounts did nothing | Takings reach the books when each day closes. Invoices work once the profile is filled in. Accounts has Payment, Receipt, Cash ↔ bank, Journal and Opening balances. |
+| 3 | No GSTIN / profile screen | **Settings → Resort profile**: the PAN fills itself from the GSTIN. **Getting started** lists what is left. |
+| 4 | Banquet booking hard | **Book an event** is one form, from the calendar or the Events tab: venue, date, guests, menu, advance. |
+| 5 | No labels on new places | Every building, hall, lawn, pool, block and villa has its own label. The label follows a rename. |
+| 6 | Roads not editable | Twin Studio draws, bends, extends, narrows and deletes roads and footpaths. |
+| 7 | Many other bugs | Three walk-throughs (front office; restaurant, stores, engineering and security; accounts, banquets and HR) found about 50 problems. All are fixed except the two listed below. |
+
+### What the walk-throughs fixed
+
+**Front desk**
+- **Find a booking** searches by name, mobile, booking number, room or OTA ID, and lists the coming bookings.
+- One booking screen shows the stay, the bill, payments, the balance, and invoices with Print. It also offers:
+  - check in and check out;
+  - take an advance or payment;
+  - add a charge, move room, extra bed, discount;
+  - cancel, reverse a charge, record Form C.
+- **Check-in**:
+  - lists clean rooms first;
+  - a room not yet cleaned needs a tick;
+  - explains a different room type;
+  - checks Aadhaar and passport numbers.
+- **Payment** and **check-out**:
+  - show what is still to be charged;
+  - check-out takes the payment in the same step;
+  - a same-day stay is charged.
+- **Invoices** print the stay, the total with GST, and paid and balance, and fit a phone.
+- **Settings → Rooms & rates**:
+  - rate per room type and meal plan;
+  - set a rate;
+  - carry all rates into the next season;
+  - edit room types.
+
+**Approvals**
+- An **Approvals** button appears in the top bar when something waits for you: new devices, discounts, cancelled items after the KOT, price changes, stock counts, payments and purchase orders.
+- Each request shows in plain words, with Approve or Reject.
+- A restaurant order cannot be billed or paid while a cancellation or discount on it waits.
+
+**Restaurant and stores**
+- Liquor bills wait until the VAT rates and the TIN are set.
+- The bill card adds up.
+- The kitchen screen drops cancelled tickets and old paid orders.
+- Printers opens without an error.
+- Breakage cannot exceed the stock.
+- Goods for the kitchen, engineering or linen store link themselves.
+- A vendor bill with lines not on the PO is shown as a difference.
+
+**Accounts**
+- **E-invoices** (Accounts → GST):
+  - Generate, when a GST provider is connected;
+  - or download the JSON for einvoice1.gst.gov.in and record the IRN by hand.
+- **Fixed assets**:
+  - an asset already in the opening balances is not posted twice;
+  - depreciation runs from the month the books begin and catches up.
+- **Banks**: the bank details can be edited.
+- **Customer advances** show as liabilities on the balance sheet.
+- **Company statements** name the tax invoice.
+- **Banquet invoices** carry SAC codes.
+
+**Banquets and HR**
+- An event can only be marked served, or given its final bill, on or after its date.
+- Payroll for the current month opens from the 25th.
+- A holiday date already taken is refused.
+
+### Still to do, or for you to decide
+- **SAC codes for halls and event services**: I used 997212 and 998596. Please have the CA confirm them.
+- **Split restaurant bills**: tax can differ from one bill by a few paise, because each part is rounded.
+- **PF without a UAN**: PF is still deducted for an employee who has no UAN. The screen warns, but the ECR file leaves them out. Get the UAN generated before running payroll.
+- **E-invoices**: generating them in one tap needs a GST provider (GSP) account. Until then, upload the JSON on the portal.

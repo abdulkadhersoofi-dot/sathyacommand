@@ -20,6 +20,13 @@ The repository has a `render.yaml` that creates both the database and the servic
 
 **Already running the Blueprint from before (with MD_MOBILE)?** Open the **sathya-hms** service → **Environment** → add `MD_EMAIL` and `MD_PASSWORD` → **Save, rebuild and deploy**. `MD_MOBILE` and `OTP_DELIVERY` can stay or go; nothing uses them while SMS sign-in is off.
 5. Every merge into `main` from then on goes live by itself.
+6. Sign in as the MD and open **Settings → Getting started**:
+   - fill in the resort profile (legal name, GSTIN, address);
+   - check the room rates;
+   - enter the bank account details and the opening balances;
+   - add the staff logins.
+
+   The hotel day closes by itself at 3:00 am. On a free plan the service sleeps when idle; it closes any missed days when it next wakes.
 
 The plans in `render.yaml` are paid (an always-on service and a database that is kept). Change `plan` there to `free` only to try it out: a free service sleeps when idle and a free database is deleted after a trial period.
 
