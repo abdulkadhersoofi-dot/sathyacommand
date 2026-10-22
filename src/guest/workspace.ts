@@ -4,6 +4,7 @@ import type { Me } from '../live/signin'
 import type { Outbox } from '../live/outbox'
 import { esc, toast, tonePill, showDate } from '../ui/dom'
 import { val } from '../ui/form-modal'
+import { toolbar } from '../ui/toolbar'
 import { Workspace, type View, type WorkspaceHost } from '../ui/workspace'
 import { money } from '../acc/books'
 
@@ -94,7 +95,7 @@ class ActivitiesView implements View {
   async load() { this.d = await this.h.cached(`/api/guest/activities${this.day ? `?day=${this.day}` : ''}`); this.day = this.d!.day }
   html() {
     const d = this.d!, manage = this.h.can('activities.manage')
-    return `<div class="ws-toolbar"><label class="inline">Day <input type="date" data-actday value="${esc(d.day)}"></label>${manage ? '<button type="button" class="btn" data-act="new">Add an activity</button>' : ''}</div>
+    return `${toolbar({ primary: manage ? [{ attrs: 'data-act="new"', label: 'Add an activity' }] : [], filters: `<label class="inline">Day <input type="date" data-actday value="${esc(d.day)}"></label>` })}
       <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Activity</th><th>Where</th><th>Hours</th><th class="n">Price</th><th class="n">Slots</th><th></th></tr></thead><tbody>
         ${d.activities.filter((a) => a.active).map((a) => `<tr><td><b>${esc(a.name)}</b>${a.notes ? ` <small class="muted">${esc(a.notes)}</small>` : ''}</td><td>${esc(a.place_name ?? '')}</td><td>${esc(a.opens ?? '')}${a.closes ? `–${esc(a.closes)}` : ''}</td>
           <td class="n">${a.price_paise ? `${money(a.price_paise)} / ${esc(a.per)}` : 'free'}</td><td class="n">${a.capacity ?? '—'}</td><td><button type="button" class="btn small primary" data-actbook="${esc(a.id)}">Book</button></td></tr>`).join('')}
@@ -132,7 +133,8 @@ class QrView implements View {
   constructor(private h: WorkspaceHost) {}
   async load() { this.rooms = await this.h.cached('/api/guest/room-qr') }
   html() {
-    return `<div class="ws-toolbar"><button type="button" class="btn primary" data-qrprint>Print all cards</button><span class="muted small">One card per room: guests scan it for housekeeping, room service, faults, things to do and feedback. Only the guest staying in the room can send requests.</span></div>
+    return `${toolbar({ primary: [{ attrs: 'data-qrprint', label: 'Print all cards' }] })}
+      <p class="muted small">One card per room: guests scan it for housekeeping, room service, faults, things to do and feedback. Only the guest staying in the room can send requests.</p>
       <div class="qr-cards">${this.rooms.map((r) => { const q = qrcode(0, 'M'); q.addData(r.url); q.make()
         return `<div class="qr-card"><div class="qr-svg">${q.createSvgTag({ cellSize: 3, margin: 2, scalable: true })}</div><b>Room ${esc(r.room_no)}</b><small>Scan for room service, housekeeping and help</small></div>` }).join('')}</div>`
   }

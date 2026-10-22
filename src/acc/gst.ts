@@ -1,4 +1,5 @@
 import { esc, toast, tonePill, showDate } from '../ui/dom'
+import { toolbar } from '../ui/toolbar'
 import { val } from '../ui/form-modal'
 import { money, type Host } from './books'
 
@@ -51,11 +52,13 @@ export class GstView {
       <td class="n">${x?.taxable != null ? money(x.taxable) : ''}</td><td class="n">${x ? money(x.igst ?? 0) : ''}</td><td class="n">${x ? money(x.cgst) : ''}</td><td class="n">${x ? money(x.sgst) : ''}</td></tr>`
     const head = '<thead><tr><th></th><th class="n">Taxable value</th><th class="n">IGST</th><th class="n">CGST</th><th class="n">SGST</th></tr></thead>'
     const b2b = sum(g1.b2b.flatMap((x) => x.items)), cn = sum(g1.cdnr.flatMap((x) => x.items))
-    return `<div class="ws-toolbar"><label class="inline">Month <input type="month" data-period value="${esc(this.period)}"></label>
-        <button type="button" class="btn" data-gs="json">GSTR-1 file (JSON)</button>
-        ${file ? `<label class="btn file-btn">Import GSTR-2B…<input type="file" accept=".json,.csv,application/json,text/csv" data-2b hidden></label>
-          ${filed('GSTR1') ? '' : '<button type="button" class="btn primary" data-gs="file1">GSTR-1 filed…</button>'}${filed('GSTR3B') ? '' : '<button type="button" class="btn primary" data-gs="file3b">GSTR-3B filed…</button>'}` : ''}</div>
-      <div class="ws-toolbar">${status('GSTR1', 'GSTR-1')} ${status('GSTR3B', 'GSTR-3B')} <span class="small muted">GSTR-3B due ${esc(showDate(g3.due))}</span></div>
+    const toFile = file ? [...(filed('GSTR1') ? [] : [{ attrs: 'data-gs="file1"', label: 'GSTR-1 filed…' }]), ...(filed('GSTR3B') ? [] : [{ attrs: 'data-gs="file3b"', label: 'GSTR-3B filed…' }])] : []
+    return `${toolbar({
+      primary: toFile.map((a, i) => (i ? { ...a, primary: false } : a)),
+      filters: `<label class="inline">Month <input type="month" data-period value="${esc(this.period)}"></label>${file ? '<label class="btn file-btn">Import GSTR-2B…<input type="file" accept=".json,.csv,application/json,text/csv" data-2b hidden></label>' : ''}`,
+      more: [{ attrs: 'data-gs="json"', label: 'GSTR-1 file (JSON)' }],
+      end: `${status('GSTR1', 'GSTR-1')} ${status('GSTR3B', 'GSTR-3B')} <span class="small muted">GSTR-3B due ${esc(showDate(g3.due))}</span>`,
+    })}
       ${this.irn.length ? `<div class="sec-title">E-invoices to generate <span>${this.irn.length}</span></div>
         <p class="muted small">Bills to companies with a GSTIN need an e-invoice number (IRN) from the GST portal within 30 days. Generate it here if a GST provider is connected; otherwise download the JSON, upload it on einvoice1.gst.gov.in, and record the IRN it gives.</p>
         ${this.irn.map((x) => `<div class="row-card"><div class="rc-title"><span class="mono">${esc(x.number)}</span> ${esc(x.recipient)} <small class="muted">${esc(x.gstin ?? '')}</small></div>

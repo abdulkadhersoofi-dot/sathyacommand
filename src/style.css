@@ -1020,3 +1020,16 @@ button.link { background: none; border: 0; padding: 0; color: var(--accent); fon
 .step.skip { text-decoration: line-through; opacity: .7; }
 .step-sep { width: 14px; height: 1.5px; background: var(--line); flex: none; }
 @media (max-width: 820px) { .steps { gap: 4px 2px; padding: 8px; } .step { padding: 4px 8px; font-size: 12px; } .step-sep { width: 8px; } }
+.tb label.inline { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; font-weight: 700; }
+.tb label.inline input, .tb label.inline select { font: 500 14px var(--f-body); color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
+.tb-mid .ws-chips { margin: 0; }
+.ord-ticket .steps, .ord-ticket .tb { margin: 8px 0; }
+.tb-mid .file-btn { flex: none; }
+.tb-mid select { font: 500 13.5px var(--f-body); color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
+.tb-end { align-items: center; gap: 8px; }
+.tb-end .pill, .tb-end .small, .tb-end .muted { white-space: nowrap; }
+.assign-box .tb { margin: 6px 0 0; }
+.sec-title + .tb { margin-top: 2px; }
+.modal .tb:last-child, .room-actions .tb { margin-bottom: 0; }
+.room-actions .steps { margin: 6px 0 8px; }
+.tb-mid .ws-search { max-width: 320px; }

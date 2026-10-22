@@ -1,6 +1,7 @@
 import { esc, tonePill } from '../ui/dom'
 import { val } from '../ui/form-modal'
 import { hydratePhotos, takePhoto, uploadPhoto } from '../ui/photo'
+import { toolbar } from '../ui/toolbar'
 import type { WorkspaceHost } from '../ui/workspace'
 import { rupees } from './common'
 
@@ -22,7 +23,7 @@ export class SparesView {
 
   html() {
     const value = this.list.reduce((a, s) => a + Math.max(0, s.stock) * s.costPaise, 0)
-    return `<div class="ws-toolbar">${this.h.can('eng.manage') ? '<button type="button" class="btn" data-sp="add">Add spare part</button>' : ''}<span class="muted small">Stock value ${rupees(Math.round(value))}</span></div>
+    return `${toolbar({ primary: this.h.can('eng.manage') ? [{ attrs: 'data-sp="add"', label: 'Add spare part' }] : [], end: `<span class="muted small">Stock value ${rupees(Math.round(value))}</span>` })}
       <div class="m-table"><div class="m-row spare-row head"><span>Part</span><span>Stock</span><span>Avg cost</span><span></span></div>
       ${this.list.filter((s) => s.active).map((s) => `<div class="m-row spare-row"><b>${esc(s.name)}</b><span class="mono">${s.stock} ${esc(s.unit)} ${s.low ? tonePill('Reorder', '--marigold') : ''}</span>
         <span class="mono">${rupees(s.costPaise)}</span><span class="row-btns"><button type="button" class="btn small" data-sp="in:${esc(s.id)}">Received…</button><button type="button" class="btn small" data-sp="out:${esc(s.id)}" ${s.stock > 0 ? '' : 'disabled'}>Issue…</button></span></div>`).join('') || '<div class="empty">No spares yet.</div>'}</div>

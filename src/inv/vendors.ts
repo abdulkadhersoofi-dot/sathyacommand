@@ -1,5 +1,6 @@
 import { esc, toast, tonePill, showDate } from '../ui/dom'
 import { checked, val } from '../ui/form-modal'
+import { toolbar } from '../ui/toolbar'
 import type { WorkspaceHost } from '../ui/workspace'
 import { CATEGORY, rupees, type Item } from './items'
 
@@ -35,8 +36,10 @@ export class VendorsView {
     const q = this.q.toLowerCase()
     const shown = this.list.filter((v) => !q || `${v.name} ${v.gstin ?? ''} ${v.pan ?? ''}`.toLowerCase().includes(q))
     const tds = (code: string | null) => this.meta?.tds.find((t) => t.code === code)?.section
-    return `<div class="ws-toolbar">${this.h.can('vendors.manage') ? '<button type="button" class="btn primary" data-vd="add">Add vendor</button>' : ''}
-        <input class="ws-search" type="search" placeholder="Search name, GSTIN or PAN" value="${esc(this.q)}" aria-label="Search vendors"></div>
+    return `${toolbar({
+      primary: this.h.can('vendors.manage') ? [{ attrs: 'data-vd="add"', label: 'Add vendor' }] : [],
+      filters: `<input class="ws-search" type="search" placeholder="Search name, GSTIN or PAN" value="${esc(this.q)}" aria-label="Search vendors">`,
+    })}
       ${shown.map((v) => `<div class="row-card${v.active ? '' : ' retired'}" data-asset="${esc(v.id)}"><div class="rc-title">${esc(v.name)}</div>
         <div class="rc-sub">${v.gstin ? `GSTIN ${esc(v.gstin)}` : v.pan ? `PAN ${esc(v.pan)} · not GST registered` : '<span class="fd-warn">no GSTIN or PAN</span>'}${v.state_code !== '33' ? ' · outside Tamil Nadu (IGST)' : ''}
           · ${esc(PAYEE[v.payee_type] ?? v.payee_type)}${v.categories.length ? ` · ${v.categories.map((c) => esc(CATEGORY[c] ?? c)).join(', ')}` : ''} · pays in ${v.payment_terms_days} days${v.rates ? ` · ${v.rates} rate${v.rates > 1 ? 's' : ''}` : ''}</div>
@@ -102,8 +105,10 @@ export class RatesView {
     const shown = this.list.filter((r) => !q || `${r.item} ${r.vendor}`.toLowerCase().includes(q))
     const best = new Map<string, number>()
     for (const r of shown.filter((x) => x.current)) best.set(r.item_id, Math.min(best.get(r.item_id) ?? Infinity, Number(r.rate_paise)))
-    return `<div class="ws-toolbar">${this.h.can('vendors.manage', 'stores.manage') ? '<button type="button" class="btn primary" data-rt="add">Add rate</button>' : ''}
-        <input class="ws-search" type="search" placeholder="Search item or vendor" value="${esc(this.q)}" aria-label="Search rates"></div>
+    return `${toolbar({
+      primary: this.h.can('vendors.manage', 'stores.manage') ? [{ attrs: 'data-rt="add"', label: 'Add rate' }] : [],
+      filters: `<input class="ws-search" type="search" placeholder="Search item or vendor" value="${esc(this.q)}" aria-label="Search rates">`,
+    })}
       <div class="m-table"><div class="m-row rate-row head"><span>Item</span><span>Vendor</span><span>Rate</span><span>Valid</span><span></span></div>
       ${shown.map((r) => `<div class="m-row rate-row"><b>${esc(r.item)}</b><span>${esc(r.vendor)}</span>
         <span class="mono">${rupees(Number(r.rate_paise))} <small class="muted">/ ${esc(r.purchase_unit)}</small> ${r.current && best.get(r.item_id) === Number(r.rate_paise) ? tonePill('Best', '--st-vacant') : ''}</span>

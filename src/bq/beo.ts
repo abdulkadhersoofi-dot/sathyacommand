@@ -1,4 +1,5 @@
 import { esc, tonePill, showDate } from '../ui/dom'
+import { toolbar } from '../ui/toolbar'
 import { STYLE_LABEL } from './calendar'
 import type { BqHost } from './workspace'
 
@@ -37,7 +38,7 @@ export class BeoView {
 
   html() {
     if (!this.depts.length) return '<p class="empty">Event orders are read by the kitchen, service, housekeeping, engineering, security and front office.</p>'
-    return `${this.depts.length > 1 ? `<div class="ws-toolbar">${this.depts.map((d) => `<button type="button" class="chip" data-bdept="${esc(d.id)}" aria-pressed="${d.id === this.dept}">${esc(d.name)}</button>`).join('')}</div>` : `<div class="sec-title">${esc(this.depts[0].name)}</div>`}
+    return `${this.depts.length > 1 ? toolbar({ filters: this.depts.map((d) => `<button type="button" class="chip" data-bdept="${esc(d.id)}" aria-pressed="${d.id === this.dept}">${esc(d.name)}</button>`).join('') }) : `<div class="sec-title">${esc(this.depts[0].name)}</div>`}
       ${this.orders.map((o) => {
         const ack = o.acks[this.dept], ins = o.beo.instructions[this.dept]
         return `<div class="row-card bq-beo"><div class="rc-title"><span class="mono muted">${esc(o.beo.number)}</span> ${esc(o.beo.title)} <small class="muted">revision ${o.revision}</small></div>

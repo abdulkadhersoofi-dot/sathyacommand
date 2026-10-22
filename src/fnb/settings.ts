@@ -1,6 +1,7 @@
 import { esc, tonePill } from '../ui/dom'
 import { checked, val } from '../ui/form-modal'
 import type { Ws } from './common'
+import { toolbar } from '../ui/toolbar'
 
 // Licences & tax: licence and permit numbers (printed on bills) with renewal dates, TN VAT rates for
 // each liquor class with their history, and the bar's licensed hours and dry days.
@@ -46,7 +47,7 @@ export class SettingsView {
     return `<div class="set-grid">
     <section>
       <div class="sec-title">Licences &amp; permits <span>${due ? `${due} need attention` : `${this.licences.filter((l) => l.active).length} active`}</span></div>
-      ${canLic ? '<div class="ws-toolbar"><button type="button" class="btn primary" data-s="add-licence">Add licence</button></div>' : ''}
+      ${canLic ? toolbar({ primary: [{ attrs: 'data-s="add-licence"', label: 'Add licence' }] }) : ''}
       ${this.licences.map((l) => `<div class="row-card${l.active ? '' : ' retired'}">
         <div class="rc-title">${esc(l.name)}</div>
         <div class="rc-sub"><span class="mono">${esc(l.number)}</span>${l.authority ? ` · ${esc(l.authority)}` : ''}${l.valid_until ? ` · valid until ${fmt(l.valid_until)}` : ''}${l.print_on.length ? ` · printed on ${l.print_on.map((p) => PRINT.find((x) => x[0] === p)?.[1].toLowerCase() ?? p).join(', ')}` : ''}</div>
@@ -54,7 +55,7 @@ export class SettingsView {
     </section>
     <section>
       <div class="sec-title">TN VAT on liquor <span>rates in force on ${fmt(this.businessDate)}</span></div>
-      ${canVat ? '<div class="ws-toolbar"><button type="button" class="btn" data-s="add-class">Add liquor class</button></div>' : ''}
+      ${canVat ? toolbar({ primary: [{ attrs: 'data-s="add-class"', label: 'Add liquor class' }] }) : ''}
       ${this.vat.map((c) => `<div class="row-card${c.active ? '' : ' retired'}">
         <div class="rc-title">${esc(c.label)} <span class="mono muted">${esc(c.id)}</span></div>
         <div class="rc-sub">${c.upcoming.length ? `From ${fmt(c.upcoming[c.upcoming.length - 1].effective_from)}: ${c.upcoming[c.upcoming.length - 1].rate}% · ` : ''}${c.history.length ? `<details><summary>History</summary>${c.history.map((h) => `<div class="small">${fmt(h.effective_from)} · ${h.rate}% · ${esc(h.set_by)}${h.note ? ` · ${esc(h.note)}` : ''}</div>`).join('')}</details>` : 'No rate set yet'}</div>
@@ -71,7 +72,7 @@ export class SettingsView {
       </form>
       <p class="muted small">Staff must check guests are ${b.legalAge} or older before serving liquor.</p>
       <div class="sec-title">Dry days <span>${b.dryDays.length}</span></div>
-      ${canBar ? '<div class="ws-toolbar"><button type="button" class="btn" data-s="add-dry">Add dry day</button></div>' : ''}
+      ${canBar ? toolbar({ primary: [{ attrs: 'data-s="add-dry"', label: 'Add dry day' }] }) : ''}
       ${b.dryDays.map((d) => `<div class="row-card"><div class="rc-title">${fmt(d.day)}</div><div class="rc-sub">${esc(d.reason)}</div>
         <div class="rc-right">${canBar ? `<button type="button" class="btn small ghost" data-dry="${esc(d.day)}">Remove</button>` : ''}</div></div>`).join('') || '<div class="empty">No dry days entered. Add them as the state notifies them.</div>'}
     </section>

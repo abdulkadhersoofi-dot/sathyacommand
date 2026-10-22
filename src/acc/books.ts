@@ -1,5 +1,6 @@
 import { esc, tonePill, showDate } from '../ui/dom'
 import { val } from '../ui/form-modal'
+import { toolbar } from '../ui/toolbar'
 import type { WorkspaceHost } from '../ui/workspace'
 
 // The books: day book, trial balance, ledgers (with the parties in them), profit and loss by department,
@@ -16,8 +17,9 @@ export const money = (paise: number) => `${paise < 0 ? '−' : ''}₹${(Math.abs
 export const drcr = (paise: number) => (paise ? `${money(Math.abs(paise))} ${paise > 0 ? 'Dr' : 'Cr'}` : '—')
 const KIND: Record<string, string> = { sales: 'Sales', receipt: 'Receipt', purchase: 'Purchase', payment: 'Payment', contra: 'Cash ↔ bank', stock: 'Stock', journal: 'Journal', reversal: 'Reversal' }
 
-export const rangeBar = (h: Host, extra = '') => `<div class="ws-toolbar"><label class="inline">From <input type="date" data-range="from" value="${esc(h.from)}"></label>
-  <label class="inline">To <input type="date" data-range="to" value="${esc(h.to)}"></label>${extra}</div>`
+/** The From / To date pickers, for a toolbar's filters. */
+export const rangeFilters = (h: Host) => `<label class="inline">From <input type="date" data-range="from" value="${esc(h.from)}"></label>
+  <label class="inline">To <input type="date" data-range="to" value="${esc(h.to)}"></label>`
 /** Applies a changed date range; true when it was one. */
 export function rangeChange(h: Host, el: HTMLElement) {
   const k = (el as HTMLInputElement).dataset.range as 'from' | 'to' | undefined
@@ -50,7 +52,7 @@ export class DayBookView {
   constructor(private h: Host) {}
   async load() { this.list = await this.h.cached(`/api/accounts/daybook?from=${this.h.from}&to=${this.h.to}${this.kind ? `&kind=${this.kind}` : ''}`) }
   html() {
-    return `${rangeBar(this.h, `<select data-kind aria-label="Kind"><option value="">All vouchers</option>${Object.entries(KIND).map(([k, v]) => `<option value="${k}"${k === this.kind ? ' selected' : ''}>${v}</option>`).join('')}</select>`)}
+    return `${toolbar({ filters: `${rangeFilters(this.h)}<select data-kind aria-label="Kind"><option value="">All vouchers</option>${Object.entries(KIND).map(([k, v]) => `<option value="${k}"${k === this.kind ? ' selected' : ''}>${v}</option>`).join('')}</select>` })}
       <p class="muted small">Bills, payments, purchases and documents post as they happen; the front office and restaurant post once their business day is closed by the night audit.</p>
       ${this.list.map(voucherCard).join('') || '<div class="empty">Nothing posted in these days.</div>'}`
   }
@@ -75,7 +77,11 @@ export class TrialBalanceView {
   html() {
     const d = this.d!, ok = d.totals.closingDebitPaise === d.totals.closingCreditPaise
     let grp = ''
-    return `${rangeBar(this.h, `<span class="small">${tonePill(ok ? 'Balanced' : 'Does not balance', ok ? '--st-vacant' : '--st-departing')}</span>${this.h.can('accounts.view') ? '<button type="button" class="btn" data-tally>Tally file (XML)</button>' : ''}`)}
+    return `${toolbar({
+      filters: rangeFilters(this.h),
+      more: this.h.can('accounts.view') ? [{ attrs: 'data-tally', label: 'Tally file (XML)' }] : [],
+      end: `<span class="small">${tonePill(ok ? 'Balanced' : 'Does not balance', ok ? '--st-vacant' : '--st-departing')}</span>`,
+    })}
       ${d.rows.length ? '' : `<div class="empty acc-empty"><b>Nothing in the books for these days yet.</b> Guest and restaurant takings post when each day closes; purchases, payroll and payments post as they are made.
         Start with the <button type="button" class="linkish" data-goto="journal">opening balances</button> in Entries.</div>`}
       <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Account</th><th class="n">Opening</th><th class="n">Debit</th><th class="n">Credit</th><th class="n">Closing</th></tr></thead><tbody>
@@ -103,8 +109,8 @@ export class LedgerView {
   }
   html() {
     const d = this.d!
-    return `${rangeBar(this.h, `<select data-acct aria-label="Account">${this.chart.map((a) => `<option value="${esc(a.code)}"${a.code === this.code ? ' selected' : ''}>${esc(a.code)} ${esc(a.name)}</option>`).join('')}</select>
-        ${d.parties.length ? `<select data-party aria-label="Party"><option value="">Everyone</option>${d.parties.map((p) => `<option value="${esc(p.id)}"${p.id === this.party ? ' selected' : ''}>${esc(p.name)} (${drcr(p.balancePaise)})</option>`).join('')}</select>` : ''}`)}
+    return `${toolbar({ filters: `${rangeFilters(this.h)}<select data-acct aria-label="Account">${this.chart.map((a) => `<option value="${esc(a.code)}"${a.code === this.code ? ' selected' : ''}>${esc(a.code)} ${esc(a.name)}</option>`).join('')}</select>
+        ${d.parties.length ? `<select data-party aria-label="Party"><option value="">Everyone</option>${d.parties.map((p) => `<option value="${esc(p.id)}"${p.id === this.party ? ' selected' : ''}>${esc(p.name)} (${drcr(p.balancePaise)})</option>`).join('')}</select>` : ''}` })}
       <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Date</th><th>Voucher</th><th>Particulars</th><th class="n">Debit</th><th class="n">Credit</th><th class="n">Balance</th></tr></thead><tbody>
         <tr class="acc-grp"><td colspan="5">Opening balance</td><td class="n">${drcr(d.openingPaise)}</td></tr>
         ${d.rows.map((r) => `<tr><td class="mono">${esc(showDate(r.date))}</td><td class="mono">${esc(r.number)}</td><td>${esc(r.narration)}${r.party_name ? ` <small class="muted">${esc(r.party_name)}</small>` : ''}</td>
@@ -135,7 +141,7 @@ export class PnlView {
       const ls = d.lines.filter((l) => l.type === type)
       return `<tr class="acc-grp"><td colspan="3">${title}</td></tr>${ls.map((l) => `<tr data-ledger="${esc(l.code)}" class="acc-click"><td><span class="mono">${esc(l.code)}</span> ${esc(l.name)}</td><td>${esc(d.departments.find((x) => x.dept === l.dept)?.name ?? l.dept)}</td><td class="n">${money(l.amountPaise)}</td></tr>`).join('')}`
     }
-    return `${rangeBar(this.h)}
+    return `${toolbar({ filters: rangeFilters(this.h) })}
       <div class="sec-title">By department</div>
       <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Department</th><th class="n">Revenue</th><th class="n">Costs</th><th class="n">Profit</th></tr></thead><tbody>
         ${d.departments.filter((x) => x.operated).map((x) => `<tr><td>${esc(x.name)}</td><td class="n">${money(x.revenuePaise)}</td><td class="n">${money(x.costPaise)}</td><td class="n"><b class="${x.profitPaise < 0 ? 'fd-warn' : ''}">${money(x.profitPaise)}</b></td></tr>`).join('')}
@@ -162,7 +168,7 @@ export class BalanceSheetView {
       return `<tr class="acc-grp"><td colspan="2">${title}</td></tr>${xs.map((x) => `${x.grp !== grp && x.code ? `<tr><td colspan="2" class="muted small">${esc((grp = x.grp))}</td></tr>` : ''}<tr${x.code ? ` data-ledger="${esc(x.code)}" class="acc-click"` : ''}><td>${x.code ? `<span class="mono">${esc(x.code)}</span> ` : ''}${esc(x.name)}</td><td class="n">${money(x.amountPaise)}</td></tr>`).join('')}
         <tr><td><b>Total ${title.toLowerCase()}</b></td><td class="n"><b>${money(total)}</b></td></tr>`
     }
-    return `<div class="ws-toolbar"><label class="inline">As on <input type="date" data-range="to" value="${esc(this.h.to)}"></label>${tonePill(ok ? 'Balanced' : 'Does not balance', ok ? '--st-vacant' : '--st-departing')}</div>
+    return `${toolbar({ filters: `<label class="inline">As on <input type="date" data-range="to" value="${esc(this.h.to)}"></label>`, end: tonePill(ok ? 'Balanced' : 'Does not balance', ok ? '--st-vacant' : '--st-departing') })}
       <div class="acc-scroll"><table class="acc-table"><tbody>${block('Equity', d.equity, d.totals.equityPaise)}${block('Liabilities', d.liabilities, d.totals.liabilitiesPaise)}${block('Assets', d.assets, d.totals.assetsPaise)}</tbody></table></div>`
   }
   async change(el: HTMLElement) { if (!rangeChange(this.h, el)) return false; await this.load(); return true }
@@ -182,8 +188,11 @@ export class JournalView {
   }
   html() {
     const can = this.h.can('accounts.post')
-    return `${rangeBar(this.h, can ? `<button type="button" class="btn primary" data-entry="payment">Payment</button><button type="button" class="btn primary" data-entry="receipt">Receipt</button>
-        <button type="button" class="btn" data-entry="contra">Cash ↔ bank</button><button type="button" class="btn" data-jv>Journal entry</button><button type="button" class="btn" data-entry="opening">Opening balances</button>` : '')}
+    return `${toolbar({
+      primary: can ? [{ attrs: 'data-entry="payment"', label: 'Payment' }, { attrs: 'data-entry="receipt"', label: 'Receipt', primary: false }] : [],
+      filters: rangeFilters(this.h),
+      more: can ? [{ attrs: 'data-entry="contra"', label: 'Cash ↔ bank' }, { attrs: 'data-jv', label: 'Journal entry' }, { attrs: 'data-entry="opening"', label: 'Opening balances' }] : [],
+    })}
       <p class="muted small"><b>Payment</b>: an expense or bill paid from cash or the bank. <b>Receipt</b>: money received that is not a guest's or a company's bill (those are taken at the desk and in Receivables). <b>Cash ↔ bank</b>: cash deposited or withdrawn. <b>Opening balances</b>: what the resort held and owed on the day the books start. Guest bills, restaurant bills, purchases and payroll post by themselves. A wrong entry is reversed, never edited or deleted.</p>
       ${this.list.map(voucherCard).join('') || '<div class="empty">No entries by hand in these days. Use the buttons above to record a payment, a receipt or the opening balances.</div>'}`
   }
@@ -256,7 +265,7 @@ export class ChartView {
   async load() { const r = await this.h.cached<{ accounts: Account[]; departments: Record<string, string> }>('/api/accounts/chart'); this.list = r.accounts; this.depts = r.departments }
   html() {
     let grp = ''
-    return `<div class="ws-toolbar">${this.h.can('accounts.post') ? '<button type="button" class="btn primary" data-addacct>Add account</button>' : ''}</div>
+    return `${toolbar({ primary: this.h.can('accounts.post') ? [{ attrs: 'data-addacct', label: 'Add account' }] : [] })}
       <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Account</th><th>Department</th><th class="n">This year</th></tr></thead><tbody>
       ${[...this.list].sort((a, b) => a.grp.localeCompare(b.grp) || a.code.localeCompare(b.code)).map((a) => `${a.grp !== grp ? `<tr class="acc-grp"><td colspan="3">${esc((grp = a.grp))}</td></tr>` : ''}
         <tr data-ledger="${esc(a.code)}" class="acc-click${a.active ? '' : ' retired'}"><td><span class="mono">${esc(a.code)}</span> ${esc(a.name)}${a.system ? '' : ' <small class="muted">added</small>'}</td><td>${esc(a.dept ? this.depts[a.dept] ?? a.dept : '')}</td><td class="n">${drcr(a.closingPaise)}</td></tr>`).join('')}
@@ -287,7 +296,7 @@ export class PeriodsView {
   constructor(private h: Host) {}
   async load() { this.list = await this.h.cached('/api/accounts/periods') }
   html() {
-    return `<div class="ws-toolbar">${this.h.can('accounts.lock') ? '<button type="button" class="btn primary" data-lock>Lock a month</button>' : ''}</div>
+    return `${toolbar({ primary: this.h.can('accounts.lock') ? [{ attrs: 'data-lock', label: 'Lock a month' }] : [] })}
       <p class="muted small">Once a month's returns are filed, lock it: nothing more can be posted into it, and a late document is booked in the next open month. Only the MD can reopen a month, and God Mode records it.</p>
       ${this.list.map((p) => `<div class="row-card"><div class="rc-title">${esc(p.month)}</div><div class="rc-sub">Locked by ${esc(p.locked_by)} on ${new Date(p.locked_at).toLocaleDateString('en-IN')}${p.note ? ` · ${esc(p.note)}` : ''}</div>
         <div class="rc-right">${this.h.me.permissions.includes('*') ? `<button type="button" class="btn small" data-unlock="${esc(p.month)}">Reopen…</button>` : tonePill('Locked', '--muted')}</div></div>`).join('') || '<div class="empty">No month is locked yet.</div>'}`

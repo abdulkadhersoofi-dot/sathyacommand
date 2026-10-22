@@ -1,4 +1,5 @@
 import { esc, tonePill } from '../ui/dom'
+import { toolbar } from '../ui/toolbar'
 import { chips } from '../fnb/common'
 import { HK, minutes, roomActions, TASK, TASK_STATE, type HkHost, type Room } from './common'
 
@@ -28,7 +29,7 @@ export class BoardView {
       ['ooo', `Out of order ${count('ooo')}`], ['dnd', `DND ${count('dnd')}`], ['alerts', `Needs attention ${count('alerts')}`]]
     const shown = rooms.filter(MATCH[this.filter])
     const sections = [...new Set(shown.map((r) => r.section))]
-    return chips(filters, this.filter, 'hkf') + sections.map((sec) => `<div class="sec-title">${esc(sec)}</div><div class="hk-grid">${shown.filter((r) => r.section === sec).map((r) => {
+    return toolbar({ filters: chips(filters, this.filter, 'hkf') }) + sections.map((sec) => `<div class="sec-title">${esc(sec)}</div><div class="hk-grid">${shown.filter((r) => r.section === sec).map((r) => {
       const t = r.task
       return `<button type="button" class="hk-room" data-room="${esc(r.space_id)}" data-st="${r.status}" style="--c: var(${HK[r.status][1]})">
         <b>${esc(r.room_no)}</b>

@@ -1,5 +1,6 @@
 import { esc, tonePill, showDate } from '../ui/dom'
 import { val } from '../ui/form-modal'
+import { toolbar } from '../ui/toolbar'
 import type { WorkspaceHost } from '../ui/workspace'
 import { rupees } from './items'
 
@@ -27,9 +28,11 @@ export class MonthCloseView {
   html() {
     const o = this.o!
     const closed = o.stores.filter((s) => s.close?.status === 'closed').length
-    return `<div class="ws-toolbar"><label class="inline">Month <input type="month" data-month value="${esc(this.month)}" aria-label="Month"></label>
-        <button type="button" class="btn" data-mc="print">Stock statement</button>
-        <span class="muted small">${closed} of ${o.stores.length} stores closed · closing count from ${esc(o.countFrom)} to ${esc(o.to)}</span></div>
+    return `${toolbar({
+      filters: `<label class="inline">Month <input type="month" data-month value="${esc(this.month)}" aria-label="Month"></label>`,
+      more: [{ attrs: 'data-mc="print"', label: 'Stock statement' }],
+      end: `<span class="muted small">${closed} of ${o.stores.length} stores closed · closing count from ${esc(o.countFrom)} to ${esc(o.to)}</span>`,
+    })}
       ${o.over ? '' : `<div class="banner-note">${esc(o.month)} is not over yet: the figures are the month so far. Close it from ${esc(o.to)} onwards, after the closing counts.</div>`}
       ${o.stores.map((s) => this.card(s, o)).join('')}`
   }

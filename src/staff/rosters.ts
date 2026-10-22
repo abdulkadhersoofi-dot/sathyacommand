@@ -1,5 +1,6 @@
 import { esc, toast } from '../ui/dom'
 import { checked, val } from '../ui/form-modal'
+import { toolbar } from '../ui/toolbar'
 import { currentFix } from './tracker'
 import type { StaffHost } from './today'
 
@@ -49,13 +50,15 @@ export class RostersView {
     }
     const people = this.people.filter((p) => !this.filter || p.roles.includes(this.filter))
     const roles = [...new Set(this.people.flatMap((p) => p.roles))].sort()
-    return `<div class="sec-title">Shifts</div>
-      <div class="chips">${this.shifts.map((s) => `<button type="button" class="chip ${s.active ? '' : 'off'}" data-rs="shift:${esc(s.id)}">${esc(s.name)} ${esc(s.starts)}–${esc(s.ends)}</button>`).join('')}
-        <button type="button" class="chip" data-rs="add-shift">+ Shift</button></div>
-      <div class="ws-toolbar"><button type="button" class="btn" data-rs="prev">‹</button><b>Week of ${new Date(`${this.week}T12:00:00+05:30`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</b><button type="button" class="btn" data-rs="next">›</button>
-        <select data-role-filter aria-label="Role"><option value="">Everyone</option>${roles.map((r) => `<option ${r === this.filter ? 'selected' : ''}>${esc(r)}</option>`).join('')}</select>
-        <button type="button" class="btn" data-rs="copy">Copy last week</button>
-        <button type="button" class="btn primary" data-rs="save" ${this.edits.size ? '' : 'disabled'}>Save ${this.edits.size || ''} change${this.edits.size === 1 ? '' : 's'}</button></div>
+    const n = this.edits.size
+    return `${toolbar({
+      primary: [{ attrs: 'data-rs="save"', label: n ? `Save ${n} change${n === 1 ? '' : 's'}` : 'Save changes', disabled: !n }],
+      filters: `<button type="button" class="btn" data-rs="prev" aria-label="Previous week">‹</button><b>Week of ${new Date(`${this.week}T12:00:00+05:30`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</b><button type="button" class="btn" data-rs="next" aria-label="Next week">›</button>
+        <select data-role-filter aria-label="Role"><option value="">Everyone</option>${roles.map((r) => `<option ${r === this.filter ? 'selected' : ''}>${esc(r)}</option>`).join('')}</select>`,
+      more: [{ attrs: 'data-rs="copy"', label: 'Copy last week' }, { attrs: 'data-rs="add-shift"', label: 'Add a shift' }],
+    })}
+      <div class="sec-title">Shifts</div>
+      <div class="chips">${this.shifts.map((s) => `<button type="button" class="chip ${s.active ? '' : 'off'}" data-rs="shift:${esc(s.id)}">${esc(s.name)} ${esc(s.starts)}–${esc(s.ends)}</button>`).join('')}</div>
       <div class="roster-wrap"><table class="roster"><thead><tr><th>Name</th>${days.map((d) => `<th>${new Date(`${d}T12:00:00+05:30`).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric' })}</th>`).join('')}</tr></thead>
       <tbody>${people.map((p) => `<tr><th>${esc(p.name)}<small class="muted"> ${esc(p.roles.join(', ').replace(/_/g, ' '))}</small></th>${days.map((d) => `<td>${cell(p, d)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
       <p class="muted small">“—” is not rostered. Late marks count from the shift's start, with 5 minutes' grace.</p>`
@@ -146,8 +149,8 @@ export class StaffSettingsView {
       </form>
       <div class="sec-title">Indoor beacons <span>${this.beacons.length}</span></div>
       <p class="muted small">Bluetooth beacons place staff inside buildings where GPS is poor (packaged phone app only). Rooms and public areas with a QR label also place the person when scanned.</p>
-      ${this.beacons.map((b) => `<div class="m-row ping-row"><span class="mono">${esc(b.id)}</span><b>${esc(b.name)}</b><span>${esc(b.space ?? '')}${b.floor != null ? ` · floor ${b.floor}` : ''}</span></div>`).join('')}
-      <div class="ws-toolbar"><button type="button" class="btn" data-ss="beacon">Add beacon</button></div>`
+      ${toolbar({ primary: [{ attrs: 'data-ss="beacon"', label: 'Add a beacon' }] })}
+      ${this.beacons.map((b) => `<div class="m-row ping-row"><span class="mono">${esc(b.id)}</span><b>${esc(b.name)}</b><span>${esc(b.space ?? '')}${b.floor != null ? ` · floor ${b.floor}` : ''}</span></div>`).join('')}`
   }
 
   async submit(f: HTMLFormElement): Promise<boolean> {

@@ -1,4 +1,5 @@
 import { esc, toast, tonePill } from '../ui/dom'
+import { toolbar } from '../ui/toolbar'
 import { val } from '../ui/form-modal'
 import { scanQr } from '../ui/qr-scan'
 import type { HkHost } from './common'
@@ -15,8 +16,10 @@ export class AreasView {
 
   html() {
     const manage = this.h.can('hk.manage')
-    return `<div class="ws-toolbar"><button type="button" class="btn primary" data-ar="scan">Scan an area's QR code</button>
-        ${manage ? '<button type="button" class="btn" data-ar="add">Add area</button><button type="button" class="btn" data-ar="labels">Print QR labels</button>' : ''}</div>
+    return `${toolbar({
+      primary: [{ attrs: 'data-ar="scan"', label: "Scan an area's QR code" }],
+      more: manage ? [{ attrs: 'data-ar="add"', label: 'Add area' }, { attrs: 'data-ar="labels"', label: 'Print QR labels' }] : [],
+    })}
       ${this.areas.filter((a) => a.active).map((a) => `<div class="row-card"><div class="rc-title">${esc(a.name)}</div>
         <div class="rc-sub">${a.done} of ${a.rounds_per_day} rounds today${a.last_at ? ` · last ${new Date(a.last_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}${a.last_by ? ` by ${esc(a.last_by)}` : ''}` : ''}</div>
         <div class="rc-right">${a.done >= a.rounds_per_day ? tonePill('Done', '--st-vacant') : a.overdue ? tonePill('Due now', '--st-departing') : tonePill('On track', '--st-occupied')}</div></div>`).join('')}`

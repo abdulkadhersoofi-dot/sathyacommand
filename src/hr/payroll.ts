@@ -1,5 +1,6 @@
 import { esc, toast, tonePill, showDate } from '../ui/dom'
 import { val } from '../ui/form-modal'
+import { steps, toolbar, type Action, type Step } from '../ui/toolbar'
 import type { View, WorkspaceHost } from '../ui/workspace'
 import { money } from '../acc/books'
 import { printPayslips } from './payslip'
@@ -58,7 +59,11 @@ export class PayrollView implements View {
   html() { return this.selected && this.run ? this.detail(this.run) : this.list() }
 
   private list() {
-    return `<div class="ws-toolbar">${this.h.can('payroll.run') ? `<label class="inline">Month <input type="month" data-pm value="${lastMonth()}"></label><button type="button" class="btn primary" data-pr="new">Run payroll</button>` : ''}</div>
+    const run = this.h.can('payroll.run')
+    return `${toolbar({
+      primary: run ? [{ attrs: 'data-pr="new"', label: 'Run payroll' }] : [],
+      filters: run ? `<label class="inline">Month <input type="month" data-pm value="${lastMonth()}"></label>` : '',
+    })}
       <p class="muted small">Each month's pay from the pay structures, attendance and leave, with PF, ESI, professional tax and the labour welfare fund. HR submits it, the GM checks it, the MD approves it, accounts pay it.</p>
       <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Month</th><th>Status</th><th class="n">People</th><th class="n">Gross pay</th><th class="n">Net pay</th></tr></thead><tbody>
         ${this.runs.map((r) => `<tr><td><button type="button" class="linkish" data-run="${esc(r.id)}">${esc(new Date(`${r.month}-01T00:00:00Z`).toLocaleDateString('en-IN', { month: 'long', year: 'numeric', timeZone: 'UTC' }))}</button></td>
@@ -66,7 +71,10 @@ export class PayrollView implements View {
       </tbody></table></div>
       ${this.requests()}
       <div class="sec-title">Returns and the parallel run</div>
-      <div class="ws-toolbar">${this.h.can('payroll.run', 'payroll.pay', 'payroll.view') ? `<label class="inline">24Q for <select data-q24fy>${fys()}</select><select data-q24q>${[1, 2, 3, 4].map((q) => `<option value="${q}" ${q === quarterNow() ? 'selected' : ''}>Q${q}</option>`).join('')}</select></label><button type="button" class="btn" data-pr="24q">Download 24Q figures</button>` : ''}</div>
+      ${this.h.can('payroll.run', 'payroll.pay', 'payroll.view') ? toolbar({
+        primary: [{ attrs: 'data-pr="24q"', label: 'Download 24Q figures', primary: false }],
+        filters: `<label class="inline">24Q for <select data-q24fy>${fys()}</select><select data-q24q>${[1, 2, 3, 4].map((q) => `<option value="${q}" ${q === quarterNow() ? 'selected' : ''}>Q${q}</option>`).join('')}</select></label>`,
+      }) : ''}
       ${this.parallel ? `<p class="small">${this.parallel.monthsMatched >= this.parallel.needed ? tonePill('Parallel run done', '--st-vacant') : tonePill(`Parallel run: ${this.parallel.monthsMatched} of ${this.parallel.needed} months matched`, '--marigold')}
         ${this.parallel.months.map((m) => ` · ${esc(m.month)}: ${m.matched} of ${m.total} people match`).join('')}</p><p class="muted small">Open a month and use <b>Compare with current payroll</b> to put the figures from today's payroll beside the system's.</p>` : ''}`
   }
@@ -100,27 +108,44 @@ export class PayrollView implements View {
     const t = r.totals, h = this.h
     const deductions = t.pf_employee + t.esi_employee + t.pt + t.lwf_employee + t.tds + t.other_deductions
     const employer = t.eps + t.pf_employer + t.edli + t.pf_admin + t.esi_employer + t.lwf_employer + t.bonus_provision + t.gratuity_provision
-    const btn = (a: string, label: string, cls = '') => `<button type="button" class="btn ${cls}" data-pr="${a}">${label}</button>`
-    const acts: string[] = []
-    if (r.status === 'draft' && h.can('payroll.run')) acts.push(btn('recalc', 'Work out again'), btn('submit', 'Submit for approval', 'primary'), btn('cancel', 'Cancel run', 'ghost'))
-    if (r.status === 'submitted' && h.can('payroll.approve') && !h.me.permissions.includes('*')) acts.push(btn('check', 'Checked: send to the MD', 'primary'))
-    if (['submitted', 'checked'].includes(r.status) && h.me.permissions.includes('*')) acts.push(btn('approve', 'Approve', 'primary'))
-    if (['submitted', 'checked'].includes(r.status) && h.can('payroll.approve')) acts.push(btn('back', 'Send back…', 'ghost'))
-    if (r.status === 'approved' && h.can('payroll.pay')) acts.push(btn('bank', 'Bank transfer file'), btn('pay', 'Salaries paid…', 'primary'))
-    if (r.status === 'paid' && h.can('payroll.pay')) acts.push(btn('bank', 'Bank transfer file'))
-    if (h.can('payroll.run', 'payroll.pay')) acts.push(btn('ecr', 'EPFO ECR file'), btn('esi', 'ESIC file'))
-    acts.push(btn('slips', 'Payslips'))
-    if (h.can('payroll.run', 'payroll.view')) acts.push(btn('compare', 'Compare with current payroll'))
+    const run = h.can('payroll.run'), approve = h.can('payroll.approve'), pay = h.can('payroll.pay'), md = h.me.permissions.includes('*')
+    const at = ['draft', 'submitted', 'checked', 'approved', 'paid'].indexOf(r.status)
+    // The run's steps in the order they happen: HR submits, the GM checks, the MD approves, accounts pay.
+    const st = (done: boolean, nowIf: boolean, label: string, attrs: string, title: string): Step =>
+      ({ label, state: done ? 'done' : nowIf ? 'now' : 'todo', attrs: nowIf ? attrs : undefined, title })
+    const checked: Step = at >= 3 && !r.people.checkedBy ? { label: 'Checked by the GM', state: 'skip', title: 'Approved by the MD without a separate check' }
+      : st(at >= 2, at === 1 && approve && !md, 'Checked by the GM', 'data-pr="check"', 'Checked: send to the MD')
+    const flow: Step[] = [
+      { label: 'Prepared', state: 'done' },
+      st(at >= 1, at === 0 && run, 'Submitted', 'data-pr="submit"', 'Submit for approval'),
+      checked,
+      st(at >= 3, at >= 1 && at <= 2 && md, 'Approved by the MD', 'data-pr="approve"', 'Approve and post to the books'),
+      st(at >= 4, at === 3 && pay, 'Salaries paid', 'data-pr="pay"', 'Record the payment'),
+    ]
+    const primary: Action[] = [
+      r.status === 'draft' && run ? { attrs: 'data-pr="recalc"', label: 'Work out again' } : null,
+      at >= 3 && pay ? { attrs: 'data-pr="bank"', label: 'Bank transfer file' } : null,
+      { attrs: 'data-pr="slips"', label: 'Payslips', primary: false },
+    ].filter((x): x is Action => !!x)
+    const more: Action[] = [
+      h.can('payroll.run', 'payroll.pay') ? { attrs: 'data-pr="ecr"', label: 'EPFO ECR file' } : null,
+      h.can('payroll.run', 'payroll.pay') ? { attrs: 'data-pr="esi"', label: 'ESIC file' } : null,
+      h.can('payroll.run', 'payroll.view') ? { attrs: 'data-pr="compare"', label: 'Compare with current payroll' } : null,
+      (at === 1 || at === 2) && approve ? { attrs: 'data-pr="back"', label: 'Send back to HR' } : null,
+      r.status === 'draft' && run ? { attrs: 'data-pr="cancel"', label: 'Cancel the run', danger: true } : null,
+    ].filter((x): x is Action => !!x)
     const who = [r.people.createdBy && `prepared by ${r.people.createdBy}`, r.people.submittedBy && `submitted by ${r.people.submittedBy}`, r.people.checkedBy && `checked by ${r.people.checkedBy}`, r.people.approvedBy && `approved by ${r.people.approvedBy}`,
       r.paid_on && `paid on ${r.paid_on}${r.pay_reference ? ` (${r.pay_reference})` : ''}`].filter(Boolean).join(' · ')
     const warned = r.lines.filter((l) => needsLook(l).length).length
     const kpi = (l: string, v: string) => `<div class="kpi"><div class="kpi-l">${l}</div><div class="kpi-v">${v}</div></div>`
     const dep = (k: string) => this.h.cfg.departments[k]?.name ?? k
-    return `<div class="ws-toolbar"><button type="button" class="btn ghost" data-pr="list">← All months</button>${acts.join('')}</div>
+    return `<div class="tb"><button type="button" class="btn ghost" data-pr="list">← All months</button></div>
       <div class="bq-head"><div><h2>Payroll · ${esc(r.monthName)}</h2><div class="small muted">${r.days_in_month} days · ${esc(who)}</div></div><div class="rc-right">${tonePill(STATUS[r.status] ?? r.status, PAY_TONE[r.status] ?? '--muted')}</div></div>
       ${r.sent_back_note && r.status === 'draft' ? `<p class="fd-warn">Sent back: ${esc(r.sent_back_note)}</p>` : ''}
       ${r.missing.length ? `<p class="fd-warn">No pay structure, so not in this payroll: ${r.missing.map((m) => `${esc(m.name)} (${esc(m.code)})`).join(', ')}.</p>` : ''}
       ${r.pendingLeave && r.status === 'draft' ? `<p class="fd-warn">${r.pendingLeave} leave application${r.pendingLeave > 1 ? 's' : ''} in this month still waiting for approval: decide ${r.pendingLeave > 1 ? 'them' : 'it'} and work the payroll out again.</p>` : ''}
+      ${steps(flow)}
+      ${toolbar({ primary, more })}
       <div class="kpis pay-kpis">${kpi('People', String(t.people))}${kpi('Gross pay', money(t.gross))}${kpi('Deductions', money(deductions))}${kpi('Net pay', money(t.net))}${kpi('Employer\'s cost on top', money(employer))}</div>
       ${r.dues.length ? `<div class="sec-title">Statutory dues</div><div class="pay-dues">${r.dues.map((d) => `<div class="row-card"><div class="rc-title">${esc(d.name)} · <span class="mono">${money(d.amount)}</span></div><div class="rc-sub">due ${esc(showDate(d.due))}${d.paid && d.paid < d.amount ? ` · ${money(d.paid)} paid` : ''}</div>
         <div class="rc-right">${['approved', 'paid'].includes(r.status) ? d.paid >= d.amount ? tonePill('Paid', '--st-vacant') : d.due < r.today ? tonePill('Overdue', '--st-departing') : tonePill('To pay', '--muted') : ''}${['approved', 'paid'].includes(r.status) && h.can('payroll.pay') && d.paid < d.amount ? `<button type="button" class="btn small" data-due="${d.kind}">Paid…</button>` : ''}</div></div>`).join('')}</div>` : ''}

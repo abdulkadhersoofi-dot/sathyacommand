@@ -1,5 +1,6 @@
 import { esc, tonePill } from '../ui/dom'
 import { checked, val } from '../ui/form-modal'
+import { toolbar } from '../ui/toolbar'
 import type { WorkspaceHost } from '../ui/workspace'
 import { t } from './i18n'
 
@@ -18,7 +19,7 @@ export class MyLeaveView {
   html() {
     const d = this.d!
     if (!d.employee) return `<p class="empty">${esc(t('Your login is not linked to an employee record yet: ask HR.'))}</p>`
-    return `<div class="ws-toolbar"><button type="button" class="btn primary" data-ml="apply">${esc(t('Ask for leave'))}</button></div>
+    return `${toolbar({ primary: [{ attrs: 'data-ml="apply"', label: t('Ask for leave') }] })}
       <div class="row-card mc-card"><div class="mc-figs">${d.balances.filter((b) => b.balance || ['CL', 'SL', 'EL'].includes(b.type)).map((b) => `<span><small>${esc(b.name)}</small><b class="mono">${b.balance}</b></span>`).join('')}</div></div>
       <div class="sec-title">${esc(t('My leave'))}</div>
       ${d.applications.map((a) => `<div class="row-card"><div class="rc-title">${esc(d.leaveTypes[a.leave_type] ?? a.leave_type)} · ${day(a.from_date)}${a.to_date !== a.from_date ? ` – ${day(a.to_date)}` : ''}</div>

@@ -22,7 +22,7 @@ interface ServerBooking { name: string; venueId: string; date: string; from: str
   client: string; turnaroundMinutes: number; valuePaise: number; paidPaise: number }
 const addDaysIso = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10)
 interface ServerOrder {
-  id: string; number: number; outlet_id: string; outlet: string; outlet_twin_id: string | null; kind: string; table_label: string | null
+  id: string; number: number; outlet_id: string; outlet: string; outlet_space_id: string | null; outlet_twin_id: string | null; kind: string; table_label: string | null
   room_no: string | null; twin_id: string | null; guest: string | null; status: string; opened_at: string; kitchen: 'new' | 'cooking' | 'ready' | null
   last_kot_at: string | null; items: { name: string; qty: number; price: number; status: string }[]
 }
@@ -100,7 +100,9 @@ export class LiveAdapter implements HmsAdapter {
     const rows = await this.api.get<ServerOrder[]>(`/api/fnb/orders?date=${date}&status=open,billed,closed`)
     return rows.filter((o) => o.last_kot_at).map((o) => ({
       id: `Order ${o.number}`, serverId: o.id, outletId: o.outlet_id,
-      origin: o.kind === 'room_service' ? (o.twin_id ?? 'KITCHEN') : (o.outlet_twin_id ?? 'RESTAURANT'),
+      // On the map an order sits above its own outlet (the bar, the poolside, a cafeteria…), not always the restaurant.
+      origin: o.kind === 'room_service' ? (o.twin_id ?? 'KITCHEN') : (o.outlet_space_id ? this.appIdOf.get(o.outlet_space_id) ?? o.outlet_twin_id ?? o.outlet_space_id : 'KITCHEN'),
+      outletName: o.outlet,
       originLabel: o.kind === 'room_service' ? `Room ${o.room_no ?? '?'}` : `${o.outlet}${o.table_label ? ` · ${o.table_label}` : ''}`,
       kind: o.kind === 'room_service' ? 'room' : 'table',
       items: o.items.map((i) => ({ name: i.name, qty: i.qty, price: Number(i.price) / 100 })),

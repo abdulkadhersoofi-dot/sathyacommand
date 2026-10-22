@@ -1,4 +1,5 @@
 import type { Api } from '../live/api'
+import { toolbar } from '../ui/toolbar'
 import type { Me } from '../live/signin'
 import type { Outbox } from '../live/outbox'
 import { esc, showDate, tonePill } from '../ui/dom'
@@ -87,7 +88,7 @@ class RatesView implements View {
     const ends = this.types.flatMap((t) => plans.map((p) => this.latest(p, t.id)?.valid_to)).filter(Boolean) as string[]
     const firstEnd = ends.sort()[0]
     return `${firstEnd && firstEnd <= soon.toISOString().slice(0, 10) ? `<div class="setup-banner">Some rates end on <b>${esc(showDate(firstEnd))}</b>. After that date reception cannot book those rooms. Add the next season's rates.</div>` : ''}
-      <div class="ws-toolbar"><button type="button" class="btn primary" data-rate-set>Set a rate</button><button type="button" class="btn" data-rate-extend>Next season: carry rates forward</button></div>
+      ${toolbar({ primary: [{ attrs: 'data-rate-set', label: 'Set a rate' }], more: [{ attrs: 'data-rate-extend', label: 'Next season: carry rates forward' }] })}
       <div class="sec-title">Rate per night before GST</div>
       <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Room type</th>${plans.map((p) => `<th class="n">${esc(PLAN_LABEL[p] ?? p)}</th>`).join('')}</tr></thead><tbody>
       ${this.types.map((t) => `<tr><td><b>${esc(t.name)}</b><div class="muted small">${t.rooms} room${t.rooms === 1 ? '' : 's'} · up to ${t.max_occupancy} guests</div></td>

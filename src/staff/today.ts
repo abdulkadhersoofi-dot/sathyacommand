@@ -1,6 +1,7 @@
 import { esc, toast, tonePill } from '../ui/dom'
 import { checked, val } from '../ui/form-modal'
 import { takePhoto, uploadPhoto } from '../ui/photo'
+import { toolbar } from '../ui/toolbar'
 import type { WorkspaceHost } from '../ui/workspace'
 import { getLang, setLang, t } from './i18n'
 import { currentFix, type Tracker } from './tracker'
@@ -107,7 +108,7 @@ export class MessagesView {
   }
 
   html() {
-    return (this.h.can('broadcast.send') ? `<div class="ws-toolbar"><button type="button" class="btn primary" data-msg="send">${t('Send a message')}</button></div>` : '')
+    return toolbar({ primary: this.h.can('broadcast.send') ? [{ attrs: 'data-msg="send"', label: t('Send a message') }] : [] })
       + (this.list.map((b) => `<div class="msg${b.urgent ? ' urgent' : ''}${b.read ? '' : ' unread'}"><div class="msg-head"><b>${esc(b.from_name)}</b>${b.urgent ? tonePill(t('Urgent'), '--st-departing') : ''}<span class="muted small">${new Date(b.at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span></div>
         <div>${esc(b.text)}</div>${b.roles ? `<div class="muted small">To: ${b.roles.map((r) => esc(ROLES.find((x) => x[0] === r)?.[1] ?? r)).join(', ')}</div>` : ''}</div>`).join('') || '<div class="empty">No messages.</div>')
   }

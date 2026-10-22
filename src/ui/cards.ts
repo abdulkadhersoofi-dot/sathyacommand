@@ -69,9 +69,10 @@ export function tipHtml(store: Store, id: string, touch: boolean) {
     body += row('Cooking', `${open.filter((o) => o.status === 'cooking').length}`)
     body += row('Ready to send', `${open.filter((o) => o.status === 'ready').length}`)
     body += row('KOTs on this date', `${store.orders.length}`)
-  } else if (s.type === 'restaurant') {
-    const t = store.orders.filter((o) => o.kind === 'table')
-    body += row('Table orders', `${t.length}`)
+  } else if (s.type === 'restaurant' || store.ordersFor(id).some((o) => o.kind === 'table')) {
+    // An outlet's own orders: the restaurant's, the poolside's, a cafeteria's.
+    const t = store.ordersFor(id).filter((o) => o.kind === 'table')
+    body += row('Orders here', `${t.length}`)
     body += row('Open now', `${store.isToday ? t.filter((o) => o.status !== 'served').length : 0}`)
     if (god) body += row('F&B sales', inr(t.reduce((a, o) => a + orderTotal(o), 0)))
   } else if (s.type === 'reception') {
@@ -158,7 +159,7 @@ export function kotCard(store: Store, orderId: string, withFrom = false) {
   return `
     <div class="kot" style="--c: var(${color})">
       <div class="kot-head"><span class="kot-id">${o.id}</span><span class="kot-age" ${late ? 'data-late' : ''}>${live ? age + ' min' : fmtTime(o.placedAt)}</span></div>
-      ${withFrom ? `<div class="kot-from" data-focus="${esc(o.kind === 'table' ? 'RESTAURANT' : o.origin)}">${esc(o.originLabel)}</div>` : ''}
+      ${withFrom ? `<div class="kot-from" data-focus="${esc(o.origin)}">${esc(o.originLabel)}</div>` : ''}
       <div class="kot-items">${o.items.map((i) => `${i.qty}× ${esc(i.name)}`).join(', ')}</div>
       <div class="kot-foot">
         <span class="pill" style="--c: var(${color})">${o.status}</span>
@@ -216,11 +217,14 @@ export function drawerHtml(store: Store, id: string) {
     const upcoming = store.events.filter((e) => e.spaceId === id && e.date > store.date).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 8)
     body += `<div class="sec-title">Upcoming</div>` + (upcoming.length ? upcoming.map((e) => `
       <div class="row-card" data-date="${e.date}"><div class="rc-title">${esc(e.title)}</div><div class="rc-sub">${fmtDay(e.date)} · ${e.slot}</div><div class="rc-right"><span class="mono">${e.pax} pax</span>${god ? `<span class="mono">${inr(e.value)}</span>` : ''}</div></div>`).join('') : `<div class="empty">Nothing booked.</div>`)
-  } else if (s.type === 'kitchen' || s.type === 'restaurant') {
-    const list = (s.type === 'restaurant' ? store.orders.filter((o) => o.kind === 'table') : store.orders).slice().reverse()
+  } else if (s.type === 'kitchen' || store.ordersFor(id).length) {
+    // The kitchen sees every order; an outlet (restaurant, bar, poolside, a cafeteria on a lawn) sees its own.
+    const list = (s.type === 'kitchen' ? store.orders : store.ordersFor(id)).slice().reverse()
     const open = list.filter((o) => o.status !== 'served')
-    body += `<div class="sec-title">Open orders <span>${open.length}</span></div>` + (open.length ? open.map((o) => kotCard(store, o.id, true)).join('') : `<div class="empty">No open orders.</div>`)
-    body += `<div class="sec-title">Served <span>${list.length - open.length}</span></div>` + list.filter((o) => o.status === 'served').slice(0, 12).map((o) => kotCard(store, o.id, true)).join('')
+    body += `<div class="sec-title">Open orders <span>${open.length}</span></div>` + (open.length ? open.map((o) => kotCard(store, o.id, s.type === 'kitchen')).join('') : `<div class="empty">No open orders.</div>`)
+    body += `<div class="sec-title">Served <span>${list.length - open.length}</span></div>` + list.filter((o) => o.status === 'served').slice(0, 12).map((o) => kotCard(store, o.id, s.type === 'kitchen')).join('')
+  } else if (s.type === 'restaurant') {
+    body += `<div class="sec-title">Orders</div><div class="empty">No orders on this date.</div>`
   } else {
     body += `<div class="note" style="margin-top:12px">${tipHtml(store, id, false)}</div>`
   }

@@ -67,6 +67,7 @@ export interface Order {
   // Live HMS only
   serverId?: string
   outletId?: string
+  outletName?: string
 }
 
 export interface EventBooking {

@@ -1,5 +1,6 @@
 import { esc, toast, tonePill } from '../ui/dom'
 import { checked, val } from '../ui/form-modal'
+import { toolbar } from '../ui/toolbar'
 import type { BqHost } from './workspace'
 
 // Rates and channels: the booking page's address, selling rules night by night (stop-sell, minimum stay,
@@ -44,8 +45,11 @@ export class ChannelsView {
         <div class="rc-right"><button type="button" class="btn small" data-chn="copy">Copy link</button></div></div>
       ${failed.length ? `<div class="sec-title fd-warn">OTA bookings that could not be placed <span>${failed.length}</span></div>${failed.map((b) => `<div class="row-card"><div class="rc-title">${esc(this.channels[b.channel] ?? b.channel)} ${esc(b.ota_ref)} · ${esc(b.payload.guest?.name ?? '')}</div>
         <div class="rc-sub">${esc(b.payload.arrival ?? '')} to ${esc(b.payload.departure ?? '')} · ${esc(b.error ?? '')}</div><div class="rc-right"><button type="button" class="btn small primary" data-chres="${esc(b.id)}">Resolved…</button></div></div>`).join('')}` : ''}
-      <div class="sec-title">Selling rules ${manage ? '<button type="button" class="btn small primary" data-chn="rule">Set a rule</button>' : ''}</div>
-      <div class="ws-toolbar"><button type="button" class="btn small" data-chnav="-14">◀</button><span class="small">${esc(days[0])} to ${esc(days[27])}</span><button type="button" class="btn small" data-chnav="14">▶</button></div>
+      <div class="sec-title">Selling rules</div>
+      ${toolbar({
+        primary: manage ? [{ attrs: 'data-chn="rule"', label: 'Set a rule' }] : [],
+        filters: `<button type="button" class="btn small" data-chnav="-14" aria-label="Earlier">◀</button><span class="small">${esc(days[0])} to ${esc(days[27])}</span><button type="button" class="btn small" data-chnav="14" aria-label="Later">▶</button>`,
+      })}
       <div class="acc-scroll"><table class="acc-table bq-rules"><thead><tr><th>Room</th>${days.map((d) => { const x = new Date(`${d}T00:00:00Z`); return `<th class="n ${x.getUTCDay() % 6 === 0 ? 'wk' : ''}">${WEEK[x.getUTCDay()][0]}<br>${x.getUTCDate()}</th>` }).join('')}</tr></thead><tbody>
         ${this.types.map((t) => `<tr><td>${esc(t.name)}</td>${days.map((d) => `<td class="n">${mark(this.rules.find((r) => r.room_type_id === t.id && r.day === d))}</td>`).join('')}</tr>`).join('')}
       </tbody></table></div>

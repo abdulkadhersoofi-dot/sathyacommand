@@ -1,5 +1,6 @@
 import { esc, toast, tonePill, showDate } from '../ui/dom'
 import { checked, val } from '../ui/form-modal'
+import { steps, toolbar, type Action, type Step } from '../ui/toolbar'
 import type { WorkspaceHost } from '../ui/workspace'
 import { rupees, type Item, type Store } from './items'
 import { receivePo } from './payables'
@@ -52,9 +53,11 @@ export class IndentsView {
     const chip = (s: string, l: string) => `<button type="button" class="chip" data-is="${s}" aria-pressed="${this.status === s}">${l}</button>`
     const canOrder = this.h.can('purchase.order')
     const approved = this.list.filter((i) => i.status === 'approved')
-    return `<div class="ws-toolbar">${this.h.can('purchase.indent') ? '<button type="button" class="btn primary" data-in="new">New indent</button>' : ''}
-        ${canOrder && approved.length ? `<button type="button" class="btn" data-in="order" ${this.picked.size ? '' : 'disabled'}>Order ${this.picked.size || ''} ticked</button>` : ''}
-        <div class="chips">${chip('open', 'Open')}${chip('ordered', 'Ordered')}${chip('all', 'All')}</div></div>
+    const primary: Action[] = [
+      ...(this.h.can('purchase.indent') ? [{ attrs: 'data-in="new"', label: 'New indent' }] : []),
+      ...(canOrder && approved.length ? [{ attrs: 'data-in="order"', label: this.picked.size ? `Order ${this.picked.size} ticked` : 'Order the ticked indents', primary: false, disabled: !this.picked.size }] : []),
+    ]
+    return `${toolbar({ primary, filters: `<div class="chips">${chip('open', 'Open')}${chip('ordered', 'Ordered')}${chip('all', 'All')}</div>` })}
       ${this.list.map((i) => `<div class="row-card ind-card">
         <div class="rc-title">${canOrder && i.status === 'approved' ? `<input type="checkbox" data-pick="${esc(i.id)}" ${this.picked.has(i.id) ? 'checked' : ''} aria-label="Order ${esc(i.number)}"> ` : ''}${esc(i.number)} · ${esc(i.store)}</div>
         <div class="rc-sub">${i.lines.map((l) => `${esc(l.item)} ${qty(l.purchaseQty)} ${esc(l.purchase_unit)}${l.po_number ? ` <small>(${esc(l.po_number)})</small>` : ''}`).join(' · ')}</div>
@@ -124,8 +127,10 @@ export class PosView {
 
   html() {
     const chip = (s: string, l: string) => `<button type="button" class="chip" data-ps="${s}" aria-pressed="${this.status === s}">${l}</button>`
-    return `<div class="ws-toolbar">${this.h.can('purchase.order') ? '<button type="button" class="btn primary" data-po="new">New purchase order</button>' : ''}
-        <div class="chips">${chip('open', 'Open')}${chip('received', 'Received')}${chip('cancelled', 'Cancelled')}${chip('all', 'All')}</div></div>
+    return `${toolbar({
+      primary: this.h.can('purchase.order') ? [{ attrs: 'data-po="new"', label: 'New purchase order' }] : [],
+      filters: `<div class="chips">${chip('open', 'Open')}${chip('received', 'Received')}${chip('cancelled', 'Cancelled')}${chip('all', 'All')}</div>`,
+    })}
       ${this.list.map((p) => `<div class="row-card" data-ticket="${esc(p.id)}"><div class="rc-title">${esc(p.number)} · ${esc(p.vendor)}${p.market_list ? ' · market list' : ''}</div>
         <div class="rc-sub">${p.lines} item${p.lines === 1 ? '' : 's'} for ${esc(p.store)} · ${esc(showDate(p.order_date))}${p.expected_date ? ` · due ${esc(showDate(p.expected_date))}` : ''} · by ${esc(p.created_by)}${p.approved_by ? ` · approved by ${esc(p.approved_by)}` : ''}</div>
         <div class="rc-right"><b class="mono">${rupees(Number(p.total_paise))}</b>${tonePill(...(PO_STATE[p.status] ?? [p.status, '--muted']))}</div></div>`).join('') || '<div class="empty">No purchase orders.</div>'}`
@@ -153,13 +158,28 @@ export class PosView {
 
   async open(id: string) {
     const po = await this.h.api.get<Po & { lines: PoLine[]; igst: boolean; terms: string | null; vendor_gstin: string | null }>(`/api/pos/${id}`)
-    const order = this.h.can('purchase.order')
-    const btn = (a: string, l: string, primary = false) => `<button type="button" class="btn${primary ? ' primary' : ''}" data-pa="${a}">${l}</button>`
-    const acts = [btn('print', 'Print / PDF')]
-    if (order && po.status === 'draft') acts.push(btn('submit', 'Submit', true))
-    if (order && po.status === 'approved') acts.push(btn('send', 'Mark sent to vendor', true))
-    if (this.h.can('stores.receive') && ['approved', 'sent', 'partly_received'].includes(po.status)) acts.push(btn('receive', 'Receive goods…', po.status !== 'approved'))
-    if ((order || this.h.can('purchase.approve')) && ['draft', 'pending_approval', 'approved', 'sent'].includes(po.status)) acts.push(btn('cancel', 'Cancel…'))
+    const order = this.h.can('purchase.order'), receive = this.h.can('stores.receive')
+    // The order's steps in the order they happen; the current one is the button to press. Billing and
+    // payment are followed under Bills and Payments, not here.
+    const s = po.status
+    const approved = ['approved', 'sent', 'partly_received', 'received', 'closed'].includes(s)
+    const sent = ['sent', 'partly_received', 'received', 'closed'].includes(s)
+    const received = ['received', 'closed'].includes(s)
+    const canSend = order && s === 'approved'
+    const canReceive = receive && ['approved', 'sent', 'partly_received'].includes(s)
+    const flow: Step[] = s === 'cancelled' ? [] : [
+      { label: 'Draft', state: 'done' },
+      s === 'pending_approval' ? { label: 'Waiting for approval', state: 'todo', title: 'Above the limit: the GM approves it' }
+        : { label: approved ? 'Approved' : 'Submit', state: approved ? 'done' : order && s === 'draft' ? 'now' : 'todo', attrs: order && s === 'draft' ? 'data-pa="submit"' : undefined, title: 'Approved within your limit, or sent to the GM' },
+      { label: 'Sent to vendor', state: sent ? 'done' : canSend ? 'now' : 'todo', attrs: canSend ? 'data-pa="send"' : undefined, title: 'Print it and mark it sent' },
+      { label: s === 'partly_received' ? 'Part received' : 'Goods received', state: received ? 'done' : canReceive && sent ? 'now' : 'todo', attrs: canReceive && sent ? 'data-pa="receive"' : undefined, title: 'Count what arrived and take it into stock' },
+      { label: 'Closed', state: s === 'closed' ? 'done' : 'todo' },
+    ]
+    const more: Action[] = [
+      { attrs: 'data-pa="print"', label: 'Print / PDF' },
+      ...(canReceive && !sent ? [{ attrs: 'data-pa="receive"', label: 'Receive goods' }] : []),
+      ...((order || this.h.can('purchase.approve')) && ['draft', 'pending_approval', 'approved', 'sent'].includes(s) ? [{ attrs: 'data-pa="cancel"', label: 'Cancel the order', danger: true }] : []),
+    ]
     const gst = Number(po.gst_paise)
     this.h.modal.open(`${po.number} · ${po.vendor}`, `<div class="room-head">${tonePill(...(PO_STATE[po.status] ?? [po.status, '--muted']))}${po.igst ? tonePill('IGST', '--muted') : ''}</div>
       <div class="m-table"><div class="m-row po-row head"><span>Item</span><span>Qty</span><span>Rate</span><span>GST</span><span>Amount</span></div>
@@ -167,7 +187,7 @@ export class PosView {
         <span class="mono">${rupees(Number(l.rate_paise))}</span><span class="mono">${Number(l.gst_rate)}%</span><span class="mono">${rupees(Number(l.amount_paise))}</span></div>`).join('')}</div>
       <dl class="kv"><dt>Taxable</dt><dd>${rupees(Number(po.subtotal_paise))}</dd>${po.igst ? `<dt>IGST</dt><dd>${rupees(gst)}</dd>` : `<dt>CGST + SGST</dt><dd>${rupees(Math.floor(gst / 2))} + ${rupees(gst - Math.floor(gst / 2))}</dd>`}
         <dt>Total</dt><dd><b>${rupees(Number(po.total_paise))}</b></dd>${po.terms ? `<dt>Terms</dt><dd>${esc(po.terms)}</dd>` : ''}</dl>
-      <div class="actions room-actions">${acts.join('')}</div>`, 'Done', async () => '')
+      <div class="room-actions">${flow.length ? steps(flow) : ''}${toolbar({ more })}</div>`, 'Done', async () => '')
     this.h.modal.el.querySelector('.room-actions')!.addEventListener('click', async (e) => {
       const a = (e.target as HTMLElement).closest<HTMLElement>('[data-pa]')?.dataset.pa
       if (!a) return
@@ -199,8 +219,11 @@ export class MarketView {
 
   html() {
     const total = this.list.reduce((a, s) => a + (s.amountPaise ?? 0), 0)
-    return `<form data-form="market"><div class="ws-toolbar"><div class="chips"><button type="button" class="chip" data-mk="1" aria-pressed="${this.perishable}">Today's market list (perishables)</button><button type="button" class="chip" data-mk="0" aria-pressed="${!this.perishable}">Everything below its level</button></div>
-        ${this.list.length ? `<button class="btn primary">Raise draft POs</button><span class="muted small">about ${rupees(total)}</span>` : ''}</div>
+    // The "raise" button submits the form around the list, so it stays a submit button at the toolbar's end.
+    return `<form data-form="market">${toolbar({
+      filters: `<div class="chips"><button type="button" class="chip" data-mk="1" aria-pressed="${this.perishable}">Today's market list (perishables)</button><button type="button" class="chip" data-mk="0" aria-pressed="${!this.perishable}">Everything below its level</button></div>`,
+      end: this.list.length ? `<span class="muted small">about ${rupees(total)}</span><button class="btn primary">Raise draft purchase orders</button>` : '',
+    })}
       <div class="m-table"><div class="m-row mk-row head"><span></span><span>Item</span><span>In stock / level</span><span>Order</span><span>Best rate</span></div>
       ${this.list.map((s, n) => `<div class="m-row mk-row"><input type="checkbox" name="t_${n}" ${s.vendor ? 'checked' : 'disabled'} aria-label="Order ${esc(s.item)}"><b>${esc(s.item)}</b>
         <span class="mono">${qty(s.stock)} / ${qty(s.par)} ${esc(s.unit)}${s.onOrder ? ` <small class="muted">+${qty(s.onOrder)} on order</small>` : ''}</span>

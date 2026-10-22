@@ -1,6 +1,7 @@
 import { esc, tonePill, showDate } from '../ui/dom'
 import { val } from '../ui/form-modal'
 import { chips, rs, type Ws } from './common'
+import { toolbar, type Action } from '../ui/toolbar'
 
 // Bar stock: what is in the bar now (full bottles and the open one), the daily stock register,
 // TASMAC purchases, breakage, physical counts and brands; and excise: the register in bottles for a
@@ -55,26 +56,28 @@ export class BarView {
 
   html() {
     const subs: [Sub, string][] = [['stock', 'In the bar'], ['register', 'Daily register'], ['purchases', 'TASMAC purchases'], ['counts', 'Physical count'], ['excise', 'Excise'], ['brands', 'Brands']]
-    const bar = `<div class="ws-toolbar">${chips(subs, this.sub, 'bsub')}<button type="button" class="btn" data-b="breakage">Report breakage</button></div>`
+    const tabs = chips(subs, this.sub, 'bsub')
+    const breakage: Action = { attrs: 'data-b="breakage"', label: 'Report breakage' }
     if (this.sub === 'stock') {
-      return bar + `<div class="m-table">${this.stock.map((s) => `<div class="m-row m-row-4${s.negative ? ' warn' : ''}"><b>${esc(s.name)}</b><span class="mono">${bottles(s.ml, s.bottle_ml)}</span>
+      return toolbar({ primary: [breakage], filters: tabs }) + `<div class="m-table">${this.stock.map((s) => `<div class="m-row m-row-4${s.negative ? ' warn' : ''}"><b>${esc(s.name)}</b><span class="mono">${bottles(s.ml, s.bottle_ml)}</span>
         <span class="muted small">${s.ml} ml${s.valuePaise ? ` · ${rs(s.valuePaise)} at cost` : ''}</span><span>${s.negative ? tonePill('Below zero', '--st-departing') : ''}</span></div>`).join('') || '<div class="empty">No brands yet. Add them under Brands.</div>'}</div>
         ${this.stock.some((s) => s.negative) ? '<p class="fd-warn small">Below zero means more was sold than bought: enter the TASMAC invoice or count the stock.</p>' : ''}`
     }
     if (this.sub === 'register') {
       const r = this.register
-      return bar + `<div class="ws-toolbar"><label class="inline">Date <input type="date" name="regdate" value="${esc(r.date)}"></label><span class="muted small">ml · bottles in brackets</span></div>
+      return toolbar({ filters: tabs + `<label class="inline">Date <input type="date" name="regdate" value="${esc(r.date)}"></label>`, more: [breakage], end: '<span class="muted small">ml · bottles in brackets</span>' }) + `
         <div class="m-table reg"><div class="m-row reg-row head"><span>Brand</span><span>Opening</span><span>Received</span><span>Sold</span><span>Breakage</span><span>Adjusted</span><span>Closing</span></div>
         ${r.brands.map((b) => `<div class="m-row reg-row"><b>${esc(b.name)}</b>${[b.opening, b.received, b.sold, b.breakage, b.adjusted, b.closing].map((v, i) => `<span class="mono${i === 5 ? ' strong' : ''}">${v}${i === 0 || i === 5 ? `<small>${bottles(v, b.bottle_ml)}</small>` : ''}</span>`).join('')}</div>`).join('')}</div>`
     }
     if (this.sub === 'purchases') {
-      return bar + (this.manager ? '<div class="ws-toolbar"><button type="button" class="btn primary" data-b="purchase">Enter TASMAC invoice</button></div>' : '')
+      return toolbar({ primary: this.manager ? [{ attrs: 'data-b="purchase"', label: 'Enter TASMAC invoice' }] : [], filters: tabs, more: [breakage] })
         + (this.purchases.map((p) => `<div class="row-card"><div class="rc-title">${esc(p.supplier)} · ${esc(p.invoice_no)}</div>
           <div class="rc-sub">${esc(showDate(p.invoice_date))} · ${p.lines.map((l) => `${l.bottles} × ${esc(l.name)}`).join(', ')} · received by ${esc(p.received_by)}${p.permit_no ? ` · permit ${esc(p.permit_no)}` : ''}${Number(p.tcs_paise) ? ` · TCS ${rs(Number(p.tcs_paise))}` : ''}</div>
           <div class="rc-right"><span class="mono">${rs(p.total_paise)}</span></div></div>`).join('') || '<div class="empty">No purchases entered.</div>')
     }
     if (this.sub === 'counts') {
-      return bar + (this.manager ? '<div class="ws-toolbar"><button type="button" class="btn primary" data-b="count">Enter a physical count</button></div><p class="muted small">Count full bottles and measure the open bottle. The GM approves before the book stock changes; a variance above 3% is flagged to the MD.</p>' : '')
+      return toolbar({ primary: this.manager ? [{ attrs: 'data-b="count"', label: 'Enter a physical count' }] : [], filters: tabs, more: [breakage] })
+        + (this.manager ? '<p class="muted small">Count full bottles and measure the open bottle. The GM approves before the book stock changes; a variance above 3% is flagged to the MD.</p>' : '')
         + this.counts.map((c) => `<div class="row-card"><div class="rc-title">${esc(showDate(c.business_date))} · variance ${Number(c.variance_percent)}%</div>
           <div class="rc-sub">${c.lines.map((l) => `${esc(l.name)} ${l.varianceMl > 0 ? '+' : ''}${l.varianceMl} ml`).join(' · ')} · ${esc(c.counted_by)}</div>
           <div class="rc-right">${tonePill(c.status === 'approved' ? 'Approved' : c.status === 'rejected' ? 'Rejected' : 'Waiting for GM', c.status === 'approved' ? '--st-vacant' : c.status === 'rejected' ? '--st-ooo' : '--marigold')}</div></div>`).join('')
@@ -82,19 +85,22 @@ export class BarView {
     if (this.sub === 'excise' && this.excise) {
       const e = this.excise, f = (n: number) => n.toLocaleString('en-IN', { maximumFractionDigits: 2 })
       const today = new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10)
-      return bar + `<div class="ws-toolbar"><label class="inline">From <input type="date" name="exfrom" value="${esc(e.from)}"></label><label class="inline">To <input type="date" name="exto" value="${esc(e.to)}"></label>
-          <button type="button" class="btn" data-b="print-daily">Print daily register</button><button type="button" class="btn" data-b="print-period">Print statement</button></div>
+      return toolbar({
+        primary: [{ attrs: 'data-b="print-daily"', label: 'Print daily register' }, { attrs: 'data-b="print-period"', label: 'Print statement', primary: false }],
+        filters: tabs + `<label class="inline">From <input type="date" name="exfrom" value="${esc(e.from)}"></label><label class="inline">To <input type="date" name="exto" value="${esc(e.to)}"></label>`,
+        more: [breakage],
+      }) + `
         <div class="m-table reg"><div class="m-row reg-row head"><span>Brand (bottles)</span><span>Opening</span><span>Received</span><span>Sold</span><span>Breakage</span><span>Adjusted</span><span>Closing</span></div>
         ${e.brands.map((b) => `<div class="m-row reg-row"><b>${esc(b.name)}<small class="muted"> ${esc(b.label)} · ${b.bottle_ml} ml</small></b>${[b.bottles.opening, b.bottles.received, b.bottles.sold, b.bottles.breakage, b.bottles.adjusted, b.bottles.closing].map((v, i) => `<span class="mono${i === 5 ? ' strong' : ''}">${f(v)}${i === 5 ? `<small>${f(b.bulkLitres.closing)} L</small>` : ''}</span>`).join('')}</div>`).join('')}</div>
         ${this.tcs ? `<div class="sec-title">TCS collected by TASMAC, ${esc(this.tcs.fy)} <span>${esc(this.tcs.section)} · a credit against income tax</span></div>
           <div class="chips">${this.tcs.quarters.map((q) => `<span class="chip">Q${q.quarter}: ${rs(q.tcsPaise)} (${q.purchases})</span>`).join('')}</div>` : ''}
         <div class="sec-title">Peg measures and scales <span>legal metrology stamping</span></div>
-        ${this.ws.can('bar.settings', 'licences.edit') ? '<div class="ws-toolbar"><button type="button" class="btn" data-b="measure">Add measure</button></div>' : ''}
+        ${this.ws.can('bar.settings', 'licences.edit') ? toolbar({ primary: [{ attrs: 'data-b="measure"', label: 'Add measure' }] }) : ''}
         ${this.measures.filter((m) => m.active).map((m) => `<div class="row-card${m.due_on && m.due_on <= today ? ' late' : ''}"><div class="rc-title">${esc(m.name)}</div>
           <div class="rc-sub">${esc([m.capacity, m.location, m.stamp_no && `stamp ${m.stamp_no}`].filter(Boolean).join(' · '))}${m.stamped_on ? ` · stamped ${esc(showDate(m.stamped_on))}` : ''}</div>
           <div class="rc-right">${m.due_on ? tonePill(`due ${showDate(m.due_on)}`, m.due_on <= today ? '--st-departing' : '--muted') : tonePill('no date', '--marigold')}${this.ws.can('bar.settings', 'licences.edit') ? `<button type="button" class="btn small" data-measure="${esc(m.id)}">Restamped…</button>` : ''}</div></div>`).join('') || '<div class="empty">No measures registered.</div>'}`
     }
-    return bar + (this.manager ? '<div class="ws-toolbar"><button type="button" class="btn primary" data-b="add-brand">Add brand</button></div>' : '')
+    return toolbar({ primary: this.manager ? [{ attrs: 'data-b="add-brand"', label: 'Add brand' }] : [], filters: tabs, more: [breakage] })
       + `<div class="m-table">${this.brands.map((b) => `<div class="m-row m-row-4${b.active ? '' : ' retired'}"><b>${esc(b.name)}</b><span>${esc(b.class_label)}</span><span class="mono">${b.bottle_ml} ml${b.placeholder ? ' · sample' : ''}</span>
         ${this.manager ? `<button type="button" class="btn small" data-edit-brand="${esc(b.id)}">Edit</button>` : '<span></span>'}</div>`).join('')}</div>
         <p class="muted small">Link each liquor dish to its brand and pour size in Menu → dish → Edit.</p>`

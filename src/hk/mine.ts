@@ -1,4 +1,5 @@
 import { esc, toast, tonePill } from '../ui/dom'
+import { toolbar } from '../ui/toolbar'
 import { hydratePhotos, takePhoto, uploadPhoto } from '../ui/photo'
 import { foundItem, minutes, roomActions, TASK, TASK_STATE, type HkHost, type HkStatus } from './common'
 
@@ -47,7 +48,7 @@ export class MineView {
         <label class="note-in">Note (anything not done, damage, maintenance needed)<input name="note_${esc(t.id)}" maxlength="300"></label>
         <div class="actions"><button type="button" class="btn primary" data-finish="${esc(t.id)}">Finished</button>${t.space_id ? `<button type="button" class="btn" data-roomact="${esc(t.space_id)}">Room…</button>` : ''}</div></div>`
     }
-    return `<div class="ws-toolbar"><span class="muted">${todo.length} to do · ${credits} credits</span><button type="button" class="btn" data-mine="found">Found an item</button></div>
+    return `${toolbar({ primary: [{ attrs: 'data-mine="found"', label: 'Found an item' }], end: `<span class="muted">${todo.length} to do · ${credits} credits</span>` })}
       ${todo.map(card).join('') || '<div class="empty">Nothing assigned to you right now.</div>'}
       ${done.length ? `<div class="sec-title">Done today <span>${done.length}</span></div>` + done.map((t) => `<div class="row-card"><div class="rc-title">${t.room_no ? `Room ${esc(t.room_no)}` : esc(t.area ?? '')} · ${esc(TASK[t.kind] ?? t.kind)}</div>
         <div class="rc-sub">${t.started_at && t.finished_at ? `${Math.round((new Date(t.finished_at).getTime() - new Date(t.started_at).getTime()) / 60000)} min` : ''}${t.score != null ? ` · score ${t.score}` : ''}</div>

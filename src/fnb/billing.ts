@@ -1,6 +1,7 @@
 import { esc, toast, tonePill } from '../ui/dom'
 import { checked, val } from '../ui/form-modal'
 import { rs, type Ws } from './common'
+import type { Action } from '../ui/toolbar'
 
 // Bills for an order: split, discount, company details, then settle by cash, card, UPI, company credit
 // or charge to the guest's room. Food goes on a GST invoice, liquor on a TN VAT invoice.
@@ -25,17 +26,26 @@ export class Billing {
     if (this.ws.can('fnb.bill')) this.cashier = await this.ws.api.get('/api/cashier/current')
   }
 
-  /** Cashier shift strip for the tables screen. */
-  shiftHtml() {
-    if (!this.ws.can('fnb.bill')) return ''
+  /** The cashier shift action for the tables screen's toolbar. */
+  shiftAction(): Action | null {
+    if (!this.ws.can('fnb.bill')) return null
     return this.cashier.open
-      ? `<button type="button" class="btn" data-bill="close-shift">Close cashier shift · ${rs(this.cashier.expectedInDrawer ?? 0)} in drawer</button>`
-      : '<button type="button" class="btn" data-bill="open-shift">Open cashier shift</button>'
+      ? { attrs: 'data-bill="close-shift"', label: `Close cashier shift · ${rs(this.cashier.expectedInDrawer ?? 0)} in drawer` }
+      : { attrs: 'data-bill="open-shift"', label: 'Open cashier shift' }
   }
 
+  /** Order-level actions on a billed order (for the order screen's toolbar): change the split, or cancel the bill. */
+  actions(o: OrderRef): Action[] {
+    if (o.status !== 'billed' || this.bills.some((b) => b.status === 'settled') || !this.ws.can('fnb.bill')) return []
+    return [{ attrs: 'data-bill="rebill"', label: 'Change split or discount' }, { attrs: 'data-bill="unbill"', label: 'Cancel bill and add more items', danger: true }]
+  }
+
+  /** Bills still to pay; when there is exactly one, the "Paid" step can take the payment. */
+  openBills() { return this.bills.filter((b) => b.status === 'open') }
+  settledAll() { return this.bills.length > 0 && this.bills.every((b) => b.status === 'settled') }
+
   /** The bills panel shown on a billed order. */
-  html(o: OrderRef) {
-    const settledAny = this.bills.some((b) => b.status === 'settled')
+  html() {
     return this.bills.map((b) => {
       const a = b.amounts
       return `<div class="bill-card${b.status === 'settled' ? ' settled' : ''}">
@@ -58,8 +68,7 @@ export class Billing {
           <button type="button" class="btn small" data-print-bill="${esc(b.id)}">${b.prints ? 'Reprint' : 'Print'}${b.status === 'settled' ? ' invoice' : ' bill'}</button>
           <button type="button" class="btn small ghost" data-printer-bill="${esc(b.id)}" title="Send to the outlet's bill printer">To printer</button>
         </div></div>`
-    }).join('') + (o.status === 'billed' && !settledAny && this.ws.can('fnb.bill')
-      ? '<div class="actions"><button type="button" class="btn small" data-bill="rebill">Change split or discount</button><button type="button" class="btn small ghost" data-bill="unbill">Cancel bill (add more items)</button></div>' : '')
+    }).join('')
   }
 
   /** Bill form: one bill, equal split, or item by item; discount; service charge; company details. */

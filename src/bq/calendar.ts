@@ -1,4 +1,5 @@
 import { esc, showDate } from '../ui/dom'
+import { toolbar } from '../ui/toolbar'
 import type { BqHost } from './workspace'
 
 // Venues down the side, days across: every function on its venue and day, pencilled, held or booked.
@@ -36,10 +37,11 @@ export class CalendarView {
         `<button type="button" class="bq-chip ${b.firm ? (b.status === 'hold' ? 'hold' : 'firm') : 'pencil'}" data-ev="${esc(b.eventId)}" title="${esc(`${b.title} · ${b.name} ${b.from}–${b.to} · ${b.pax} guests · ${STATUS_LABEL[b.status]}${b.holdUntil ? ` until ${showDate(b.holdUntil)}` : ''}`)}">
           <span class="mono">${esc(b.from)}</span> ${esc(b.title)}<small>${esc(b.name)} · ${b.pax}</small></button>`).join('')}</div>`
     }).join('')}`).join('')
-    return `<div class="ws-toolbar"><button type="button" class="btn" data-cal-nav="-7">◀ Week</button>
-        <label class="inline">From <input type="date" data-cal-from value="${esc(this.from)}"></label><button type="button" class="btn" data-cal-nav="7">Week ▶</button>
-        ${manage ? '<button type="button" class="btn primary" data-cal-book>Book an event</button><button type="button" class="btn" data-cal-new>New enquiry</button>' : ''}
-        <span class="bq-legend"><span class="bq-chip pencil">Pencilled</span><span class="bq-chip hold">On hold</span><span class="bq-chip firm">Booked</span></span></div>
+    return `${toolbar({
+      primary: manage ? [{ attrs: 'data-cal-book', label: 'Book an event' }, { attrs: 'data-cal-new', label: 'New enquiry', primary: false }] : [],
+      filters: `<button type="button" class="btn" data-cal-nav="-7">◀ Week</button><label class="inline">From <input type="date" data-cal-from value="${esc(this.from)}"></label><button type="button" class="btn" data-cal-nav="7">Week ▶</button>`,
+      end: '<span class="bq-legend"><span class="bq-chip pencil">Pencilled</span><span class="bq-chip hold">On hold</span><span class="bq-chip firm">Booked</span></span>',
+    })}
       <p class="muted small">A venue is kept free for its turnaround (setting up and clearing) around each booking. Pencilled enquiries may overlap; only one can hold or book a slot.${manage ? ' Tap an empty day to book that venue; tap a booking to open it.' : ''}</p>
       <div class="bq-cal-wrap"><div class="bq-cal" style="--days:${DAYS}"><div class="bq-venue head">Venue</div>${head}${rows}</div></div>`
   }

@@ -1,5 +1,6 @@
 import { esc, tonePill, showDate } from '../ui/dom'
 import { val } from '../ui/form-modal'
+import { toolbar, type Action } from '../ui/toolbar'
 import { money } from '../acc/books'
 import { STATUS_LABEL } from './calendar'
 import { ACT_KINDS, activityRows, doneForm, type Activity } from './sales'
@@ -39,8 +40,10 @@ export class AccountsView {
   private list() {
     const q = this.q.toLowerCase()
     const rows = this.rows.filter((r) => !q || r.name.toLowerCase().includes(q) || (r.city ?? '').toLowerCase().includes(q))
-    return `<div class="ws-toolbar"><input class="ws-search" type="search" placeholder="Search accounts" value="${esc(this.q)}" data-acq>
-        ${this.h.can('sales.manage') ? '<button type="button" class="btn primary" data-ac="new">New account</button>' : ''}</div>
+    return `${toolbar({
+      primary: this.h.can('sales.manage') ? [{ attrs: 'data-ac="new"', label: 'New account' }] : [],
+      filters: `<input class="ws-search" type="search" placeholder="Search accounts" value="${esc(this.q)}" data-acq>`,
+    })}
       <p class="muted small">This year (from ${esc(this.from)}): room nights and room revenue booked for each account, and its events billed.</p>
       <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Account</th><th>Handled by</th><th class="n">Room nights</th><th class="n">Rooms</th><th class="n">Events</th><th>Next follow-up</th></tr></thead><tbody>
         ${rows.map((r) => `<tr class="${r.active ? '' : 'retired'}"><td><button type="button" class="linkish" data-acopen="${esc(r.id)}"><b>${esc(r.name)}</b></button> <small class="muted">${esc(KIND[r.kind] ?? r.kind)}${r.city ? `, ${esc(r.city)}` : ''}${r.rates ? ' · contracted rate' : ''}</small></td>
@@ -50,13 +53,16 @@ export class AccountsView {
 
   private detail(d: Detail) {
     const a = d.account, manage = this.h.can('sales.manage'), rates = this.h.can('rates.contract')
-    return `<div class="ws-toolbar"><button type="button" class="btn ghost" data-ac="back">← All accounts</button>
-        ${manage ? '<button type="button" class="btn" data-ac="edit">Edit</button><button type="button" class="btn" data-ac="contact">Add contact</button><button type="button" class="btn primary" data-ac="follow">Follow-up</button>' : ''}
-        ${rates ? '<button type="button" class="btn" data-ac="rate">Contracted rate</button>' : ''}</div>
+    const more: Action[] = [
+      manage ? { attrs: 'data-ac="edit"', label: 'Account details' } : null,
+      rates ? { attrs: 'data-ac="rate"', label: 'Contracted rate' } : null,
+    ].filter((x): x is Action => !!x)
+    return `<div class="tb"><button type="button" class="btn ghost" data-ac="back">← All accounts</button></div>
       <div class="bq-head"><div><div class="muted small">${esc(KIND[a.kind] ?? a.kind)}${a.city ? ` · ${esc(a.city)}` : ''}</div><h2>${esc(a.name)}</h2>
         <div class="small">${a.gstin ? `GSTIN <span class="mono">${esc(a.gstin)}</span> · ` : ''}${a.phone ? `${esc(a.phone)} · ` : ''}${a.email ? esc(a.email) : ''}</div>
         <div class="muted small">Handled by ${esc(a.owner ?? 'nobody yet')} · credit ${a.credit_limit_paise == null ? 'limit not set' : `limit ${money(a.credit_limit_paise)}`}, ${a.terms_days} days · owes <b>${money(d.outstandingPaise)}</b></div>
         ${a.notes ? `<p class="small">${esc(a.notes)}</p>` : ''}</div></div>
+      ${toolbar({ primary: manage ? [{ attrs: 'data-ac="follow"', label: 'Follow-up' }, { attrs: 'data-ac="contact"', label: 'Add a contact', primary: false }] : [], more })}
       <div class="sec-title">Contacts</div>
       <div class="m-table">${d.contacts.map((c) => `<div class="m-row bq-contact"><b>${esc(c.name)}</b><span>${esc(c.role ?? '')}</span><span>${c.mobile ? `<a href="tel:${esc(c.mobile)}">${esc(c.mobile)}</a>` : ''}</span><span>${esc(c.email ?? '')}</span>
         <span class="rc-right">${manage ? `<button type="button" class="btn small ghost" data-acdel="${esc(c.id)}">Remove</button>` : ''}</span></div>`).join('') || '<p class="empty">No contacts yet.</p>'}</div>

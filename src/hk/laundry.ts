@@ -1,4 +1,5 @@
 import { esc, toast } from '../ui/dom'
+import { toolbar } from '../ui/toolbar'
 import { checked, val } from '../ui/form-modal'
 import { rs } from '../fnb/common'
 import type { HkHost } from './common'
@@ -29,10 +30,10 @@ export class LaundryView {
         <div class="rc-sub">${o.items.map((i) => `${i.qty} × ${esc(i.name)}`).join(', ')} · collected by ${esc(o.picked_by)} ${new Date(o.picked_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</div>
         <div class="rc-right"><span class="mono">${rs(Number(o.total_paise))}</span><button type="button" class="btn small primary" data-deliver="${esc(o.id)}">Delivered</button></div></div>`).join('') || '<div class="empty">Nothing at the laundry.</div>'}
       <div class="sec-title">Laundry prices</div>
-      ${manage ? '<div class="ws-toolbar"><button type="button" class="btn" data-lp="laundry">Add laundry item</button></div>' : ''}
+      ${toolbar({ primary: manage ? [{ attrs: 'data-lp="laundry"', label: 'Add laundry item' }] : [] })}
       <div class="m-table">${this.laundry.map((i) => `<div class="m-row m-row-4${i.active ? '' : ' retired'}"><b>${esc(i.name)}</b><span>${SV[i.service!]}</span><span class="mono">${rs(i.price_paise)}</span>${manage ? `<button type="button" class="btn small" data-edit-price="laundry:${esc(i.id)}">Edit</button>` : '<span></span>'}</div>`).join('')}</div>
       <div class="sec-title">Minibar</div>
-      ${manage ? '<div class="ws-toolbar"><button type="button" class="btn" data-lp="minibar">Add minibar item</button></div>' : ''}
+      ${toolbar({ primary: manage ? [{ attrs: 'data-lp="minibar"', label: 'Add minibar item' }] : [] })}
       <div class="m-table">${this.minibar.map((i) => `<div class="m-row m-row-4${i.active ? '' : ' retired'}"><b>${esc(i.name)}</b><span>GST ${Number(i.gst_rate)}%</span><span class="mono">${rs(i.price_paise)}</span>${manage ? `<button type="button" class="btn small" data-edit-price="minibar:${esc(i.id)}">Edit</button>` : '<span></span>'}</div>`).join('') || '<div class="empty">No minibar items yet.</div>'}</div>`
   }
 

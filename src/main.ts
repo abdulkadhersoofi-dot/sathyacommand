@@ -127,6 +127,8 @@ tip.addEventListener('click', (e) => {
   const open = (e.target as HTMLElement).closest<HTMLElement>('[data-open]')
   if (open) { openDrawer(open.dataset.open!); hideTip() }
 })
+// For checks from the browser console and the automated walk-throughs.
+;(window as unknown as { __sathya: unknown }).__sathya = { world, store }
 
 // ---------- drawer ----------
 function openDrawer(id: string) {

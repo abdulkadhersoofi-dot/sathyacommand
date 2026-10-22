@@ -1,5 +1,6 @@
 import { esc, toast, tonePill, showDate } from '../ui/dom'
 import { checked, val } from '../ui/form-modal'
+import { toolbar } from '../ui/toolbar'
 import type { WorkspaceHost } from '../ui/workspace'
 import { currentFix } from '../staff/tracker'
 import { assetOptions, CATEGORY, reportFault, rupees } from './common'
@@ -35,7 +36,10 @@ export class AssetsView {
     const q = this.q.toLowerCase()
     const shown = this.list.filter((a) => !q || `${a.name} ${a.space ?? ''} ${CATEGORY[a.category]} ${a.make ?? ''}`.toLowerCase().includes(q))
     const groups = [...new Set(shown.map((a) => a.category))]
-    return `<div class="ws-toolbar">${this.h.can('eng.manage') ? '<button type="button" class="btn primary" data-as="add">Add asset</button>' : ''}<input class="ws-search" type="search" placeholder="Search assets" value="${esc(this.q)}" aria-label="Search assets"></div>
+    return `${toolbar({
+      primary: this.h.can('eng.manage') ? [{ attrs: 'data-as="add"', label: 'Add asset' }] : [],
+      filters: `<input class="ws-search" type="search" placeholder="Search assets" value="${esc(this.q)}" aria-label="Search assets">`,
+    })}
       ${groups.map((g) => `<div class="sec-title">${esc(CATEGORY[g] ?? g)} <span>${shown.filter((a) => a.category === g).length}</span></div>
         ${shown.filter((a) => a.category === g).map((a) => `<div class="row-card${a.active ? '' : ' retired'}" data-asset="${esc(a.id)}"><div class="rc-title">${esc(a.name)}</div>
           <div class="rc-sub">${esc([a.space, a.make, a.model].filter(Boolean).join(' · ') || (a.x != null ? 'Pinned on the map' : 'No place set'))}${a.next_pm ? ` · service ${dueText(a.next_pm)}` : ''}</div>
@@ -102,8 +106,8 @@ export class PlansView {
 
   html() {
     const active = this.list.filter((p) => p.active)
-    return `<div class="ws-toolbar">${this.h.can('eng.manage') ? '<button type="button" class="btn primary" data-pl="add">Add a schedule</button>' : ''}
-        <span class="muted small">A ticket is raised on the due day; finishing it sets the next date.</span></div>
+    return `${toolbar({ primary: this.h.can('eng.manage') ? [{ attrs: 'data-pl="add"', label: 'Add a schedule' }] : [] })}
+      <p class="muted small">A ticket is raised on the due day; finishing it sets the next date.</p>
       ${active.map((p) => `<div class="row-card${left(p.next_due) < 0 ? ' late' : ''}" data-plan="${esc(p.id)}"><div class="rc-title">${esc(p.title)} · ${esc(p.asset)}</div>
         <div class="rc-sub">Every ${p.every_days} days · next ${esc(showDate(p.next_due))} (${dueText(p.next_due)})${p.last_done ? ` · last done ${esc(p.last_done)}` : ''} · ${p.checklist.length} checks</div></div>`).join('') || '<div class="empty">No maintenance schedules yet.</div>'}
       ${this.list.some((p) => !p.active) ? `<div class="sec-title">Stopped</div>${this.list.filter((p) => !p.active).map((p) => `<div class="row-card retired" data-plan="${esc(p.id)}"><div class="rc-title">${esc(p.title)} · ${esc(p.asset)}</div></div>`).join('')}` : ''}`

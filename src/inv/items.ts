@@ -1,5 +1,6 @@
 import { esc, toast, tonePill } from '../ui/dom'
 import { checked, val } from '../ui/form-modal'
+import { toolbar } from '../ui/toolbar'
 import type { WorkspaceHost } from '../ui/workspace'
 
 // The item master: what the resort buys, how it is counted (stock unit) and bought (purchase unit), its
@@ -36,9 +37,12 @@ export class ItemsView {
     const shown = this.list.filter((i) => (!this.cat || i.category === this.cat) && (!q || `${i.name} ${i.hsn ?? ''} ${i.barcode ?? ''}`.toLowerCase().includes(q)))
     const cats = [...new Set(this.list.map((i) => i.category))]
     const manage = this.h.can('stores.manage')
-    return `<div class="ws-toolbar">${manage ? '<button type="button" class="btn primary" data-it="add">Add item</button><button type="button" class="btn" data-it="import">Bring in kitchen, bar, spares and linen</button>' : ''}
-        <input class="ws-search" type="search" placeholder="Search name, HSN or barcode" value="${esc(this.q)}" aria-label="Search items"></div>
-      <div class="chips"><button type="button" class="chip" data-ic="" aria-pressed="${!this.cat}">All ${this.list.length}</button>${cats.map((c) => `<button type="button" class="chip" data-ic="${c}" aria-pressed="${this.cat === c}">${esc(CATEGORY[c] ?? c)}</button>`).join('')}</div>
+    return `${toolbar({
+      primary: manage ? [{ attrs: 'data-it="add"', label: 'Add item' }] : [],
+      filters: `<input class="ws-search" type="search" placeholder="Search name, HSN or barcode" value="${esc(this.q)}" aria-label="Search items">
+        <div class="chips"><button type="button" class="chip" data-ic="" aria-pressed="${!this.cat}">All ${this.list.length}</button>${cats.map((c) => `<button type="button" class="chip" data-ic="${c}" aria-pressed="${this.cat === c}">${esc(CATEGORY[c] ?? c)}</button>`).join('')}</div>`,
+      more: manage ? [{ attrs: 'data-it="import"', label: 'Bring in kitchen, bar, spares and linen' }] : [],
+    })}
       <div class="m-table"><div class="m-row item-row head"><span>Item</span><span>Bought as</span><span>HSN · GST</span><span>Best rate</span><span>Book</span></div>
       ${shown.map((i) => `<div class="m-row item-row${i.active ? '' : ' retired'}" data-asset="${esc(i.id)}"><b>${esc(i.name)}<small class="muted"> ${esc(CATEGORY[i.category] ?? i.category)}${i.perishable ? ' · perishable' : ''}</small></b>
         <span>${esc(i.purchase_unit)} <small class="muted">= ${Number(i.purchase_factor).toLocaleString('en-IN')} ${esc(i.unit)}</small></span>
@@ -106,7 +110,7 @@ export class StoresView {
 
   html() {
     const BOOK: Record<string, string> = { own: 'Kept here', kitchen: 'Kitchen ingredient book', bar: 'Bar register (ml)', spares: 'Engineering spares book', linen: 'Linen book' }
-    return `${this.h.can('stores.manage') ? '<div class="ws-toolbar"><button type="button" class="btn" data-sv="add">Add store</button></div>' : ''}
+    return `${toolbar({ primary: this.h.can('stores.manage') ? [{ attrs: 'data-sv="add"', label: 'Add store' }] : [] })}
       ${this.list.map((s) => `<div class="row-card${s.active ? '' : ' retired'}"><div class="rc-title">${esc(s.name)}</div><div class="rc-sub">${esc(BOOK[s.ledger] ?? s.ledger)}${s.space ? ` · ${esc(s.space)}` : ''}</div></div>`).join('')}
       <p class="muted small">Department stores keep stock in the books the kitchen, bar, engineering and housekeeping already use: goods received or issued into them go straight there.</p>`
   }

@@ -531,7 +531,7 @@ export function fnbRoutes(app: FastifyInstance, ctx: Ctx) {
     const q = req.query as { outletId?: string; status?: string; date?: string }
     const statuses = q.status ? q.status.split(',') : ['open', 'billed']
     return db.query(
-      `select o.id, o.number, o.outlet_id, ot.name as outlet, os.twin_id as outlet_twin_id, o.kind, o.table_id, tb.label as table_label, o.reservation_id,
+      `select o.id, o.number, o.outlet_id, ot.name as outlet, ot.space_id as outlet_space_id, os.twin_id as outlet_twin_id, o.kind, o.table_id, tb.label as table_label, o.reservation_id,
               s.room_no, s.twin_id, g.name as guest, o.covers, o.status, o.business_date::text, o.opened_at, u.name as opened_by,
               coalesce((select json_agg(json_build_object('name', i.name, 'qty', i.qty, 'price', i.price_paise, 'status', i.status) order by i.added_at, i.seq)
                           from order_item i where i.order_id = o.id and i.status <> 'void'), '[]') as items,

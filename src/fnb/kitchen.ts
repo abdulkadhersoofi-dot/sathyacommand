@@ -2,6 +2,7 @@ import { esc } from '../ui/dom'
 import { checked } from '../ui/form-modal'
 import { chips, minutesAgo, type MenuItem, type Ticket, type Ws } from './common'
 import { printTickets } from './print'
+import { toolbar } from '../ui/toolbar'
 
 // Kitchen and bar screens: each station's tickets, oldest first, with timers that turn amber at
 // 10 minutes and red at 20. Start, ready, recall, served; all-day counts; sold-out switches.
@@ -45,8 +46,7 @@ export class KitchenView {
         </footer></article>`
     }
     const col = (title: string, list: KdsTicket[]) => `<section class="kds-col"><div class="sec-title">${title} <span>${list.length}</span></div>${list.map(card).join('') || '<div class="empty">None</div>'}</section>`
-    return `<div class="ws-toolbar">${chips(stations, this.stationId, 'station')}
-        ${this.ws.can('kitchen', 'menu.edit') ? '<button type="button" class="btn" data-kds="soldout">Sold out…</button>' : ''}</div>
+    return toolbar({ filters: chips(stations, this.stationId, 'station'), more: this.ws.can('kitchen', 'menu.edit') ? [{ attrs: 'data-kds="soldout"', label: 'Sold out today' }] : [] }) + `
       <div class="kds-wrap">
         <div class="kds-board">${col('New', t.filter((k) => k.status === 'new'))}${col('Cooking', t.filter((k) => k.status === 'cooking'))}${col('Ready', t.filter((k) => k.status === 'ready'))}</div>
         <aside class="kds-allday"><div class="sec-title">All day</div>${this.data.allDay.map((a) => `<div class="kv-row"><span>${esc(a.name)}</span><b>${a.qty}</b></div>`).join('') || '<div class="empty">Nothing to make.</div>'}</aside>

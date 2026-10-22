@@ -1,4 +1,5 @@
 import { esc, tonePill } from '../ui/dom'
+import { toolbar } from '../ui/toolbar'
 import { val } from '../ui/form-modal'
 import type { HkHost } from './common'
 
@@ -16,7 +17,7 @@ export class LinenView {
 
   html() {
     const manage = this.h.can('hk.manage')
-    return `<div class="ws-toolbar"><button type="button" class="btn primary" data-ln="move">Record a movement</button>${manage ? '<button type="button" class="btn" data-ln="add">Add linen item</button>' : ''}</div>
+    return `${toolbar({ primary: [{ attrs: 'data-ln="move"', label: 'Record a movement' }], more: manage ? [{ attrs: 'data-ln="add"', label: 'Add linen item' }] : [] })}
       <div class="m-table"><div class="m-row linen-row head"><span>Item</span><span>In rooms</span><span>Shelf</span><span>Laundry</span><span>Owned / needed</span><span>Lost</span></div>
       ${this.items.filter((i) => i.active).map((i) => `<div class="m-row linen-row"><b>${esc(i.name)}<small class="muted"> ${i.parPerRoom}/room × ${i.parSets} sets</small></b>
         <span class="mono">${i.inRooms}</span><span class="mono">${i.shelf}</span><span class="mono">${i.laundry}</span>

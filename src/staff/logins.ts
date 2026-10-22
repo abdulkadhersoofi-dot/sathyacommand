@@ -1,5 +1,6 @@
 import { esc, toast, tonePill } from '../ui/dom'
 import { checked, val } from '../ui/form-modal'
+import { toolbar } from '../ui/toolbar'
 import type { StaffHost } from './today'
 
 // Staff logins: who can sign in, with which email and roles. A new login (or a reset) gets a temporary
@@ -32,8 +33,9 @@ export class LoginsView {
   }
 
   html() {
-    return `<div class="sec-title">Logins <span>${this.rows.length}</span></div>
-      <div class="logins-bar"><button type="button" class="btn small primary" data-lg="add">Add login</button><p class="muted small">Staff sign in with their email and a password. A new login gets a temporary password to hand over; they choose their own at the first sign-in.</p></div>
+    return `${toolbar({ primary: [{ attrs: 'data-lg="add"', label: 'Add a login' }] })}
+      <div class="sec-title">Logins <span>${this.rows.length}</span></div>
+      <p class="muted small">Staff sign in with their email and a password. A new login gets a temporary password to hand over; they choose their own at the first sign-in.</p>
       <div class="m-table"><div class="m-row login-row head"><span>Name</span><span>Email</span><span>Roles</span><span></span><span></span></div>
       ${this.rows.map((u) => `<div class="m-row login-row"><b>${esc(u.name)}</b><span>${u.email ? esc(u.email) : '<span class="muted">—</span>'}</span>
         <span>${u.roles.map((r) => esc(roleName(r))).join(', ')}${u.access_until ? `<small class="muted"> until ${day(u.access_until)}</small>` : ''}</span><span>${this.status(u)}</span>

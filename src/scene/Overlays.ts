@@ -31,7 +31,10 @@ export class Overlays {
   private tables: THREE.InstancedMesh
   private kitchenRing: THREE.Mesh
   private markers: THREE.InstancedMesh
-  private markerTargets: THREE.Vector3[] = []
+  private lateMarkers: THREE.InstancedMesh
+  /** One marker per place with open orders: above the room, or above the outlet (bar, poolside, cafeteria…). */
+  private markerTargets: { p: THREE.Vector3; late: boolean; origin: string }[] = []
+  private labelledOutlets = new Set<string>()
   private liveVenues = new Set<string>()
   private pinGroup = new THREE.Group()
   private pins = new Map<string, Map<string, { obj: THREE.Group; ring: THREE.Mesh | null; shape: MapPin['shape']; colour: number }>>()
@@ -55,11 +58,17 @@ export class Overlays {
     const k = site.anchors.get('KITCHEN')?.pos ?? new THREE.Vector3()
     this.kitchenRing.position.set(k.x, 0.2, k.z)
     this.markers = new THREE.InstancedMesh(
-      new THREE.OctahedronGeometry(0.9, 0),
+      new THREE.OctahedronGeometry(1.4, 0),
       new THREE.MeshStandardMaterial({ color: MARIGOLD, emissive: MARIGOLD, emissiveIntensity: 0.6, roughness: 0.4 }), 80,
     )
     this.markers.count = 0
-    this.group.add(this.tables, this.kitchenRing, this.markers, this.pinGroup)
+    // Late orders get their own red markers: an instanced mesh has one colour.
+    this.lateMarkers = new THREE.InstancedMesh(
+      new THREE.OctahedronGeometry(1.7, 0),
+      new THREE.MeshStandardMaterial({ color: 0xe0533d, emissive: 0xe0533d, emissiveIntensity: 0.9, roughness: 0.4 }), 40,
+    )
+    this.lateMarkers.count = 0
+    this.group.add(this.tables, this.kitchenRing, this.markers, this.lateMarkers, this.pinGroup)
     this.buildLabels()
   }
 
@@ -247,21 +256,34 @@ export class Overlays {
     this.kitchenRing.visible = showFnb && store.isToday
     ;(this.kitchenRing.material as THREE.MeshBasicMaterial).color.setHex(late ? 0xe0533d : open.length > 8 ? MARIGOLD : 0x35a46b)
     this.setLabelDetail('KITCHEN', showFnb && store.isToday ? `${open.length} open KOT${open.length === 1 ? '' : 's'}${late ? ` · <b>${late} late</b>` : ''}` : null, late ? 'alert' : 'fnb')
-    const tableOrders = store.orders.filter((o) => o.kind === 'table')
-    this.setLabelDetail('RESTAURANT', showFnb ? `${tableOrders.length} orders${store.isToday ? ` · ${tableOrders.filter((o) => o.status !== 'served').length} open` : ''}` : null, 'fnb')
-
-    // room-service markers above rooms with an open order
-    this.markerTargets = []
-    if (showFnb && store.isToday) {
-      const seen = new Set<string>()
-      for (const o of open.filter((x) => x.kind === 'room')) {
-        if (seen.has(o.origin)) continue
-        seen.add(o.origin)
-        const p = this.rooms.anchor(o.origin)
-        if (p) this.markerTargets.push(p.add(new THREE.Vector3(0, 2.2, 0)))
+    // Each outlet's label counts its own orders; the kitchen counts them all.
+    const byOutlet = new Map<string, Order[]>()
+    for (const o of store.orders.filter((x) => x.kind === 'table')) byOutlet.set(o.origin, [...(byOutlet.get(o.origin) ?? []), o])
+    for (const id of this.labelledOutlets) if (!byOutlet.has(id) || !showFnb) { this.setLabelDetail(id, null); this.outline(id, false) }
+    this.labelledOutlets.clear()
+    if (showFnb) {
+      for (const [id, list] of byOutlet) {
+        const openHere = list.filter((o) => o.status !== 'served'), lateHere = store.isToday ? openHere.filter((o) => minutesOpen(o) > 20).length : 0
+        this.setLabelDetail(id, `${list.length} order${list.length === 1 ? '' : 's'}${store.isToday ? ` · ${openHere.length} open${lateHere ? ` · <b>${lateHere} late</b>` : ''}` : ''}`, lateHere ? 'alert' : 'fnb')
+        this.labelledOutlets.add(id)
       }
     }
-    this.markers.count = this.markerTargets.length
+
+    // markers above every room and outlet with an open order: red when one is late
+    this.markerTargets = []
+    if (showFnb && store.isToday) {
+      const seen = new Map<string, { p: THREE.Vector3; late: boolean; origin: string }>()
+      for (const o of open) {
+        const lateNow = minutesOpen(o) > 20
+        const had = seen.get(o.origin)
+        if (had) { had.late ||= lateNow; continue }
+        const p = o.kind === 'room' ? this.rooms.anchor(o.origin)?.add(new THREE.Vector3(0, 3.2, 0)) : this.outletTop(o.origin)
+        if (p) seen.set(o.origin, { p, late: lateNow, origin: o.origin })
+      }
+      this.markerTargets = [...seen.values()]
+    }
+    this.markers.count = this.markerTargets.filter((m) => !m.late).length
+    this.lateMarkers.count = this.markerTargets.filter((m) => m.late).length
     this.placeMarkers(0)
 
     // reception & lodging summaries
@@ -301,15 +323,33 @@ export class Overlays {
     return i
   }
 
+  /** A point above an outlet (its building roof, or a lawn or deck) for its order marker. */
+  private outletTop(id: string): THREE.Vector3 | null {
+    const a = this.site.anchors.get(id)
+    if (!a) return null
+    // High enough to clear the place's name label, which sits at its roof.
+    return a.pos.clone().setY(Math.max(1.2, a.height) + 7)
+  }
+
+  /** The place a marker belongs to (for a tap): the first `markers.count` are on time, the rest late. */
+  markerOrigin(mesh: THREE.Object3D, instanceId: number): string | null {
+    const list = mesh === this.lateMarkers ? this.markerTargets.filter((m) => m.late) : this.markerTargets.filter((m) => !m.late)
+    return list[instanceId]?.origin ?? null
+  }
+  get markerMeshes(): THREE.Object3D[] { return [this.markers, this.lateMarkers] }
+
   private placeMarkers(t: number) {
     const m = new THREE.Matrix4(), q = new THREE.Quaternion()
-    this.markerTargets.forEach((p, i) => {
-      q.setFromEuler(new THREE.Euler(0, t * 1.6 + i, 0))
-      m.compose(p.clone().setY(p.y + Math.sin(t * 2.4 + i) * 0.4), q, new THREE.Vector3(1, 1.4, 1))
-      this.markers.setMatrixAt(i, m)
+    let onTime = 0, late = 0
+    this.markerTargets.forEach((x, i) => {
+      const p = x.p
+      // A late order's marker beats faster and bigger, so it is seen from across the map.
+      const beat = x.late ? 1.15 + Math.sin(t * 6 + i) * 0.25 : 1 + Math.sin(t * 2.4 + i) * 0.08
+      q.setFromEuler(new THREE.Euler(0, t * (x.late ? 3 : 1.6) + i, 0))
+      m.compose(p.clone().setY(p.y + Math.sin(t * 2.4 + i) * 0.4), q, new THREE.Vector3(beat, 1.4 * beat, beat))
+      if (x.late) this.lateMarkers.setMatrixAt(late++, m); else this.markers.setMatrixAt(onTime++, m)
     })
-    this.markers.instanceMatrix.needsUpdate = true
-    this.markers.computeBoundingSphere()
+    for (const mesh of [this.markers, this.lateMarkers]) { mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingSphere() }
   }
 
   // ---------- motion ----------

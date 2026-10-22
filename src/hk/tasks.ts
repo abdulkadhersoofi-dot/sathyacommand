@@ -1,4 +1,5 @@
 import { esc, toast, tonePill } from '../ui/dom'
+import { toolbar } from '../ui/toolbar'
 import { val } from '../ui/form-modal'
 import { hydratePhotos } from '../ui/photo'
 import { minutes, TASK, TASK_STATE, type HkHost } from './common'
@@ -27,7 +28,7 @@ export class TasksView {
     const unassigned = this.tasks.filter((t) => !t.assigned_to && ['pending', 'reclean'].includes(t.status)).length
     const opt = (cur: string | null) => `<option value="">Unassigned</option>${this.staff.map((s) => `<option value="${esc(s.id)}" ${s.id === cur ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}`
     return (manage ? `<div class="assign-box"><div class="sec-title">On duty today</div><div class="duty">${this.staff.map((s) => `<label class="check"><input type="checkbox" data-duty="${esc(s.id)}" ${this.onDuty.has(s.id) ? 'checked' : ''}> ${esc(s.name)} <small class="muted">${byPerson.get(s.id) ?? 0} cr</small></label>`).join('')}</div>
-        <div class="actions"><button type="button" class="btn primary" data-hk="assign">Assign ${unassigned} unassigned</button><button type="button" class="btn" data-hk="rebalance">Rebalance all</button><button type="button" class="btn" data-hk="public">Add public-area task…</button></div></div>` : '')
+        ${toolbar({ primary: [{ attrs: 'data-hk="assign"', label: `Assign ${unassigned} unassigned` }], more: [{ attrs: 'data-hk="rebalance"', label: 'Rebalance all' }, { attrs: 'data-hk="public"', label: 'Add public-area task…' }] })}</div>` : '')
       + (inspect && toInspect.length ? `<div class="sec-title">Waiting for inspection <span>${toInspect.length}</span></div>` + toInspect.map((t) => `<div class="row-card"><div class="rc-title">Room ${esc(t.room_no ?? t.area ?? '')} · ${esc(TASK[t.kind] ?? t.kind)}</div>
           <div class="rc-sub">${esc(t.attendant ?? '')} · ${t.started_at && t.finished_at ? `${Math.round((new Date(t.finished_at).getTime() - new Date(t.started_at).getTime()) / 60000)} min` : ''}${t.photos.length ? ` · ${t.photos.length} photo${t.photos.length > 1 ? 's' : ''}` : ''}${t.notes ? ` · “${esc(t.notes)}”` : ''}</div>
           <div class="rc-right"><button type="button" class="btn small primary" data-inspect="${esc(t.id)}">Inspect</button></div></div>`).join('') : '')

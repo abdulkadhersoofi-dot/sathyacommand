@@ -2,6 +2,7 @@ import { esc, toast, tonePill } from '../ui/dom'
 import { checked, val } from '../ui/form-modal'
 import { takePhoto, uploadPhoto } from '../ui/photo'
 import { scanQr } from '../ui/qr-scan'
+import { toolbar } from '../ui/toolbar'
 import type { WorkspaceHost } from '../ui/workspace'
 import { currentFix } from '../staff/tracker'
 import { placeField, readPlace, spaceList, time, when } from './common'
@@ -33,8 +34,10 @@ export class GateView {
 
   html() {
     const cars = this.inside.filter((e) => e.vehicle_no).length
-    return `<div class="ws-toolbar">${this.h.can('security.gate') ? '<button type="button" class="btn primary" data-gt="in">Entry at the gate</button>' : ''}
-        <span class="muted small">${this.inside.length} inside now · ${cars} vehicle${cars === 1 ? '' : 's'}</span></div>
+    return `${toolbar({
+      primary: this.h.can('security.gate') ? [{ attrs: 'data-gt="in"', label: 'Entry at the gate' }] : [],
+      end: `<span class="muted small">${this.inside.length} inside now · ${cars} vehicle${cars === 1 ? '' : 's'}</span>`,
+    })}
       <div class="sec-title">Inside now <span>${this.inside.length}</span></div>
       ${this.inside.map((e) => this.card(e, true)).join('') || '<div class="empty">Nobody signed in at the gate.</div>'}
       ${this.today.length ? `<div class="sec-title">Left today <span>${this.today.length}</span></div>${this.today.map((e) => this.card(e, false)).join('')}` : ''}`
@@ -102,8 +105,10 @@ export class PatrolsView {
 
   html() {
     const manage = this.h.can('security.manage'), name = (id: string) => this.cps.find((c) => c.id === id)?.name ?? id
-    return `<div class="ws-toolbar">${this.h.can('security.gate') ? '<button type="button" class="btn primary" data-pt="scan">Scan checkpoint</button>' : ''}
-        ${manage ? '<button type="button" class="btn" data-pt="cp">Add checkpoint</button><button type="button" class="btn" data-pt="route">Add round</button><button type="button" class="btn" data-pt="labels">Print QR labels</button>' : ''}</div>
+    return `${toolbar({
+      primary: this.h.can('security.gate') ? [{ attrs: 'data-pt="scan"', label: 'Scan a checkpoint' }] : [],
+      more: manage ? [{ attrs: 'data-pt="cp"', label: 'Add checkpoint' }, { attrs: 'data-pt="route"', label: 'Add a patrol round' }, { attrs: 'data-pt="labels"', label: 'Print QR labels' }] : [],
+    })}
       <div class="sec-title">Checkpoints <span>${this.cps.filter((c) => c.overdue).length} due</span></div>
       ${this.cps.filter((c) => c.active).map((c) => `<div class="row-card${c.overdue ? ' late' : ''}"><div class="rc-title">${esc(c.name)}</div>
         <div class="rc-sub">${c.last_scan ? `Last ${when(c.last_scan)} by ${esc(c.last_by ?? '')}` : 'Never scanned'}${c.space ? ` · ${esc(c.space)}` : ''}${c.overdue ? ` · <span class="fd-warn">due ${c.overdueMinutes} min</span>` : ''}</div>

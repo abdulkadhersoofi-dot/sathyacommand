@@ -4,6 +4,7 @@ import type { Me } from '../live/signin'
 import type { Outbox } from '../live/outbox'
 import { esc, toast, tonePill, showDate } from '../ui/dom'
 import { val } from '../ui/form-modal'
+import { toolbar, type Action } from '../ui/toolbar'
 import { Workspace, type View, type WorkspaceHost } from '../ui/workspace'
 import { money } from '../acc/books'
 import { LEAVE_TONE } from '../staff/leave'
@@ -51,8 +52,11 @@ class PeopleView implements View {
   private list() {
     const q = this.q.toLowerCase(), dep = this.h.cfg.departments
     const rows = this.rows.filter((r) => !q || `${r.name} ${r.code} ${r.designation}`.toLowerCase().includes(q))
-    return `<div class="ws-toolbar"><input class="ws-search" type="search" placeholder="Search people" value="${esc(this.q)}" data-hrq>${this.h.can('hr.manage') ? '<button type="button" class="btn primary" data-hr="new">Add an employee</button>' : ''}
-        <span class="muted small">${this.rows.filter((r) => r.status !== 'exited').length} on the rolls</span></div>
+    return `${toolbar({
+      primary: this.h.can('hr.manage') ? [{ attrs: 'data-hr="new"', label: 'Add an employee' }] : [],
+      filters: `<input class="ws-search" type="search" placeholder="Search people" value="${esc(this.q)}" data-hrq>`,
+      end: `<span class="muted small">${this.rows.filter((r) => r.status !== 'exited').length} on the rolls</span>`,
+    })}
       <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Code</th><th>Name</th><th>Department</th><th>Designation</th><th>Joined</th><th>UAN / ESIC</th>${this.rows.some((r) => r.grossPaise != null) ? '<th class="n">Monthly pay</th>' : ''}<th></th></tr></thead><tbody>
         ${rows.map((r) => `<tr class="${r.status === 'exited' ? 'retired' : ''}"><td class="mono">${esc(r.code)}</td><td><button type="button" class="linkish" data-emp="${esc(r.id)}">${esc(r.name)}</button>${r.login ? ' <small class="muted">app</small>' : ''}</td>
           <td>${esc(dep[r.department]?.name ?? r.department)}</td><td>${esc(r.designation)}</td><td>${esc(showDate(r.joinedOn))}</td><td class="mono small">${esc(r.uan ?? '—')} / ${esc(r.esicIp ?? '—')}</td>
@@ -64,13 +68,21 @@ class PeopleView implements View {
     const manage = this.h.can('hr.manage'), cur = d.structures?.[0]
     const done = d.onboarding.filter((o) => o.done_at).length
     const kv = (k: string, v: unknown) => `<dt>${esc(k)}</dt><dd>${v == null || v === '' ? '<span class="muted">—</span>' : esc(v)}</dd>`
-    return `<div class="ws-toolbar"><button type="button" class="btn ghost" data-hr="back">← Everyone</button>
-        ${manage ? '<button type="button" class="btn" data-hr="edit">Edit</button><button type="button" class="btn" data-hr="salary">Pay structure</button><button type="button" class="btn" data-hr="training">Add training</button><button type="button" class="btn" data-hr="grant">Grant leave</button>' : ''}
-        ${this.payroll() ? '<button type="button" class="btn" data-hr="tax">Income tax</button><button type="button" class="btn" data-hr="form16">Form 16</button>' : ''}${this.h.can('payroll.run', 'hr.manage') && d.status !== 'exited' ? '<button type="button" class="btn" data-hr="advance">Salary advance…</button>' : ''}
-        ${this.h.can('payroll.run') && d.exit_on && !this.settlements.length ? '<button type="button" class="btn" data-hr="fnf">Full and final…</button>' : ''}
-        <button type="button" class="btn" data-hr="idcard">ID card</button>${manage && d.status !== 'exited' ? '<button type="button" class="btn ghost" data-hr="exit">Leaving…</button>' : ''}</div>
+    const more: Action[] = [
+      manage ? { attrs: 'data-hr="salary"', label: 'Pay structure' } : null,
+      manage ? { attrs: 'data-hr="training"', label: 'Add training' } : null,
+      manage ? { attrs: 'data-hr="grant"', label: 'Grant leave' } : null,
+      this.payroll() ? { attrs: 'data-hr="tax"', label: 'Income tax' } : null,
+      this.payroll() ? { attrs: 'data-hr="form16"', label: 'Form 16' } : null,
+      this.h.can('payroll.run', 'hr.manage') && d.status !== 'exited' ? { attrs: 'data-hr="advance"', label: 'Salary advance' } : null,
+      this.h.can('payroll.run') && d.exit_on && !this.settlements.length ? { attrs: 'data-hr="fnf"', label: 'Full and final settlement' } : null,
+      { attrs: 'data-hr="idcard"', label: 'ID card' },
+      manage && d.status !== 'exited' ? { attrs: 'data-hr="exit"', label: 'Leaving the resort', danger: true } : null,
+    ].filter((x): x is Action => !!x)
+    return `<div class="tb"><button type="button" class="btn ghost" data-hr="back">← Everyone</button></div>
       <div class="bq-head"><div><div class="muted mono small">${esc(d.code)} · ${esc(d.departmentName)}</div><h2>${esc(d.name)}</h2><div class="small">${esc(d.designation)} · ${esc(d.employment_type.replace('_', ' '))} · joined ${esc(showDate(d.joined_on))}${d.exit_on ? ` · last day ${esc(showDate(d.exit_on))} (${esc(d.exit_reason ?? '')})` : ''}</div></div>
         <div class="rc-right">${d.status !== 'active' ? tonePill(d.status === 'notice' ? 'Serving notice' : 'Left', '--marigold') : ''}${d.user_id ? tonePill('Uses the app', '--st-vacant') : ''}</div></div>
+      ${toolbar({ primary: manage ? [{ attrs: 'data-hr="edit"', label: 'Edit details' }] : [], more })}
       <div class="bq-two"><div><div class="sec-title">Details</div><dl class="hr-dl">${kv('Mobile', d.mobile)}${kv('Email', d.email)}${kv('Date of birth', d.dob)}${kv('Address', d.address)}${kv('Emergency contact', d.emergency)}
           ${kv('PAN', d.pan)}${kv('Aadhaar', d.aadhaar_last4 ? `•••• •••• ${d.aadhaar_last4}` : null)}${kv('UAN', d.uan)}${kv('ESIC IP', d.esic_ip)}${kv('Bank', [d.bank_name, d.bank_account, d.ifsc].filter(Boolean).join(' · '))}
           ${kv('Deductions', [d.pf_member ? 'PF' : 'no PF', d.pt_applicable ? 'professional tax' : 'no PT', d.lwf_applicable ? 'welfare fund' : 'no LWF', `${d.tax_regime} tax regime`].join(', '))}</dl></div>
@@ -204,7 +216,7 @@ class LeaveView implements View {
   constructor(private h: Host) {}
   async load() { this.rows = await this.h.cached(`/api/hr/leave/applications${this.status === 'all' ? '' : `?status=${this.status}`}`) }
   html() {
-    return `<div class="ws-toolbar">${[['pending', 'Waiting'], ['approved', 'Approved'], ['all', 'All']].map(([k, l]) => `<button type="button" class="chip" data-lvs="${k}" aria-pressed="${k === this.status}">${l}</button>`).join('')}</div>
+    return `${toolbar({ filters: [['pending', 'Waiting'], ['approved', 'Approved'], ['all', 'All']].map(([k, l]) => `<button type="button" class="chip" data-lvs="${k}" aria-pressed="${k === this.status}">${l}</button>`).join('') })}
       ${this.rows.map((a) => `<div class="row-card"><div class="rc-title">${esc(a.name)} <small class="muted mono">${esc(a.code)}</small> · ${esc(this.h.cfg.leaveTypes[a.leave_type]?.name ?? a.leave_type)}</div>
         <div class="rc-sub">${esc(showDate(a.from_date))}${a.to_date !== a.from_date ? ` to ${esc(showDate(a.to_date))}` : ''}${a.half_day ? ' (half day)' : ''} · ${Number(a.days)} days · ${esc(this.h.cfg.departments[a.department]?.name ?? a.department)}${a.reason ? ` · ${esc(a.reason)}` : ''}${a.decided_by ? ` · ${esc(a.decided_by)}${a.decision_note ? `: ${esc(a.decision_note)}` : ''}` : ''}</div>
         <div class="rc-right">${a.status === 'pending' ? `<button type="button" class="btn small primary" data-lvd="${esc(a.id)}|approve">Approve</button><button type="button" class="btn small" data-lvd="${esc(a.id)}|reject">Turn down…</button>` : tonePill(a.status, LEAVE_TONE[a.status])}</div></div>`).join('') || '<p class="empty">Nothing here.</p>'}`
@@ -230,8 +242,11 @@ class HolidaysView implements View {
   async load() { this.d = await this.h.cached(`/api/hr/holidays${this.year ? `?year=${this.year}` : ''}`); this.year = this.d!.year }
   html() {
     const d = this.d!
-    return `<div class="ws-toolbar"><button type="button" class="btn small" data-hy="-1">◀</button><b>${d.year}</b><button type="button" class="btn small" data-hy="1">▶</button>${this.h.can('hr.manage') ? '<button type="button" class="btn primary" data-hol="add">Add a holiday</button>' : ''}
-        ${d.festivalChosen < d.festivalRequired ? tonePill(`${d.festivalRequired - d.festivalChosen} festival holiday${d.festivalRequired - d.festivalChosen > 1 ? 's' : ''} still to choose`, '--marigold') : tonePill('Festival holidays chosen', '--st-vacant')}</div>
+    return `${toolbar({
+      primary: this.h.can('hr.manage') ? [{ attrs: 'data-hol="add"', label: 'Add a holiday' }] : [],
+      filters: `<button type="button" class="btn small" data-hy="-1" aria-label="Previous year">◀</button><b>${d.year}</b><button type="button" class="btn small" data-hy="1" aria-label="Next year">▶</button>`,
+      end: d.festivalChosen < d.festivalRequired ? tonePill(`${d.festivalRequired - d.festivalChosen} festival holiday${d.festivalRequired - d.festivalChosen > 1 ? 's' : ''} still to choose`, '--marigold') : tonePill('Festival holidays chosen', '--st-vacant'),
+    })}
       <p class="muted small">Tamil Nadu law: the four national holidays and five festival holidays a year. Leave does not count holidays.</p>
       <div class="m-table">${d.holidays.map((h) => `<div class="m-row hr-hol"><span class="mono">${esc(showDate(h.day))}</span><span>${esc(new Date(`${h.day}T00:00:00Z`).toLocaleDateString('en-IN', { weekday: 'long', timeZone: 'UTC' }))}</span><b>${esc(h.name)}</b><span>${esc(h.kind)}</span>
         <span class="rc-right">${this.h.can('hr.manage') && h.kind !== 'national' ? `<button type="button" class="btn small ghost" data-holdel="${esc(h.day)}">Remove</button>` : ''}</span></div>`).join('')}</div>`

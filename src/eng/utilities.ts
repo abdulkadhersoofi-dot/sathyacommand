@@ -1,5 +1,6 @@
 import { esc, tonePill } from '../ui/dom'
 import { checked, val } from '../ui/form-modal'
+import { toolbar } from '../ui/toolbar'
 import type { WorkspaceHost } from '../ui/workspace'
 import { rupees } from './common'
 
@@ -30,7 +31,7 @@ export class MetersView {
   html() {
     const r = this.report!
     return `<form class="meter-form" data-form="readings">
-        <div class="ws-toolbar"><label class="inline">Readings for <input type="date" name="day" value="${this.day}" max="${today()}" data-day></label></div>
+        ${toolbar({ filters: `<label class="inline">Readings for <input type="date" name="day" value="${this.day}" max="${today()}" data-day></label>` })}
         <div class="m-table"><div class="m-row meter-row head"><span>Meter</span><span>Last</span><span>Today</span><span>Use</span><span>Reset</span></div>
         ${this.sheet.map((m) => `<div class="m-row meter-row"><b>${esc(m.name)}<small class="muted"> ${esc(m.unit)}${m.cumulative ? '' : ' used'}</small></b>
           <span class="mono">${m.cumulative && m.previous != null ? `${n(Number(m.previous))}<small class="muted"> ${esc(m.previous_day ?? '')}</small>` : '—'}</span>
@@ -95,7 +96,10 @@ export class LogsView {
 
   html() {
     const summary = (l: Log) => l.kind === 'pool' ? `pH ${l.data.ph} · chlorine ${l.data.chlorine} ppm` : l.kind === 'stp' ? `pH ${l.data.ph}${l.data.bod != null ? ` · BOD ${l.data.bod}` : ''}${l.data.tss != null ? ` · TSS ${l.data.tss}` : ''}${l.data.flowKl != null ? ` · ${l.data.flowKl} kL` : ''}` : esc(l.asset ?? '')
-    return `<div class="ws-toolbar"><button type="button" class="btn primary" data-lg="pool">Pool check</button><button type="button" class="btn" data-lg="stp">STP check</button><button type="button" class="btn" data-lg="fire">Fire extinguisher / hydrant</button></div>
+    return `${toolbar({
+      primary: [{ attrs: 'data-lg="pool"', label: 'Pool check' }, { attrs: 'data-lg="stp"', label: 'STP check', primary: false }],
+      more: [{ attrs: 'data-lg="fire"', label: 'Fire extinguisher or hydrant check' }],
+    })}
       <p class="muted small">Pool: pH 7.2–7.8, free chlorine 1–3 ppm, twice a day. STP outlet: pH 6.5–9, BOD up to 30, TSS up to 100 mg/L (check the TNPCB consent order). A reading outside the range raises a fault for engineering.</p>
       ${this.list.map((l) => `<div class="row-card"><div class="rc-title">${esc(KIND[l.kind])} · ${new Date(l.at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
         <div class="rc-sub">${summary(l)} · ${esc(l.by)}${l.issues.length ? ` · <span class="fd-warn">${esc(l.issues.join(', '))}</span>` : ''}${l.note ? ` · ${esc(l.note)}` : ''}</div>

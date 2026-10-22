@@ -321,6 +321,9 @@ export class World {
     const r = this.renderer.domElement.getBoundingClientRect()
     this.ndc.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1)
     this.raycaster.setFromCamera(this.ndc, this.camera)
+    // An order marker counts as a tap on its room or outlet.
+    const [mk] = this.raycaster.intersectObjects(this.overlays.markerMeshes, false)
+    if (mk && mk.instanceId != null) { const id = this.overlays.markerOrigin(mk.object, mk.instanceId); if (id && this.store.spaceById.has(id)) return id }
     const hits = this.raycaster.intersectObjects([...this.rooms.pickables, ...this.site.pickables], false)
     for (const h of hits) {
       const id = this.rooms.idFromHit(h)

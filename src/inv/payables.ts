@@ -1,6 +1,7 @@
 import { esc, toast, tonePill, showDate } from '../ui/dom'
 import { checked, val } from '../ui/form-modal'
 import { takePhoto, uploadPhoto } from '../ui/photo'
+import { toolbar } from '../ui/toolbar'
 import type { WorkspaceHost } from '../ui/workspace'
 import { rupees, type Item, type Store } from './items'
 
@@ -53,7 +54,12 @@ export class ReceiptsView {
   }
 
   html() {
-    return `<div class="ws-toolbar">${this.h.can('stores.receive') ? '<button type="button" class="btn primary" data-gr="po">Receive against a PO</button>' : ''}${this.h.can('purchase.order') ? '<button type="button" class="btn" data-gr="cash">Cash purchase (no PO)</button>' : ''}</div>
+    return `${toolbar({
+      primary: [
+        ...(this.h.can('stores.receive') ? [{ attrs: 'data-gr="po"', label: 'Receive against a purchase order' }] : []),
+        ...(this.h.can('purchase.order') ? [{ attrs: 'data-gr="cash"', label: 'Cash purchase without an order', primary: false }] : []),
+      ],
+    })}
       ${this.expiring.length ? `<div class="sec-title">Expiring in 3 days <span>${this.expiring.length}</span></div>${this.expiring.map((x) => `<div class="row-card late"><div class="rc-title">${esc(x.item)} · ${q3(x.qty_left)} ${esc(x.unit)}</div>
         <div class="rc-sub">${esc(x.store)}${x.batch_no ? ` · batch ${esc(x.batch_no)}` : ''} · ${x.days_left < 0 ? '<span class="fd-warn">expired</span>' : `expires ${esc(x.expiry)}`}</div>
         ${this.h.can('stores.issue') ? `<div class="rc-right"><button type="button" class="btn small" data-gr="expire:${esc(x.id)}">Write off</button></div>` : ''}</div>`).join('')}` : ''}
@@ -114,7 +120,10 @@ export class BillsView {
 
   html() {
     const chip = (s: string, l: string) => `<button type="button" class="chip" data-bs="${s}" aria-pressed="${this.status === s}">${l}</button>`
-    return `<div class="ws-toolbar">${this.h.can('purchase.bill') ? '<button type="button" class="btn primary" data-bl="new">Enter a bill</button>' : ''}<div class="chips">${chip('open', 'Open')}${chip('paid', 'Paid')}${chip('all', 'All')}</div></div>
+    return `${toolbar({
+      primary: this.h.can('purchase.bill') ? [{ attrs: 'data-bl="new"', label: 'Enter a bill' }] : [],
+      filters: `<div class="chips">${chip('open', 'Open')}${chip('paid', 'Paid')}${chip('all', 'All')}</div>`,
+    })}
       ${this.list.map((b) => `<div class="row-card${b.msmeLate || (b.msme_due_date && b.daysToDue <= 10 && b.status !== 'paid') ? ' late' : ''}"><div class="rc-title">${esc(b.vendor)} · bill ${esc(b.bill_no)} · ${esc(showDate(b.bill_date))}</div>
         <div class="rc-sub">${b.po_number ? esc(b.po_number) : 'no PO'}${b.grns ? ` · ${esc(b.grns)}` : ''} · taxable ${rupees(n(b.taxable_paise))} + GST ${rupees(n(b.cgst_paise) + n(b.sgst_paise) + n(b.igst_paise))}${n(b.itc_paise) ? ` (ITC ${rupees(n(b.itc_paise))})` : ''}</div>
         ${b.differences.length ? `<div class="rc-sub fd-warn">${b.differences.map(esc).join(' · ')}</div>` : ''}

@@ -1,6 +1,7 @@
 import { esc, tonePill } from '../ui/dom'
 import { val } from '../ui/form-modal'
 import { chips, rs, type Ws } from './common'
+import { toolbar, type Action } from '../ui/toolbar'
 
 // Kitchen stock: ingredients and what is on the shelf, recipes per dish with their cost, receipts,
 // wastage and counts, and the food cost report with menu engineering.
@@ -42,11 +43,13 @@ export class KitchenStockView {
 
   html() {
     const subs: [Sub, string][] = [['stock', 'Ingredients'], ['recipes', 'Recipes'], ...(this.ws.can('food_cost.view') ? [['cost', 'Food cost'] as [Sub, string]] : [])]
-    const actions = this.edit ? '<button type="button" class="btn" data-k="receive">Receive stock</button><button type="button" class="btn" data-k="count">Count</button>' : ''
-    const bar = `<div class="ws-toolbar">${chips(subs, this.sub, 'ksub')}${actions}<button type="button" class="btn" data-k="waste">Record wastage</button></div>`
+    const tabs = chips(subs, this.sub, 'ksub')
+    // Receiving stock is the daily job; counting and wastage are the other things done here.
+    const primary: Action[] = this.edit ? [{ attrs: 'data-k="receive"', label: 'Receive stock' }] : []
+    const more: Action[] = [...(this.edit ? [{ attrs: 'data-k="count"', label: 'Count the stock' }] : []), { attrs: 'data-k="waste"', label: 'Record wastage' }]
     if (this.sub === 'stock') {
       const low = this.ingredients.filter((i) => i.active && (i.belowPar || i.stock < 0)).length
-      return bar + (this.edit ? '<div class="ws-toolbar"><button type="button" class="btn primary" data-k="add-ing">Add ingredient</button></div>' : '')
+      return toolbar({ primary: [...primary, ...(this.edit ? [{ attrs: 'data-k="add-ing"', label: 'Add ingredient', primary: false }] : [])], filters: tabs, more })
         + (low ? `<p class="fd-warn small">${low} ingredient${low > 1 ? 's are' : ' is'} below the reorder level or below zero.</p>` : '')
         + `<div class="m-table">${this.ingredients.map((i) => `<div class="m-row m-row-4${i.active ? '' : ' retired'}${i.stock < 0 ? ' warn' : ''}"><b>${esc(i.name)}</b>
           <span class="mono">${qtyText(i.stock, i.unit)}${i.parLevel != null ? `<small class="muted"> · reorder at ${qtyText(i.parLevel, i.unit)}</small>` : ''}</span>
@@ -54,14 +57,14 @@ export class KitchenStockView {
           <span>${i.stock < 0 ? tonePill('Below zero', '--st-departing') : i.belowPar ? tonePill('Reorder', '--marigold') : ''}${this.edit ? ` <button type="button" class="btn small" data-edit-ing="${esc(i.id)}">Edit</button>` : ''}</span></div>`).join('')}</div>`
     }
     if (this.sub === 'recipes') {
-      return bar + `<p class="muted small">One recipe per dish code, shared by every outlet that sells it. Quantities are per portion.</p>
+      return toolbar({ primary, filters: tabs, more }) + `<p class="muted small">One recipe per dish code, shared by every outlet that sells it. Quantities are per portion.</p>
         <div class="m-table">${this.recipes.map((r) => `<div class="m-row m-row-4"><span class="mono">${esc(r.code)}</span><b>${esc(r.name)}</b>
           <span class="small">${r.lines.length ? `${r.lines.length} ingredients · cost ${rs(r.costPaise)} · <b class="${(r.costPercent ?? 0) > 35 ? 'fd-warn' : ''}">${r.costPercent}%</b> of ${rs(r.price_paise)}` : '<span class="fd-warn">No recipe yet</span>'}</span>
           ${this.edit ? `<button type="button" class="btn small" data-recipe="${esc(r.code)}">${r.lines.length ? 'Edit' : 'Add'}</button>` : '<span></span>'}</div>`).join('')}</div>`
     }
     const c = this.cost!
     const t = c.totals
-    return bar + `<div class="ws-toolbar"><label class="inline">From <input type="date" name="kfrom" value="${esc(c.from)}"></label><label class="inline">To <input type="date" name="kto" value="${esc(c.to)}"></label></div>
+    return toolbar({ primary, filters: tabs + `<label class="inline">From <input type="date" name="kfrom" value="${esc(c.from)}"></label><label class="inline">To <input type="date" name="kto" value="${esc(c.to)}"></label>`, more }) + `
       <div class="kpi-strip">
         <div><span>Food sales</span><b>${rs(t.salesPaise)}</b></div>
         <div><span>Recipe cost</span><b>${rs(t.theoreticalCostPaise)} · ${t.theoreticalPercent}%</b></div>

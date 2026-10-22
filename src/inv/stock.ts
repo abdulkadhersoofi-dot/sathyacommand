@@ -1,6 +1,7 @@
 import { esc, toast, tonePill, showDate } from '../ui/dom'
 import { val } from '../ui/form-modal'
 import { scanQr } from '../ui/qr-scan'
+import { toolbar, type Action } from '../ui/toolbar'
 import type { WorkspaceHost } from '../ui/workspace'
 import { CATEGORY, rupees, type Item, type Store } from './items'
 
@@ -32,11 +33,15 @@ export class StockView {
     const q = this.q.toLowerCase()
     const shown = this.rows.filter((r) => !q || r.item.toLowerCase().includes(q) || r.barcode === this.q)
     const own = this.ledger === 'own'
-    return `<div class="ws-toolbar"><select data-store aria-label="Store"></select>
-        ${own && this.h.can('stores.issue') ? '<button type="button" class="btn primary" data-sk="issue">Issue to a department</button><button type="button" class="btn" data-sk="transfer">Transfer to a store</button>' : ''}
-        ${own && this.h.can('stores.manage') ? '<button type="button" class="btn" data-sk="opening">Opening stock</button>' : ''}
-        ${this.h.can('stores.manage', 'stores.issue', 'stores.count') ? '<button type="button" class="btn" data-sk="labels">Print labels</button>' : ''}
-        <input class="ws-search" type="search" placeholder="Search or barcode" value="${esc(this.q)}" aria-label="Search stock"><span class="muted small">Worth ${rupees(this.value)}</span></div>
+    const more: Action[] = [
+      ...(own && this.h.can('stores.manage') ? [{ attrs: 'data-sk="opening"', label: 'Opening stock' }] : []),
+      ...(this.h.can('stores.manage', 'stores.issue', 'stores.count') ? [{ attrs: 'data-sk="labels"', label: 'Print labels' }] : []),
+    ]
+    return `${toolbar({
+      primary: own && this.h.can('stores.issue') ? [{ attrs: 'data-sk="issue"', label: 'Issue to a department' }, { attrs: 'data-sk="transfer"', label: 'Transfer to a store', primary: false }] : [],
+      filters: `<select data-store aria-label="Store"></select><input class="ws-search" type="search" placeholder="Search or barcode" value="${esc(this.q)}" aria-label="Search stock">`,
+      more, end: `<span class="muted small">Worth ${rupees(this.value)}</span>`,
+    })}
       ${own ? '' : '<p class="muted small">This store keeps its stock in its department\'s book (kitchen, bar, engineering or linen); counts and use are recorded there.</p>'}
       <div class="m-table"><div class="m-row stock-row head"><span>Item</span><span>In stock</span><span>Average cost</span><span>Value</span><span></span></div>
       ${shown.map((r) => `<div class="m-row stock-row${r.low ? ' warn' : ''}"><b>${esc(r.item)}<small class="muted"> ${esc(CATEGORY[r.category] ?? r.category)}</small></b>
@@ -125,7 +130,12 @@ export class CountsView {
   html() {
     const STATE: Record<string, [string, string]> = { pending_approval: ['Waiting for GM', '--marigold'], applied: ['Book corrected', '--st-vacant'], rejected: ['Turned down', '--muted'] }
     const n = (v: string) => Number(v)
-    return `<div class="ws-toolbar">${this.h.can('stores.count') ? '<button type="button" class="btn primary" data-ct="count">Count a store</button>' : ''}${this.h.can('stores.breakage') ? '<button type="button" class="btn" data-ct="break">Record breakage</button>' : ''}</div>
+    return `${toolbar({
+      primary: [
+        ...(this.h.can('stores.count') ? [{ attrs: 'data-ct="count"', label: 'Count a store' }] : []),
+        ...(this.h.can('stores.breakage') ? [{ attrs: 'data-ct="break"', label: 'Record breakage', primary: false }] : []),
+      ],
+    })}
       <div class="sec-title">Counts</div>
       ${this.counts.map((c) => `<div class="row-card"><div class="rc-title">${esc(c.number)} · ${esc(c.store)} · ${esc(showDate(c.business_date))}</div>
         <div class="rc-sub">${c.lines.filter((l) => n(l.variance_paise)).slice(0, 6).map((l) => `${esc(l.item)} ${n(l.variance_paise) < 0 ? 'short' : 'over'} ${((n(l.counted_qty) - n(l.book_qty)) / n(l.purchase_factor)).toLocaleString('en-IN', { maximumFractionDigits: 2 })} ${esc(l.purchase_unit)} (${rupees(n(l.variance_paise))})`).join(' · ') || 'No differences'}</div>
@@ -149,7 +159,7 @@ export class CountsView {
     this.h.modal.open('Count a store', `<div class="form-grid"><label class="span2">Store<select name="store">${stores.map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('')}</select></label></div>`, 'Start counting', async (f) => {
       const storeId = val(f, 'store')
       const rows = (await this.h.api.get<{ items: Row[] }>(`/api/stock?storeId=${storeId}`)).items
-      this.h.modal.open(`Count: ${stores.find((s) => s.id === storeId)?.name}`, `<div class="ws-toolbar"><input data-find type="search" placeholder="Find item or barcode" aria-label="Find item"><button type="button" class="btn" data-scan>Scan</button></div><div data-cam></div>
+      this.h.modal.open(`Count: ${stores.find((s) => s.id === storeId)?.name}`, `${toolbar({ primary: [{ attrs: 'data-scan', label: 'Scan a label', primary: false }], filters: '<input class="ws-search" data-find type="search" placeholder="Find item or barcode" aria-label="Find item">' })}<div data-cam></div>
         <p class="muted small">Count what is on the shelf in the unit shown; leave blank what you did not count. Differences above your limit go to the GM before the book changes.</p>
         <div class="count-grid">${rows.map((r) => `<label data-row="${esc(r.item.toLowerCase())}|${esc(r.barcode ?? '')}|${esc(r.itemId)}"><span>${esc(r.item)} <small class="muted">${esc(r.purchaseUnit)}</small></span><input name="c_${esc(r.itemId)}" type="number" min="0" step="any" aria-label="Counted"></label>`).join('')}</div>
         <div class="form-grid"><label class="span2">Note<input name="note" maxlength="200"></label></div>`, 'Submit count', async (f2) => {

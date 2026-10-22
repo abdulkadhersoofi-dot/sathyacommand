@@ -1,4 +1,5 @@
 import { esc, showDate } from '../ui/dom'
+import { toolbar } from '../ui/toolbar'
 import type { WorkspaceHost } from '../ui/workspace'
 import { money } from '../acc/books'
 import { printForm16, printPayslips, type Employer, type Form16, type Slip } from '../hr/payslip'
@@ -22,7 +23,7 @@ export class MyPayView {
         <div class="rc-right"><button type="button" class="btn small" data-slip="${esc(p.month)}">${esc(t('Open'))}</button></div></div>`).join('') || `<p class="empty">${esc(t('No payslip yet.'))}</p>`}
       <div class="sec-title">${esc(t('Income tax'))} ${esc(d.tax.fy)}</div>
       ${taxSummary(d.tax, t)}
-      <div class="ws-toolbar"><button type="button" class="btn" data-mp="decl">${esc(t('My declaration'))}</button>${d.years.map((y) => `<button type="button" class="btn ghost" data-f16="${esc(y)}">Form 16 ${esc(y)}</button>`).join('')}</div>`
+      ${toolbar({ primary: [{ attrs: 'data-mp="decl"', label: t('My declaration') }], more: d.years.map((y) => ({ attrs: `data-f16="${esc(y)}"`, label: `Form 16 ${y}` })) })}`
   }
   async click(el: HTMLElement) {
     const d = this.d!

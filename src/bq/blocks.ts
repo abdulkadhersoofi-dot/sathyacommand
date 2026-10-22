@@ -1,5 +1,6 @@
 import { esc, toast, tonePill, showDate } from '../ui/dom'
 import { val } from '../ui/form-modal'
+import { steps, toolbar, type Action, type Step } from '../ui/toolbar'
 import { money } from '../acc/books'
 import type { BqHost } from './workspace'
 
@@ -33,7 +34,7 @@ export class BlocksView {
 
   html() {
     if (this.selected && this.d) return this.detail(this.d)
-    return `<div class="ws-toolbar">${this.h.can('sales.manage') ? '<button type="button" class="btn primary" data-bk="new">New room block</button>' : ''}</div>
+    return `${toolbar({ primary: this.h.can('sales.manage') ? [{ attrs: 'data-bk="new"', label: 'New room block' }] : [] })}
       <p class="muted small">Rooms in a block are kept off general sale until the cut-off; at the cut-off, rooms not picked up go back on sale by themselves.</p>
       ${this.list.map((b) => `<div class="row-card"><div class="rc-title"><span class="mono muted">${esc(b.number)}</span> <button type="button" class="linkish" data-bkopen="${esc(b.id)}">${esc(b.name)}</button></div>
         <div class="rc-sub">${day(b.arrival)} to ${day(b.departure)} · ${b.lines.map((l) => `${l.rooms} ${esc(l.name)} at ${money(l.ratePaise)}`).join(', ')}${b.event ? ` · for ${esc(b.event)}` : ''}${b.account ? ` · ${esc(b.account)}` : ''}</div>
@@ -42,12 +43,23 @@ export class BlocksView {
 
   private detail(b: Block) {
     const open = b.status === 'open', manage = this.h.can('sales.manage'), pick = this.h.can('sales.manage', 'front_desk')
-    return `<div class="ws-toolbar"><button type="button" class="btn ghost" data-bk="back">← All blocks</button>
-        ${open && pick ? '<button type="button" class="btn primary" data-bk="list">Rooming list</button><button type="button" class="btn" data-bk="book">Book a guest</button>' : ''}
-        ${open && manage ? '<button type="button" class="btn" data-bk="rooms">Change rooms held</button><button type="button" class="btn ghost" data-bk="release">Release the rest now</button>' : ''}</div>
+    // The block's steps: rooms held, guests booked into them, then what is not taken goes back on sale.
+    const full = b.roomNights.picked >= b.roomNights.allotted
+    const flow: Step[] = b.status === 'cancelled' ? [] : [
+      { label: 'Rooms held', state: 'done', title: `Held to ${b.cutoff}` },
+      { label: 'Guests booked', state: !open ? (b.roomNights.picked ? 'done' : 'skip') : full ? 'done' : pick ? 'now' : 'todo', attrs: open && !full && pick ? 'data-bk="book"' : undefined, title: `${b.roomNights.picked} of ${b.roomNights.allotted} room nights booked` },
+      { label: 'Rest released', state: b.status === 'released' ? 'done' : open && full && manage ? 'now' : 'todo', attrs: open && full && manage ? 'data-bk="release"' : undefined, title: `Rooms not booked go back on sale at the cut-off, ${b.cutoff}` },
+    ]
+    const more: Action[] = [
+      open && manage ? { attrs: 'data-bk="rooms"', label: 'Change rooms held' } : null,
+      open && manage ? { attrs: 'data-bk="release"', label: 'Release the rest now', danger: true } : null,
+    ].filter((x): x is Action => !!x)
+    return `<div class="tb"><button type="button" class="btn ghost" data-bk="back">← All blocks</button></div>
       <div class="bq-head"><div><div class="muted mono small">${esc(b.number)} · ${esc(b.plan_code)}</div><h2>${esc(b.name)}</h2>
         <div class="small">${day(b.arrival)} to ${day(b.departure)}${b.event ? ` · for <button type="button" class="linkish" data-ev2="${esc(b.event_id!)}">${esc(b.event)}</button>` : ''}${b.account ? ` · ${esc(b.account)}` : ''} · cut-off ${esc(b.cutoff)}</div></div>
         <div class="rc-right">${this.statusPill(b)}</div></div>
+      ${flow.length ? steps(flow) : ''}
+      ${toolbar({ primary: open && pick ? [{ attrs: 'data-bk="list"', label: 'Rooming list' }, { attrs: 'data-bk="book"', label: 'Book a guest', primary: false }] : [], more })}
       <div class="sec-title">Rooms booked of those held, night by night</div>
       <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Room</th><th class="n">Rate</th>${b.nights.map((n) => `<th class="n">${day(n)}</th>`).join('')}</tr></thead><tbody>
         ${b.lines.map((l) => `<tr><td>${esc(l.name)}</td><td class="n">${money(l.ratePaise)}</td>${l.nights.map((x) => `<td class="n ${x.picked >= l.rooms ? '' : 'muted'}">${x.picked} / ${l.rooms}</td>`).join('')}</tr>`).join('')}

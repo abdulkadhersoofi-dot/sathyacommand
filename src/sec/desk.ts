@@ -1,6 +1,7 @@
 import { esc, toast, tonePill } from '../ui/dom'
 import { checked, val } from '../ui/form-modal'
 import { hydratePhotos, takePhoto, uploadPhoto } from '../ui/photo'
+import { toolbar, type Action } from '../ui/toolbar'
 import type { WorkspaceHost } from '../ui/workspace'
 import { placeField, readPlace, spaceList, time, when } from './common'
 
@@ -44,7 +45,7 @@ export class IncidentsView {
 
   html() {
     const chip = (s: string, label: string) => `<button type="button" class="chip" data-is="${s}" aria-pressed="${this.status === s}">${label}</button>`
-    return `<div class="ws-toolbar"><button type="button" class="btn primary" data-ic="new">Report an incident</button><div class="chips">${chip('open', 'Open')}${chip('closed', 'Closed')}</div></div>
+    return `${toolbar({ primary: [{ attrs: 'data-ic="new"', label: 'Report an incident' }], filters: `<div class="chips">${chip('open', 'Open')}${chip('closed', 'Closed')}</div>` })}
       ${this.list.map((i) => `<div class="row-card" data-ticket="${esc(i.id)}"><div class="rc-title">${esc(i.title)}</div>
         <div class="rc-sub">${esc(INCIDENT[i.kind] ?? i.kind)}${i.space ? ` · ${esc(i.space)}` : ''} · ${when(i.at)} · ${esc(i.reported_by_name)}${i.police_informed ? ' · police informed' : ''}</div>
         <div class="rc-right">${tonePill(...(SEV[i.severity] ?? [i.severity, '--muted']))}</div></div>`).join('') || '<div class="empty">No incidents.</div>'}`
@@ -89,7 +90,7 @@ export class KeysView {
 
   html() {
     const out = this.list.filter((k) => k.log_id)
-    return `<div class="ws-toolbar">${this.h.can('security.manage') ? '<button type="button" class="btn" data-ky="add">Add key</button>' : ''}<span class="muted small">${out.length} out · ${out.filter((k) => k.overdue).length} overdue</span></div>
+    return `${toolbar({ primary: this.h.can('security.manage') ? [{ attrs: 'data-ky="add"', label: 'Add key' }] : [], end: `<span class="muted small">${out.length} out · ${out.filter((k) => k.overdue).length} overdue</span>` })}
       ${this.list.filter((k) => k.active).map((k) => `<div class="row-card${k.overdue ? ' late' : ''}"><div class="rc-title">🔑 ${esc(k.label)}</div>
         <div class="rc-sub">${k.log_id ? `With <b>${esc(k.issued_to ?? '')}</b> since ${time(k.out_at!)}${k.due_back ? ` · back by ${time(k.due_back)}` : ''}${k.overdue ? ' · <span class="fd-warn">overdue</span>' : ''}` : 'In the key box'}</div>
         <div class="rc-right">${this.h.can('security.gate') ? (k.log_id ? `<button type="button" class="btn small" data-ky="back:${esc(k.id)}">Returned</button>` : `<button type="button" class="btn small" data-ky="out:${esc(k.id)}">Issue…</button>`) : ''}</div></div>`).join('') || '<div class="empty">No keys registered.</div>'}`
@@ -129,7 +130,8 @@ export class CamerasView {
   async load() { this.list = await this.h.cached('/api/security/cameras') }
 
   html() {
-    return `<div class="ws-toolbar">${this.h.can('security.manage') ? '<button type="button" class="btn" data-cm="add">Add camera</button>' : ''}<span class="muted small">Tap a camera pin on the 3D map (Security layer) to open its live view.</span></div>
+    return `${toolbar({ primary: this.h.can('security.manage') ? [{ attrs: 'data-cm="add"', label: 'Add camera' }] : [] })}
+      <p class="muted small">Tap a camera pin on the 3D map (Security layer) to open its live view.</p>
       ${this.list.filter((c) => c.active).map((c) => `<div class="row-card"><div class="rc-title">📹 ${esc(c.name)}</div><div class="rc-sub">${esc([c.space, c.channel && `channel ${c.channel}`].filter(Boolean).join(' · ') || '—')}</div>
         <div class="rc-right">${c.view_url ? `<button type="button" class="btn small primary" data-cm="view:${esc(c.id)}">Live view</button>` : '<span class="muted small">no live view set</span>'}${this.h.can('security.manage') ? `<button type="button" class="btn small" data-cm="edit:${esc(c.id)}">Edit</button>` : ''}</div></div>`).join('') || '<div class="empty">No cameras yet.</div>'}`
   }
@@ -181,12 +183,13 @@ export class EmergencyView {
 
   html() {
     const e = this.e!
-    const manage = this.h.can('security.manage')
+    const manage = this.h.can('security.manage'), starter = this.h.can('emergency.start')
     const points = `<div class="sec-title">Assembly points <span>${e.points.length}</span></div>
-      ${e.points.map((p) => `<div class="row-card"><div class="rc-title">🟢 ${esc(p.name)}</div></div>`).join('') || '<div class="empty">No assembly points set.</div>'}
-      ${manage ? '<div class="ws-toolbar"><button type="button" class="btn" data-em="point">Add assembly point</button></div>' : ''}`
+      ${e.points.map((p) => `<div class="row-card"><div class="rc-title">🟢 ${esc(p.name)}</div></div>`).join('') || '<div class="empty">No assembly points set.</div>'}`
+    const addPoint: Action[] = manage ? [{ attrs: 'data-em="point"', label: 'Add assembly point' }] : []
     if (!e.active) {
-      return `${this.h.can('emergency.start') ? '<div class="ws-toolbar"><button type="button" class="btn danger" data-em="start">Start emergency…</button><span class="muted small">Every phone shows the alarm; everyone on duty must answer the roll-call.</span></div>' : ''}
+      return `${toolbar({ primary: starter ? [{ attrs: 'data-em="start"', label: 'Start emergency', danger: true }] : [], more: addPoint })}
+        ${starter ? '<p class="muted small">Every phone shows the alarm; everyone on duty must answer the roll-call.</p>' : ''}
         ${points}
         ${this.history.length ? `<div class="sec-title">Past emergencies</div>${this.history.map((x) => `<div class="row-card"><div class="rc-title">${esc(EMERGENCY[x.kind] ?? x.kind)} · ${when(x.started_at)}</div>
           <div class="rc-sub">${x.safe}/${x.people} accounted for · started by ${esc(x.started_by_name)}${x.summary ? ` · ${esc(x.summary)}` : ''}</div></div>`).join('')}` : ''}`
@@ -195,13 +198,15 @@ export class EmergencyView {
     const status = (s: string | null) => s === 'safe' ? tonePill('Safe', '--st-vacant') : s === 'need_help' ? tonePill('Needs help', '--st-departing') : tonePill('Not answered', '--marigold')
     const warden = this.h.can('security.gate', 'staff.track', 'emergency.start')
     return `<div class="em-head"><b>${esc(EMERGENCY[e.active.kind] ?? 'Emergency')}</b> since ${time(e.active.started_at)} · ${esc(e.active.started_by)}${e.active.note ? ` · ${esc(e.active.note)}` : ''}</div>
-      <div class="ws-toolbar"><button type="button" class="btn primary" data-em="safe">I am safe</button><button type="button" class="btn danger" data-em="help">I need help</button>
-        ${e.mine?.status ? `<span class="muted small">You: ${status(e.mine.status)}</span>` : ''}</div>
+      ${toolbar({
+        primary: [{ attrs: 'data-em="safe"', label: 'I am safe' }, { attrs: 'data-em="help"', label: 'I need help', primary: false, danger: true }],
+        more: [...addPoint, ...(starter ? [{ attrs: 'data-em="end"', label: 'End the emergency', danger: true }] : [])],
+        end: e.mine?.status ? `<span class="muted small">You: ${status(e.mine.status)}</span>` : '',
+      })}
       ${c ? `<div class="kpi-mini"><div><b>${c.safe}/${c.total}</b><span>safe</span></div><div><b class="fd-warn">${c.needHelp}</b><span>need help</span></div><div><b>${c.missing}</b><span>not answered</span></div></div>
         ${e.people!.map((p) => `<div class="row-card${p.status === 'need_help' ? ' late' : ''}"><div class="rc-title">${esc(p.name)}<small class="muted"> ${esc((p.roles ?? '').replace(/_/g, ' '))}</small></div>
           <div class="rc-sub">${p.status ? `${time(p.at!)}${p.point ? ` · at ${esc(p.point)}` : ''}${p.marked_by ? ` · marked by ${esc(p.marked_by)}` : ''}` : `Last seen: ${esc(p.last_place ?? 'unknown')}`}${p.on_duty ? '' : ' · off duty'}</div>
           <div class="rc-right">${status(p.status)}${warden && p.status !== 'safe' ? `<button type="button" class="btn small" data-em="mark:${esc(p.user_id)}">Seen safe</button>` : ''}</div></div>`).join('')}` : ''}
-      ${this.h.can('emergency.start') ? '<div class="ws-toolbar"><button type="button" class="btn" data-em="end">End emergency…</button></div>' : ''}
       ${points}`
   }
 

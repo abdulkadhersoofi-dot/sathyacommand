@@ -1,6 +1,7 @@
 import { esc, toast } from '../ui/dom'
 import { val } from '../ui/form-modal'
 import { hydratePhotos, takePhoto, uploadPhoto } from '../ui/photo'
+import { steps, toolbar, type Action, type Step } from '../ui/toolbar'
 import type { WorkspaceHost } from '../ui/workspace'
 import { age, CATEGORY, priorityPill, reportFault, rupees, statusPill, type Ticket } from './common'
 
@@ -26,9 +27,11 @@ export class TicketsView {
   html() {
     const chip = (f: Filter, label: string) => `<button type="button" class="chip" data-tf="${f}" aria-pressed="${this.filter === f}">${label}</button>`
     const late = this.list.filter((k) => k.responseLate || k.resolveLate).length
-    return `<div class="ws-toolbar"><button type="button" class="btn primary" data-tk="new">Report a fault</button>
-        <div class="chips">${chip('open', 'Open')}${this.worker ? chip('mine', 'Mine') : ''}${chip('done', 'Fixed: to confirm')}${chip('closed', 'Closed')}</div>
-        ${late ? `<span class="fd-warn">${late} late</span>` : ''}</div>
+    return `${toolbar({
+      primary: [{ attrs: 'data-tk="new"', label: 'Report a fault' }],
+      filters: `<div class="chips">${chip('open', 'Open')}${this.worker ? chip('mine', 'Mine') : ''}${chip('done', 'Fixed: to confirm')}${chip('closed', 'Closed')}</div>`,
+      end: late ? `<span class="fd-warn">${late} late</span>` : '',
+    })}
       ${this.list.map((k) => `<div class="row-card tk-card${k.escalation ? ' late' : ''}" data-ticket="${esc(k.id)}">
           <div class="rc-title">${k.kind === 'pm' ? '🛠 ' : ''}${esc(k.title)}</div>
           <div class="rc-sub">${esc([k.space, k.asset].filter(Boolean).join(' · ') || 'Place not given')} · ${age(k.reported_at)} ago${k.reported_by ? ` · by ${esc(k.reported_by)}` : ''}${k.assignee ? ` · ${esc(k.assignee)}` : this.worker && ['open', 'on_hold'].includes(k.status) ? ' · <b>nobody yet</b>' : ''}
@@ -51,17 +54,31 @@ export class TicketsView {
     if (!k) { k = (await this.h.api.get<Ticket[]>('/api/eng/tickets?status=all')).find((x) => x.id === id); if (!k) { toast('Ticket not found'); return } }
     const t = k
     const isOpen = ['open', 'in_progress', 'on_hold'].includes(t.status)
-    const mineToClose = t.status === 'done' && (this.h.can('eng.manage') || t.reporter_id === this.h.me.id)
-    const btn = (a: string, label: string, primary = false) => `<button type="button" class="btn${primary ? ' primary' : ''}" data-ta="${a}">${label}</button>`
-    const acts: string[] = []
-    if (isOpen && this.worker) {
-      if (t.assigned_to !== this.h.me.id) acts.push(btn('take', 'I will take it', !t.assigned_to))
-      if (t.status !== 'in_progress') acts.push(btn('start', 'Start work'))
-      acts.push(btn('done', 'Fixed…', t.status === 'in_progress'), btn('hold', 'On hold…'), btn('spares', 'Draw spares…'))
-    }
-    if (isOpen && this.h.can('eng.manage')) acts.push(btn('assign', 'Assign…'), btn('cancel', 'Cancel…'))
-    if (mineToClose) acts.push(btn('close', 'Confirm fixed', true))
-    if (['done', 'closed'].includes(t.status) && (this.h.can('eng.manage') || t.reporter_id === this.h.me.id)) acts.push(btn('reopen', 'Still not right…'))
+    const manage = this.h.can('eng.manage'), worker = this.worker
+    const mineToClose = t.status === 'done' && (manage || t.reporter_id === this.h.me.id)
+    // The ticket's steps in the order they happen; the current one is the button to press, the rest of
+    // what this person can do goes under More.
+    const started = ['in_progress', 'done', 'closed'].includes(t.status), fixed = ['done', 'closed'].includes(t.status)
+    const now = isOpen && worker && !t.assigned_to ? 'take' : isOpen && worker && !started ? 'start' : worker && t.status === 'in_progress' ? 'done' : mineToClose ? 'close' : null
+    const st = (label: string, done: boolean, key: string, title?: string): Step => ({ label, state: done ? 'done' : now === key ? 'now' : 'todo', attrs: now === key ? `data-ta="${key}"` : undefined, title })
+    const flow: Step[] = t.status === 'cancelled' ? [] : [
+      { label: 'Reported', state: 'done' },
+      st(t.assigned_to ? 'Assigned' : 'Take it', !!t.assigned_to, 'take', t.assignee ? `With ${t.assignee}` : 'Nobody has taken it yet'),
+      st(started ? 'Started' : 'Start work', started, 'start', t.status === 'on_hold' ? `On hold: ${t.hold_reason ?? ''}` : undefined),
+      st(fixed ? 'Fixed' : 'Mark fixed', fixed, 'done', 'What was done, with a photo'),
+      st(t.status === 'closed' ? 'Confirmed' : 'Confirm fixed', t.status === 'closed', 'close', 'The person who reported it confirms'),
+    ]
+    const act = (key: string, label: string, danger = false): Action | null => now === key ? null : { attrs: `data-ta="${key}"`, label, danger }
+    const more: Action[] = [
+      ...(isOpen && worker ? [
+        t.assigned_to !== this.h.me.id ? act('take', 'I will take it') : null,
+        t.status !== 'in_progress' ? act('start', 'Start work') : null,
+        act('done', 'Mark fixed'), act('hold', 'Put on hold'), act('spares', 'Draw spares'),
+      ] : []),
+      ...(isOpen && manage ? [act('assign', 'Assign to someone'), act('cancel', 'Cancel the ticket', true)] : []),
+      mineToClose ? act('close', 'Confirm fixed') : null,
+      fixed && (manage || t.reporter_id === this.h.me.id) ? act('reopen', 'Still not right') : null,
+    ].filter((x): x is Action => !!x)
     this.h.modal.open(t.title, `<div class="room-head">${priorityPill(t.priority)}${statusPill(t.status)}${t.escalation ? '<span class="fd-warn">Escalated</span>' : ''}</div>
       <dl class="kv">${t.space ? `<dt>Where</dt><dd>${esc(t.space)}</dd>` : ''}${t.asset ? `<dt>Asset</dt><dd>${esc(t.asset)} · ${esc(CATEGORY[t.category ?? ''] ?? '')}</dd>` : ''}
         ${t.detail ? `<dt>Detail</dt><dd>${esc(t.detail)}</dd>` : ''}<dt>Reported</dt><dd>${new Date(t.reported_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}${t.reported_by ? ` by ${esc(t.reported_by)}` : ' (planned)'}</dd>
@@ -71,7 +88,7 @@ export class TicketsView {
         ${t.resolution ? `<dt>Done</dt><dd>${esc(t.resolution)}</dd>` : ''}${t.spares_paise ? `<dt>Spares</dt><dd>${rupees(Number(t.spares_paise))}</dd>` : ''}</dl>
       ${t.checklist.length ? `<ul class="checklist">${t.checklist.map((c, i) => `<li><label><input type="checkbox" data-ck="${i}" ${c.done ? 'checked' : ''} ${isOpen && this.worker ? '' : 'disabled'}> ${esc(c.item)}</label></li>`).join('')}</ul>` : ''}
       ${t.photos.length ? `<div class="photos">${t.photos.map((p) => `<img data-upload="${esc(p)}" alt="Fault photo">`).join('')}</div>` : ''}
-      <div class="actions room-actions">${acts.join('')}</div>`, 'Done', async () => '')
+      <div class="room-actions">${flow.length ? steps(flow) : ''}${toolbar({ more })}</div>`, 'Done', async () => '')
     hydratePhotos(this.h.api, this.h.modal.el)
     const checklist = () => t.checklist.map((c, i) => ({ item: c.item, done: !!this.h.modal.el.querySelector<HTMLInputElement>(`[data-ck="${i}"]`)?.checked }))
     const after = async (msg: string) => { await this.load(); this.h.render(); return msg }

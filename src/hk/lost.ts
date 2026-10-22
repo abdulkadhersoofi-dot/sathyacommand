@@ -1,4 +1,5 @@
 import { esc, tonePill } from '../ui/dom'
+import { toolbar } from '../ui/toolbar'
 import { val } from '../ui/form-modal'
 import { hydratePhotos } from '../ui/photo'
 import { chips } from '../fnb/common'
@@ -16,7 +17,7 @@ export class LostView {
   async load() { this.items = await this.h.api.get(`/api/hk/lost-found?status=${this.status}`) }
 
   html() {
-    return `<div class="ws-toolbar">${chips([['held', 'Being held'], ['returned', 'Returned'], ['disposed', 'Disposed'], ['all', 'All']], this.status, 'lf')}<button type="button" class="btn" data-lfa="add">Log a found item</button></div>
+    return `${toolbar({ primary: [{ attrs: 'data-lfa="add"', label: 'Log a found item' }], filters: chips([['held', 'Being held'], ['returned', 'Returned'], ['disposed', 'Disposed'], ['all', 'All']], this.status, 'lf') })}
       ${this.items.map((i) => `<div class="row-card lf-card">${i.photo_id ? `<img data-upload="${esc(i.photo_id)}" alt="">` : ''}<div class="rc-title">${esc(i.description)}</div>
         <div class="rc-sub">${i.room_no ? `Room ${esc(i.room_no)}` : esc(i.place ?? '')} · ${new Date(i.found_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} by ${esc(i.found_by)}${i.guest ? ` · last guest ${esc(i.guest)}${i.guest_mobile ? ` (${esc(i.guest_mobile)})` : ''}` : ''}${i.handed_to ? ` · collected by ${esc(i.handed_to)}` : ''}</div>
         <div class="rc-right">${i.status === 'held' ? `<button type="button" class="btn small" data-lfclose="${esc(i.id)}">Hand over…</button>` : tonePill(i.status === 'returned' ? 'Returned' : 'Disposed', i.status === 'returned' ? '--st-vacant' : '--st-ooo')}</div></div>`).join('') || '<div class="empty">Nothing here.</div>'}`

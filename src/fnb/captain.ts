@@ -5,6 +5,7 @@ import { printTickets } from './print'
 import { Billing } from './billing'
 import { isNetworkError } from '../live/api'
 import { newKey } from '../live/outbox'
+import { steps, toolbar, type Action, type Step } from '../ui/toolbar'
 
 // The captain's tablet: tables of an outlet, then the order screen. Items go into a cart on the tablet
 // and reach the kitchen only on "Send", one ticket per station.
@@ -98,9 +99,10 @@ export class CaptainView {
   // ---------- tables ----------
   private tablesHtml() {
     const o = this.outlet!
-    const head = chips(this.ws.outlets.filter((x) => x.active).map((x) => [x.id, x.name]), this.outletId, 'outlet') + `<div class="ws-toolbar">${this.billing.shiftHtml()}</div>`
+    const outletChips = chips(this.ws.outlets.filter((x) => x.active).map((x) => [x.id, x.name]), this.outletId, 'outlet')
+    const shift = this.billing.shiftAction()
     if (o.kind === 'room_service') {
-      return head + `<div class="ws-toolbar"><button class="btn primary" type="button" data-cap="new-room">New room-service order</button></div>
+      return toolbar({ primary: [{ attrs: 'data-cap="new-room"', label: 'New room-service order' }], filters: outletChips, more: shift ? [shift] : [] }) + `
         <div class="sec-title">Open room-service orders <span>${this.roomOrders.length}</span></div>
         ${this.roomOrders.length ? this.roomOrders.map((r) => `<button type="button" class="row-card ws-row" data-order="${esc(r.id)}">
           <div class="rc-title">Room ${esc(r.room_no ?? '?')} · ${esc(r.guest ?? '')}</div>
@@ -109,20 +111,42 @@ export class CaptainView {
     }
     const sections = [...new Set(this.tables.map((t) => t.section ?? ''))]
     const takeaway = this.roomOrders.filter((r) => r.kind === 'takeaway')
-    return head + sections.map((sec) => `<div class="sec-title">${esc(sec || 'Tables')}</div><div class="tables">${this.tables.filter((t) => (t.section ?? '') === sec).map((t) => {
+    return toolbar({ primary: [{ attrs: 'data-cap="takeaway"', label: 'Takeaway order' }], filters: outletChips, more: shift ? [shift] : [] })
+      + sections.map((sec) => `<div class="sec-title">${esc(sec || 'Tables')}</div><div class="tables">${this.tables.filter((t) => (t.section ?? '') === sec).map((t) => {
       const state = !t.order_id ? 'free' : t.order_status === 'billed' ? 'billed' : t.ready_tickets ? 'ready' : 'open'
       return `<button type="button" class="tbl" data-table="${esc(t.id)}" data-state="${state}">
         <b>${esc(t.label)}</b>
         <span>${t.order_id ? `Order ${t.order_number} · ${t.covers} pax · ${minutesAgo(t.opened_at!)} min` : `${t.seats} seats`}</span>
         ${state === 'billed' ? '<em>Bill out</em>' : t.ready_tickets ? '<em>Food ready</em>' : ''}</button>`
     }).join('')}</div>`).join('')
-      + `<div class="ws-toolbar"><button class="btn" type="button" data-cap="takeaway">Takeaway order</button></div>`
       + (takeaway.length ? `<div class="sec-title">Takeaway</div>` + takeaway.map((r) => `<button type="button" class="row-card ws-row" data-order="${esc(r.id)}"><div class="rc-title">Order ${r.number}</div><div class="rc-sub">${minutesAgo(r.opened_at)} min · ${rs(Number(r.subtotal_paise))}</div></button>`).join('') : '')
   }
 
   // ---------- order ----------
   private orderHtml(o: OrderView) {
     const where = o.table_label ? `Table ${o.table_label}` : o.room_no ? `Room ${o.room_no}${o.guest ? ` · ${o.guest}` : ''}` : 'Takeaway'
+    const billed = o.status === 'billed'
+    const sentAny = o.items.some((i) => i.status === 'sent'), pendingAny = o.items.some((i) => i.status === 'pending')
+    const inCart = [...this.cart.values()].reduce((a, c) => a + c.qty, 0)
+    const canBill = !billed && !this.cart.size && sentAny && !pendingAny && this.ws.can('fnb.bill')
+    const openBills = this.billing.openBills()
+    // The order's steps in the order they happen: opened → sent to the kitchen → billed → paid (the table is then free).
+    const flow: Step[] = [
+      { label: 'Opened', state: 'done' },
+      this.cart.size ? { label: 'Sent to kitchen', state: 'now', attrs: 'data-cap="send"', title: 'Send the new items to the kitchen, one ticket per station' } : { label: 'Sent to kitchen', state: sentAny ? 'done' : 'todo' },
+      billed ? { label: 'Billed', state: 'done' } : { label: 'Billed', state: canBill ? 'now' : 'todo', attrs: canBill ? 'data-bill="bill"' : undefined, title: 'Split, discount and company details, then the bill' },
+      this.billing.settledAll() ? { label: 'Paid', state: 'done' }
+        : { label: 'Paid', state: billed ? 'now' : 'todo', attrs: billed && openBills.length === 1 && this.ws.can('fnb.bill') ? `data-settle="${esc(openBills[0].id)}"` : undefined, title: 'Cash, card, UPI, company credit or the guest\'s room' },
+    ]
+    const primary: Action[] = billed ? [] : [
+      { attrs: 'data-cap="send"', label: `Send to kitchen${inCart ? ` (${inCart})` : ''}`, disabled: !this.cart.size },
+      ...(canBill ? [{ attrs: 'data-bill="bill"', label: 'Bill', primary: false }] : []),
+    ]
+    const more: Action[] = billed ? this.billing.actions(o) : [
+      ...(this.lastTickets.length ? [{ attrs: 'data-cap="print"', label: 'Print tickets' }] : []),
+      ...(o.kind === 'dine_in' && !o.offline ? [{ attrs: 'data-cap="move"', label: 'Move table' }, { attrs: 'data-cap="merge"', label: 'Merge table' }] : []),
+      ...(sentAny || o.offline ? [] : [{ attrs: 'data-cap="cancel-order"', label: 'Cancel order', danger: true }]),
+    ]
     return `<div class="ord">
       <div class="ord-menu">
         <div class="ord-top"><button type="button" class="btn small" data-cap="back">← ${esc(this.outlet?.kind === 'room_service' ? 'Orders' : 'Tables')}</button>
@@ -132,15 +156,10 @@ export class CaptainView {
       <div class="ord-ticket">
         <div class="ord-head"><div><div class="dr-kicker">${esc(o.outlet)} · ${o.offline ? 'New order (not yet on the HMS)' : `Order ${o.number}`}</div><div class="dr-title">${esc(where)}</div>
           <div class="muted small">${o.covers} cover${o.covers > 1 ? 's' : ''} · open ${minutesAgo(o.opened_at)} min</div></div></div>
+        ${steps(flow)}
+        ${toolbar({ primary, more })}
         ${this.linesHtml(o)}
-        ${o.status === 'billed' ? '' : this.totalsHtml(o)}
-        ${o.status === 'billed' ? this.billing.html(o) : `<div class="actions">
-          <button type="button" class="btn primary" data-cap="send" ${this.cart.size ? '' : 'disabled'}>Send to kitchen${this.cart.size ? ` (${[...this.cart.values()].reduce((a, c) => a + c.qty, 0)})` : ''}</button>
-          ${!this.cart.size && o.items.some((i) => i.status === 'sent') && !o.items.some((i) => i.status === 'pending') && this.ws.can('fnb.bill') ? '<button type="button" class="btn primary" data-bill="bill">Bill</button>' : ''}
-          ${this.lastTickets.length ? '<button type="button" class="btn" data-cap="print">Print tickets</button>' : ''}
-          ${o.kind === 'dine_in' && !o.offline ? '<button type="button" class="btn" data-cap="move">Move table</button><button type="button" class="btn" data-cap="merge">Merge table</button>' : ''}
-          ${o.items.some((i) => i.status === 'sent') || o.offline ? '' : '<button type="button" class="btn ghost" data-cap="cancel-order">Cancel order</button>'}
-        </div>`}
+        ${billed ? this.billing.html() : this.totalsHtml(o)}
       </div></div>`
   }
 

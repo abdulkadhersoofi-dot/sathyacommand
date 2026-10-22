@@ -1,5 +1,6 @@
 import { esc, toast, tonePill, showDate } from '../ui/dom'
 import { val } from '../ui/form-modal'
+import { toolbar } from '../ui/toolbar'
 import { drcr, money, type Host } from './books'
 
 // Money owed to the resort and money it holds: company accounts (credit limits, statements, ageing, money
@@ -27,8 +28,10 @@ export class ReceivablesView {
 
   private overview() {
     const total = this.list.reduce((a, d) => a + d.outstandingPaise, 0), overdue = this.list.reduce((a, d) => a + d.overduePaise, 0)
-    return `<div class="ws-toolbar">${this.h.can('receivables.manage') ? '<button type="button" class="btn primary" data-rv="add">Open an account</button>' : ''}
-        <span class="small">Owed ${money(total)} · <span class="${overdue ? 'fd-warn' : ''}">overdue ${money(overdue)}</span></span></div>
+    return `${toolbar({
+      primary: this.h.can('receivables.manage') ? [{ attrs: 'data-rv="add"', label: 'Open an account' }] : [],
+      end: `<span class="small">Owed ${money(total)} · <span class="${overdue ? 'fd-warn' : ''}">overdue ${money(overdue)}</span></span>`,
+    })}
       <p class="muted small">Companies and agents billed on credit. An account opens by itself the first time a bill is charged to a company; set its terms here, and the GM its credit limit: beyond it the desk and the restaurant cannot charge to it.</p>
       <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Account</th><th class="n">Limit</th><th class="n">Owed</th><th class="n">Overdue</th>${this.buckets.map((b) => `<th class="n">${esc(b)} days</th>`).join('')}</tr></thead><tbody>
         ${this.list.map((d) => `<tr class="acc-click${d.active ? '' : ' retired'}" data-ledger="debtor:${esc(d.id)}"><td><b>${esc(d.name)}</b> <small class="muted">${esc(KIND[d.kind] ?? d.kind)} · ${d.terms_days} days${d.gstin ? ` · ${esc(d.gstin)}` : ''}</small></td>
@@ -39,11 +42,17 @@ export class ReceivablesView {
 
   private statement(s: Statement) {
     const d = s.debtor, full = this.list.find((x) => x.id === d.id)
-    return `<div class="ws-toolbar"><button type="button" class="btn" data-rv="back">← All accounts</button>
-        <label class="inline">From <input type="date" data-range="from" value="${esc(this.h.from)}"></label><label class="inline">To <input type="date" data-range="to" value="${esc(this.h.to)}"></label>
-        ${this.h.can('receivables.manage') ? '<button type="button" class="btn primary" data-rv="receive">Money received…</button><button type="button" class="btn" data-rv="edit">Edit…</button>' : ''}
-        ${this.h.can('credit.limit') ? '<button type="button" class="btn" data-rv="limit">Credit limit…</button>' : ''}
-        <button type="button" class="btn" data-rv="print">Print statement</button></div>
+    const manage = this.h.can('receivables.manage')
+    return `<div class="tb"><button type="button" class="btn ghost" data-rv="back">← All accounts</button></div>
+      ${toolbar({
+        primary: manage ? [{ attrs: 'data-rv="receive"', label: 'Money received…' }] : [],
+        filters: `<label class="inline">From <input type="date" data-range="from" value="${esc(this.h.from)}"></label><label class="inline">To <input type="date" data-range="to" value="${esc(this.h.to)}"></label>`,
+        more: [
+          { attrs: 'data-rv="print"', label: 'Print statement' },
+          ...(manage ? [{ attrs: 'data-rv="edit"', label: 'Edit the account…' }] : []),
+          ...(this.h.can('credit.limit') ? [{ attrs: 'data-rv="limit"', label: 'Credit limit…' }] : []),
+        ],
+      })}
       <div class="row-card mc-card"><div class="rc-title">${esc(d.name)} ${d.active ? '' : tonePill('Closed', '--muted')}</div>
         <div class="rc-sub">${esc(KIND[d.kind] ?? d.kind)}${d.gstin ? ` · GSTIN ${esc(d.gstin)}` : ''}${d.pan ? ` · PAN ${esc(d.pan)}` : ''} · pays in ${d.terms_days} days · limit ${full?.credit_limit_paise == null ? 'not set' : money(full.credit_limit_paise)}</div>
         <div class="rc-sub">${esc([d.contact_name, d.phone, d.email].filter(Boolean).join(' · ')) || 'No contact yet'}</div>
@@ -145,9 +154,11 @@ export class BanksView {
   html() {
     const b = this.banks.find((x) => x.id === this.bankId), r = this.recon
     const manage = this.h.can('bank.reconcile')
-    return `<div class="ws-toolbar"><select data-bank aria-label="Bank account">${this.banks.map((x) => `<option value="${esc(x.id)}"${x.id === this.bankId ? ' selected' : ''}>${esc(x.name)}${x.is_default ? ' (default)' : ''}</option>`).join('')}</select>
-        ${manage ? `<label class="btn primary file-btn">Import statement (CSV)<input type="file" accept=".csv,text/csv" data-import hidden></label><button type="button" class="btn" data-bk="auto">Match again</button><button type="button" class="btn" data-bk="add">Add bank account</button>` : ''}
-        <select data-show aria-label="Show"><option value="open"${this.show === 'open' ? ' selected' : ''}>To settle</option><option value="all"${this.show === 'all' ? ' selected' : ''}>All lines</option></select></div>
+    return `${toolbar({
+      filters: `${manage ? '<label class="btn primary file-btn">Import statement (CSV)<input type="file" accept=".csv,text/csv" data-import hidden></label>' : ''}<select data-bank aria-label="Bank account">${this.banks.map((x) => `<option value="${esc(x.id)}"${x.id === this.bankId ? ' selected' : ''}>${esc(x.name)}${x.is_default ? ' (default)' : ''}</option>`).join('')}</select>
+        <select data-show aria-label="Show"><option value="open"${this.show === 'open' ? ' selected' : ''}>To settle</option><option value="all"${this.show === 'all' ? ' selected' : ''}>All lines</option></select>`,
+      more: manage ? [{ attrs: 'data-bk="auto"', label: 'Match again' }, { attrs: 'data-bk="add"', label: 'Add bank account' }] : [],
+    })}
       ${b ? `<div class="row-card mc-card"><div class="rc-title">${esc(b.name)} <small class="muted">${esc([b.bank, b.branch, b.account_no, b.ifsc].filter(Boolean).join(' · ') || 'bank, account number and IFSC not entered yet')} · ledger ${esc(b.account_code)}</small>
         ${manage ? '<button type="button" class="btn small" data-bk="edit">Bank details…</button>' : ''}</div>
         ${r ? `<div class="mc-figs"><span><small>Books on ${esc(r.asOf)}</small><b class="mono">${money(r.bookPaise)}</b></span>
@@ -265,7 +276,10 @@ export class CashView {
   async load() { this.d = await this.h.cached('/api/cash') }
   html() {
     const d = this.d!, manage = this.h.can('cash.manage')
-    return `<div class="ws-toolbar">${manage ? '<button type="button" class="btn primary" data-cs="deposit">Bank the cash…</button><button type="button" class="btn" data-cs="topup">Top up petty cash…</button><button type="button" class="btn" data-cs="expense">Pay from petty cash…</button>' : ''}</div>
+    return `${toolbar({
+      primary: manage ? [{ attrs: 'data-cs="deposit"', label: 'Bank the cash…' }, { attrs: 'data-cs="expense"', label: 'Pay from petty cash…', primary: false }] : [],
+      more: manage ? [{ attrs: 'data-cs="topup"', label: 'Top up petty cash…' }] : [],
+    })}
       <div class="row-card mc-card"><div class="mc-figs"><span><small>Cash in hand</small><b class="mono">${money(d.cashPaise)}</b></span><span><small>Petty cash</small><b class="mono">${money(d.pettyPaise)}</b></span></div>
         <div class="rc-sub">${esc(d.note)}</div></div>
       ${d.txns.map((x) => `<div class="m-row"><span class="mono">${esc(showDate(x.date))}</span><b>${esc(CASH_KIND[x.kind] ?? x.kind)}${x.description ? `: ${esc(x.description)}` : ''}</b>

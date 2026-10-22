@@ -1,6 +1,7 @@
 import { esc, tonePill } from '../ui/dom'
 import { checked, val } from '../ui/form-modal'
 import { chips, DIET, dietDot, rs, type Category, type MenuItem, type Outlet, type Station, type Table, type Ws } from './common'
+import { toolbar, type Action } from '../ui/toolbar'
 
 // Menu editor: outlets, menu sections and dishes (English and Tamil), prices, kitchen stations and
 // tables. Price changes by anyone but the GM wait in the approval inbox; everything is logged.
@@ -45,17 +46,21 @@ export class MenuView {
     const subs: [Sub, string][] = [['items', 'Dishes'], ['tables', 'Tables'], ['stations', 'Kitchen stations'], ['outlets', 'Outlets'], ['printers', 'Printers']]
     const outletChips = this.sub === 'items' || this.sub === 'tables'
       ? chips(this.allOutlets.filter((o) => o.active).map((o) => [o.id, o.name]), this.outletId, 'moutlet') : ''
-    return `<div class="ws-toolbar">${chips(subs, this.sub, 'msub')}</div>${outletChips}` + (
+    // One toolbar for the whole Menu tab: the sub-tab's main action on the left, the sub-tab and outlet chips in the middle.
+    const primary: Action[] = this.sub === 'items' ? (this.canEdit ? [{ attrs: 'data-m="add-item"', label: 'Add dish' }, { attrs: 'data-m="add-cat"', label: 'Add section', primary: false }] : [])
+      : this.sub === 'tables' ? (this.canEdit ? [{ attrs: 'data-m="add-table"', label: 'Add table' }] : [])
+      : this.sub === 'stations' ? (this.canEdit ? [{ attrs: 'data-m="add-station"', label: 'Add station' }] : [])
+      : this.sub === 'printers' ? (this.ws.can('printers.manage') ? [{ attrs: 'data-m="add-printer"', label: 'Add printer' }] : [])
+      : this.canEdit ? [{ attrs: 'data-m="add-outlet"', label: 'Add outlet' }] : []
+    const more: Action[] = this.sub === 'items' && this.canPrice ? [{ attrs: 'data-m="import"', label: 'Import menu' }] : []
+    return toolbar({ primary, filters: chips(subs, this.sub, 'msub') + outletChips, more }) + (
       this.sub === 'items' ? this.itemsHtml() : this.sub === 'tables' ? this.tablesHtml() : this.sub === 'stations' ? this.stationsHtml() : this.sub === 'printers' ? this.printersHtml() : this.outletsHtml())
   }
 
   private itemsHtml() {
     const { categories, items } = this.menu
     const placeholder = items.some((i) => i.placeholder && i.active !== false)
-    const bar = `<div class="ws-toolbar">
-      ${this.canEdit ? '<button type="button" class="btn primary" data-m="add-item">Add dish</button><button type="button" class="btn" data-m="add-cat">Add section</button>' : ''}
-      ${this.canPrice ? '<button type="button" class="btn" data-m="import">Import menu…</button>' : ''}</div>
-      ${placeholder ? '<p class="fd-warn small">Dishes marked "sample" are placeholders. Import the real menu or edit them.</p>' : ''}`
+    const bar = placeholder ? '<p class="fd-warn small">Dishes marked "sample" are placeholders. Import the real menu or edit them.</p>' : ''
     const groups = [...categories.map((c) => ({ c, list: items.filter((i) => i.category_id === c.id) })), { c: null, list: items.filter((i) => !i.category_id || !categories.some((c) => c.id === i.category_id)) }]
     return bar + groups.filter((g) => g.c || g.list.length).map(({ c, list }) => `
       <div class="sec-title">${esc(c?.name ?? 'No section')} <span>${list.length}${c && this.canEdit ? ` · <button type="button" class="linkish" data-cat="${esc(c.id)}">Rename</button>` : ''}</span></div>
@@ -70,14 +75,12 @@ export class MenuView {
   }
 
   private tablesHtml() {
-    return (this.canEdit ? '<div class="ws-toolbar"><button type="button" class="btn primary" data-m="add-table">Add table</button></div>' : '')
-      + `<div class="m-table">${this.tables.map((t) => `<div class="m-row m-row-4"><b>${esc(t.label)}</b><span>${t.seats} seats</span><span class="muted">${esc(t.section ?? '')}</span>
+    return `<div class="m-table">${this.tables.map((t) => `<div class="m-row m-row-4"><b>${esc(t.label)}</b><span>${t.seats} seats</span><span class="muted">${esc(t.section ?? '')}</span>
         ${this.canEdit ? `<button type="button" class="btn small" data-edit-table="${esc(t.id)}">Edit</button>` : '<span></span>'}</div>`).join('') || '<div class="empty">This outlet has no tables (room service and takeaway don\'t need them).</div>'}</div>`
   }
 
   private stationsHtml() {
-    return (this.canEdit ? '<div class="ws-toolbar"><button type="button" class="btn primary" data-m="add-station">Add station</button></div>' : '')
-      + `<p class="muted small">Each dish goes to one station. Kitchen stations get KOTs, bar stations get BOTs.</p>
+    return `<p class="muted small">Each dish goes to one station. Kitchen stations get KOTs, bar stations get BOTs.</p>
       <div class="m-table">${this.allStations.map((s) => `<div class="m-row m-row-4${s.active ? '' : ' retired'}"><span class="mono">${esc(s.id)}</span><b>${esc(s.name)}</b><span class="muted">${s.kind === 'bar' ? 'Bar (BOT)' : 'Kitchen (KOT)'}${s.active ? '' : ' · retired'}</span>
         ${this.canEdit ? `<button type="button" class="btn small" data-edit-station="${esc(s.id)}">Edit</button>` : '<span></span>'}</div>`).join('')}</div>`
   }
@@ -90,7 +93,6 @@ export class MenuView {
     const JOB: Record<string, [string, string]> = { queued: ['Waiting', '--marigold'], printing: ['Printing', '--st-occupied'], done: ['Printed', '--st-vacant'], failed: ['Failed', '--st-departing'] }
     return `<p class="muted small">Kitchen, bar and bill printers on the resort network print through the print agent on the edge box.
         ${p.agentConfigured ? (seen == null ? 'The agent has not collected a job yet.' : `The agent last collected jobs ${seen} min ago.`) : '<span class="fd-warn">The print agent is not set up on this server yet (see the edge box guide).</span>'}</p>
-      ${canEdit ? '<div class="ws-toolbar"><button type="button" class="btn primary" data-m="add-printer">Add printer</button></div>' : ''}
       <div class="m-table">${p.printers.map((x) => `<div class="m-row m-row-4${x.active ? '' : ' retired'}"><b>${esc(x.name)}</b><span class="mono">${esc(x.host)}:${x.port}</span><span class="muted small">${x.width === 48 ? '80 mm' : x.width === 32 ? '58 mm' : `${x.width} chars`}</span>
         ${canEdit ? `<span><button type="button" class="btn small" data-test-printer="${esc(x.id)}">Test</button> <button type="button" class="btn small" data-edit-printer="${esc(x.id)}">Edit</button></span>` : '<span></span>'}</div>`).join('') || '<div class="empty">No printers yet. Tickets show on the kitchen screens only.</div>'}</div>
       ${p.printers.length ? `<form class="form-grid print-routes" data-routes>
@@ -128,8 +130,7 @@ export class MenuView {
   }
 
   private outletsHtml() {
-    return (this.canEdit ? '<div class="ws-toolbar"><button type="button" class="btn primary" data-m="add-outlet">Add outlet</button></div>' : '')
-      + `<div class="m-table">${this.allOutlets.map((o) => `<div class="m-row m-row-4${o.active ? '' : ' retired'}"><span class="mono">${esc(o.id)}</span><b>${esc(o.name)}</b>
+    return `<div class="m-table">${this.allOutlets.map((o) => `<div class="m-row m-row-4${o.active ? '' : ' retired'}"><span class="mono">${esc(o.id)}</span><b>${esc(o.name)}</b>
         <span class="muted">${OUTLET_KIND[o.kind] ?? o.kind}${o.serves_liquor ? ' · serves liquor' : ''}${o.active ? '' : ' · closed'}</span>
         ${this.canEdit ? `<button type="button" class="btn small" data-edit-outlet="${esc(o.id)}">Edit</button>` : '<span></span>'}</div>`).join('')}</div>`
   }
@@ -270,7 +271,7 @@ export class MenuView {
       <label>Code<input name="id" maxlength="10" value="${esc(o?.id ?? '')}" ${o ? 'disabled' : 'placeholder="CAFE"'}></label>
       <label>Kind<select name="kind">${Object.entries(OUTLET_KIND).map(([k, v]) => `<option value="${k}" ${k === (o?.kind ?? 'restaurant') ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
       <label class="span2">Name<input name="name" maxlength="60" value="${esc(o?.name ?? '')}"></label>
-      <label class="span2">Building on the 3D map (place code, e.g. RESTAURANT)<input name="space" maxlength="40" value="${esc(o?.space_id ?? '')}"></label>
+      <label class="span2">Where on the map (its orders show there)<select name="space" data-places><option value="">Choose the place…</option></select></label>
       <label class="check"><input type="checkbox" name="liquor" ${o?.serves_liquor ? 'checked' : ''}> Serves liquor (within the bar licence)</label>
       ${o ? `<label class="check"><input type="checkbox" name="active" ${o.active ? 'checked' : ''}> Open</label>` : ''}</div>`, o ? 'Save' : 'Add outlet', async (f) => {
       const body = { name: val(f, 'name'), kind: val(f, 'kind'), spaceId: val(f, 'space') || null, servesLiquor: checked(f, 'liquor') }
@@ -279,6 +280,12 @@ export class MenuView {
       await this.reload()
       return o ? 'Saved' : 'Outlet added'
     })
+    // Every hall, lawn, building and pool on the map, by name: an outlet's orders are shown above the place chosen.
+    const sel = this.ws.modal.el.querySelector<HTMLSelectElement>('[data-places]')!
+    void this.ws.api.get<{ id: string; kind: string; name: string | null; room_no: string | null }[]>('/api/spaces').then((sp) => {
+      const places = sp.filter((x) => !x.room_no && !['room', 'villa', 'suite'].includes(x.kind)).sort((a, b) => (a.name ?? a.id).localeCompare(b.name ?? b.id))
+      sel.insertAdjacentHTML('beforeend', places.map((x) => `<option value="${esc(x.id)}" ${x.id === o?.space_id ? "selected" : ""}>${esc(x.name ?? x.id)} · ${esc(x.kind)}</option>`).join(''))
+    }).catch(() => {})
   }
 
   /** Paste rows from a spreadsheet or the Champagne export: code, name, Tamil name, price, station, diet, liquor class, section. */

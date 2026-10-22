@@ -1,4 +1,5 @@
 import { esc, toast, tonePill, showDate } from '../ui/dom'
+import { toolbar } from '../ui/toolbar'
 import { val } from '../ui/form-modal'
 import { money, type Host } from './books'
 
@@ -21,10 +22,12 @@ export class VatView {
   async load() { this.period ||= lastMonth(this.h.to); this.d = await this.h.cached(`/api/vat/${this.period}`) }
   html() {
     const d = this.d!
-    return `<div class="ws-toolbar"><label class="inline">Month <input type="month" data-period value="${esc(this.period)}"></label>
-        <button type="button" class="btn" data-vt="sales.csv">Sales register (CSV)</button><button type="button" class="btn" data-vt="purchases.csv">Purchase register (CSV)</button>
-        ${this.h.can('vat.file') && !d.filed ? '<button type="button" class="btn primary" data-vt="file">Return filed…</button>' : ''}
-        ${d.filed ? tonePill(`Filed ${d.filed.filed_on} · ${d.filed.ack_no}`, '--st-vacant') : tonePill(`Due ${showDate(d.due)}`, '--marigold')}</div>
+    return `${toolbar({
+      primary: this.h.can('vat.file') && !d.filed ? [{ attrs: 'data-vt="file"', label: 'Return filed…' }] : [],
+      filters: `<label class="inline">Month <input type="month" data-period value="${esc(this.period)}"></label>`,
+      more: [{ attrs: 'data-vt="sales.csv"', label: 'Sales register (CSV)' }, { attrs: 'data-vt="purchases.csv"', label: 'Purchase register (CSV)' }],
+      end: d.filed ? tonePill(`Filed ${d.filed.filed_on} · ${d.filed.ack_no}`, '--st-vacant') : tonePill(`Due ${showDate(d.due)}`, '--marigold'),
+    })}
       <div class="sec-title">Liquor sold (${d.invoices.length} VAT invoices)</div>
       <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Class</th><th class="n">Rate</th><th class="n">Value</th><th class="n">VAT</th></tr></thead><tbody>
         ${d.byRate.map((r) => `<tr><td>${esc(r.liquorClass)}</td><td class="n">${r.rate}%</td><td class="n">${money(r.taxable)}</td><td class="n">${money(r.vat)}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">No liquor sold this month.</td></tr>'}
@@ -63,9 +66,12 @@ export class AssetsView {
     const d = this.d!, manage = this.h.can('assets.manage'), it = this.it!
     const due = dueMonths(d.nextMonth, d.businessDate)
     const label = (m: string) => new Date(`${m}-01T00:00:00Z`).toLocaleDateString('en-IN', { month: 'short', year: 'numeric', timeZone: 'UTC' })
-    const depBtn = !d.assets.length ? '' : !due.length ? `<span class="muted small">Depreciation is posted up to ${esc(label(lastMonth(`${d.nextMonth}-15`)))}.</span>`
-      : `<button type="button" class="btn" data-fa="dep">Post depreciation for ${esc(label(due[0]))}${due.length > 1 ? ` to ${esc(label(due[due.length - 1]))} (${due.length} months)` : ''}</button>`
-    return `<div class="ws-toolbar">${manage ? `<button type="button" class="btn primary" data-fa="add">Add an asset…</button>${depBtn}` : ''}</div>
+    const depNote = d.assets.length && !due.length ? `<span class="muted small">Depreciation is posted up to ${esc(label(lastMonth(`${d.nextMonth}-15`)))}.</span>` : ''
+    const depAction = d.assets.length && due.length ? [{ attrs: 'data-fa="dep"', label: `Post depreciation for ${label(due[0])}${due.length > 1 ? ` to ${label(due[due.length - 1])} (${due.length} months)` : ''}`, primary: false }] : []
+    return `${toolbar({
+      primary: manage ? [{ attrs: 'data-fa="add"', label: 'Add an asset…' }, ...depAction] : [],
+      end: manage ? depNote : '',
+    })}
       <p class="muted small">Assets bought on a vendor bill are put in the books by charging the bill's line to the asset account; add them here too, so they are depreciated. Depreciation in the books is straight line over the Companies Act lives; the income-tax figure below is by block.</p>
       <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Asset</th><th>Class</th><th>In use from</th><th class="n">Cost</th><th class="n">Depreciation</th><th class="n">Book value</th><th></th></tr></thead><tbody>
         ${d.assets.map((a) => `<tr class="${a.disposed_on ? 'retired' : ''}"><td><span class="mono">${esc(a.code)}</span> ${esc(a.name)}${a.dept ? ` <small class="muted">${esc(d.departments[a.dept] ?? a.dept)}</small>` : ''}</td>
@@ -127,8 +133,10 @@ export class BudgetView {
   html() {
     const d = this.d!
     const cell = (x: Row3, good: (v: number) => boolean) => `<td class="n">${money(x.actualPaise)}</td><td class="n">${money(x.budgetPaise)}</td><td class="n ${x.budgetPaise && !good(x.variancePaise) ? 'fd-warn' : ''}">${x.budgetPaise ? money(x.variancePaise) : ''}</td>`
-    return `<div class="ws-toolbar"><label class="inline">From <input type="date" data-range="from" value="${esc(this.h.from)}"></label><label class="inline">To <input type="date" data-range="to" value="${esc(this.h.to)}"></label>
-        ${this.h.can('budget.manage') ? '<button type="button" class="btn primary" data-bg="set">Set a budget…</button>' : ''}</div>
+    return `${toolbar({
+      primary: this.h.can('budget.manage') ? [{ attrs: 'data-bg="set"', label: 'Set a budget…' }] : [],
+      filters: `<label class="inline">From <input type="date" data-range="from" value="${esc(this.h.from)}"></label><label class="inline">To <input type="date" data-range="to" value="${esc(this.h.to)}"></label>`,
+    })}
       <div class="acc-scroll"><table class="acc-table"><thead><tr><th rowspan="2">Department</th><th colspan="3" class="n">Revenue</th><th colspan="3" class="n">Costs</th><th colspan="3" class="n">Profit</th></tr>
         <tr><th class="n">Actual</th><th class="n">Budget</th><th class="n">±</th><th class="n">Actual</th><th class="n">Budget</th><th class="n">±</th><th class="n">Actual</th><th class="n">Budget</th><th class="n">±</th></tr></thead><tbody>
         ${d.rows.map((r) => `<tr><td>${esc(r.name)}</td>${cell(r.revenue, (v) => v >= 0)}${cell(r.cost, (v) => v >= 0)}${cell(r.profit, (v) => v >= 0)}</tr>`).join('') || '<tr><td colspan="10" class="empty">No figures for these dates.</td></tr>'}
