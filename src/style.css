@@ -1033,3 +1033,10 @@ button.link { background: none; border: 0; padding: 0; color: var(--accent); fon
 .modal .tb:last-child, .room-actions .tb { margin-bottom: 0; }
 .room-actions .steps { margin: 6px 0 8px; }
 .tb-mid .ws-search { max-width: 320px; }
+/* tour mode: a ticker of today's figures across the bottom of the map */
+.tour-bar { position: absolute; left: 0; right: 0; bottom: 0; z-index: 4; pointer-events: none; }
+.tour-ticker { display: flex; width: max-content; background: color-mix(in srgb, var(--fg) 86%, transparent); color: var(--bg); font: 600 15px var(--f-body); padding: 10px 0; white-space: pre; animation: ticker 40s linear infinite; }
+.tour-ticker span { padding-right: 2em; }
+@keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.tour-hint { position: absolute; right: 14px; bottom: 50px; font: 600 11px var(--f-body); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: var(--glass); padding: 4px 10px; border-radius: 999px; }
+.touring .layers, .touring .legend, .touring .hint, .touring .notices { opacity: 0; transition: opacity .6s; }

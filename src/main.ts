@@ -208,6 +208,7 @@ store.on((why, payload) => {
     if (secWs?.open && !secWs.modal.isOpen) void secWs.refresh()
     void loadSec()
     if (e.action.startsWith('security.emergency')) void checkEmergency()
+    if (/^security\.gate_(in|out)$/.test(e.action) && store.isToday) world.overlays.vehicle(e.action.endsWith('_in') ? 'in' : 'out')
     if (!['security.incident', 'security.patrol_missed', 'security.key_overdue', 'security.emergency_start', 'security.emergency_end', 'security.emergency_help'].includes(e.action)) return
   }
   if (why === 'staff') {
@@ -237,11 +238,50 @@ function animate(e: DomainEvent) {
   if (e.type === 'order.created' && store.layers.has('fnb')) world.overlays.orderArc(e.order)
   if (e.type === 'order.updated' && e.order.status === 'ready' && store.layers.has('fnb')) world.overlays.foodRunner(e.order)
   if (e.type === 'reservation.updated') world.overlays.guestMove(e.reservation, e.change)
+  if (e.type === 'snapshot.changed' && e.action === 'event.contract') void celebrate(e.entityId)
   if (e.type === 'snapshot.changed' && (e.action === 'reservation.check_in' || e.action === 'reservation.check_out')) {
     const r = store.reservations.find((x) => x.id === e.entityId)
     if (r?.spaceId) world.overlays.guestMove(r, e.action === 'reservation.check_in' ? 'check-in' : 'check-out')
   }
 }
+
+/** An event just became definite: confetti over its venues. */
+async function celebrate(eventId: string) {
+  if (!api || !liveAdapter) return
+  try {
+    const d = await api.get<{ functions: { venueId: string }[] }>(`/api/banquets/events/${encodeURIComponent(eventId)}`)
+    for (const id of new Set(d.functions.map((f) => liveAdapter!.appIdOf.get(f.venueId) ?? f.venueId))) world.overlays.celebrate(id)
+  } catch { /* someone without the banquets screens: no confetti for them */ }
+}
+
+// ---------- tour mode: the camera glides around the resort with today's figures, for a lobby screen or an idle desk ----------
+const tourBar = document.createElement('div')
+tourBar.className = 'tour-bar'
+tourBar.hidden = true
+$('#stage').appendChild(tourBar)
+function startTour() {
+  if (studio.open || world.touring) return
+  hideWorkspaces(); closeDrawer(); hideTip()
+  const k = store.kpis()
+  const open = store.orders.filter((o) => o.status !== 'served').length
+  const events = store.events.filter((e) => e.date === store.date)
+  const bits = [`Occupancy ${Math.round(k.occupancy * 100)}%`, `${k.arrivals} arriving`, `${k.departures} leaving`, `${open} open KOT${open === 1 ? '' : 's'}`,
+    events.length ? `${events.length} event${events.length === 1 ? '' : 's'} today: ${events.map((e) => e.title).join(', ')}` : 'No events today',
+    `${Object.values(store.hk).filter((h) => h === 'dirty').length} rooms to clean`]
+  tourBar.innerHTML = `<div class="tour-ticker"><span>${bits.map(esc).join('  ·  ')}  ·  Sathya Park &amp; Resorts  ·  ${fmtDay(todayKey())}  ·  </span><span>${bits.map(esc).join('  ·  ')}  ·  Sathya Park &amp; Resorts  ·  ${fmtDay(todayKey())}  ·  </span></div><div class="tour-hint">Resort tour · tap anywhere to take over</div>`
+  tourBar.hidden = false
+  document.body.classList.add('touring')
+  world.startTour()
+}
+world.onTourEnd = () => { tourBar.hidden = true; document.body.classList.remove('touring') }
+// After five quiet minutes with nothing open, the map starts touring by itself.
+let idleTimer = 0
+const armIdle = () => {
+  clearTimeout(idleTimer)
+  idleTimer = window.setTimeout(() => { if (liveMode && !document.hidden && ![fnb, hkWs, staffWs, engWs, secWs, invWs, accWs, bqWs, guestWs, hrWs, settingsWs].some((w) => w?.open)) startTour() }, 5 * 60_000)
+}
+for (const ev of ['pointerdown', 'keydown', 'touchstart', 'wheel']) document.addEventListener(ev, () => { armIdle(); if (ev === 'keydown') world.stopTour() }, { passive: true })
+armIdle()
 
 // ---------- staff on duty (managers and security) ----------
 interface LiveStaff { user_id: string; name: string; roles: string | null; at: string | null; x: string | number | null; z: string | number | null; inside: boolean | null; sos: boolean }
@@ -781,7 +821,14 @@ $('#btn-frontdesk').addEventListener('click', () => { hideWorkspaces(); setTab('
   const close = () => { menu.hidden = true; btn.setAttribute('aria-expanded', 'false') }
   btn.addEventListener('click', (e) => { e.stopPropagation(); if (menu.hidden) { menu.hidden = false; btn.setAttribute('aria-expanded', 'true') } else close() })
   document.addEventListener('click', (e) => { if (!menu.hidden && !menu.contains(e.target as Node)) close() })
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !menu.hidden) { close(); btn.focus() } })
   menu.addEventListener('click', (e) => { if ((e.target as HTMLElement).closest('.menu-row:not([role=menuitemcheckbox])')) close() })
+  const tour = document.createElement('button')
+  tour.type = 'button'
+  tour.className = 'menu-row'
+  tour.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>Resort tour'
+  tour.addEventListener('click', () => startTour())
+  $('#btn-eco').after(tour)
 }
 watchMenus()
 store.load().then(renderAll).catch((err) => toast(`Couldn't load HMS data: ${err.message}`))

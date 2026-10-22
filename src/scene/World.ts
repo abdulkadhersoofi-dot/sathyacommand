@@ -15,6 +15,8 @@ export interface WorldCallbacks {
 
 const HOME_POS = new THREE.Vector3(62, 150, 200)
 const HOME_TARGET = new THREE.Vector3(10, 0, 14)
+/** The hour of the day in India, with minutes as a fraction. */
+const istHour = () => { const d = new Date(Date.now() + 330 * 60_000); return d.getUTCHours() + d.getUTCMinutes() / 60 }
 
 export class World {
   renderer: THREE.WebGLRenderer
@@ -28,6 +30,8 @@ export class World {
   /** Twin Studio is open: normal hover / tap is off and the studio handles the pointer. */
   editMode = false
   night = false
+  /** true: the Night button holds the scene after dark; null: the sky follows the clock. */
+  nightOverride: boolean | null = null
   eco = false
 
   private hemi = new THREE.HemisphereLight(0xeaf4ff, 0x7d6b4f, 1.3)
@@ -37,6 +41,7 @@ export class World {
   private pendingPick: { x: number; y: number; pointer: string } | null = null
   private hoverId: string | null = null
   private dirty = true
+  private lastFrame = 0
   private tweens: { start: number; dur: number; fn: (k: number) => void }[] = []
   private introUntil = 0
   private down = { x: 0, y: 0, t: 0 }
@@ -76,8 +81,8 @@ export class World {
     this.overlays = new Overlays(this.site, this.rooms, labelLayer)
     this.scene.add(this.overlays.group)
 
-    const h = new Date().getHours()
-    this.setNight(h < 6 || h >= 18)
+    this.applyTime(istHour())
+    setInterval(() => { if (this.nightOverride === null) this.applyTime(istHour()) }, 60_000)
     this.bindPointer()
     new ResizeObserver(() => this.resize()).observe(host)
     this.resize()
@@ -102,7 +107,7 @@ export class World {
     this.overlays = new Overlays(this.site, this.rooms, this.labelLayer)
     this.overlays.group.visible = !this.editMode
     this.scene.add(this.site.root, this.rooms.group, this.overlays.group)
-    this.setNight(this.night)
+    this.applyTime(this.nightOverride ? 22 : istHour())
     for (const [layer, list] of this.pinLists) this.overlays.setPins(layer, list)
     this.refresh()
   }
@@ -190,20 +195,53 @@ export class World {
     this.dirty = true
   }
 
+  /** The Night button: a preview of the resort after dark; off again, the sky follows the clock. */
   setNight(on: boolean) {
-    this.night = on
-    const bg = new THREE.Color(on ? 0x0d1726 : 0xd3ded7)
+    this.nightOverride = on ? true : null
+    this.applyTime(on ? 22 : istHour())
+  }
+
+  /** Sky, sun, lamps and lit windows for an hour of the day in India: dawn around 6, dusk around 18. */
+  applyTime(h: number) {
+    const dark = h < 5.5 || h >= 19 ? 1 : h < 7 ? 1 - (h - 5.5) / 1.5 : h < 17 ? 0 : (h - 17) / 2
+    const dusk = Math.max(0, 1 - Math.abs(dark - 0.5) * 2)   // the orange hour, strongest at half light
+    const mix = (a: number, b: number, k: number) => new THREE.Color(a).lerp(new THREE.Color(b), k)
+    const bg = mix(0xd3ded7, 0x0d1726, dark).lerp(new THREE.Color(0xf0b58a), dusk * 0.55)
     this.scene.background = bg
     this.scene.fog = new THREE.Fog(bg, 420, 900)
-    this.hemi.color.setHex(on ? 0x5272a8 : 0xeaf4ff)
-    this.hemi.groundColor.setHex(on ? 0x1b1c24 : 0x7d6b4f)
-    this.hemi.intensity = on ? 0.55 : 1.3
-    this.sun.color.setHex(on ? 0x9fb8ff : 0xfff1dc)
-    this.sun.intensity = on ? 0.45 : 2.4
-    this.site.lampMaterial.emissiveIntensity = on ? 2.4 : 0
-    this.site.waterUniforms.uNight.value = on ? 1 : 0
-    this.rooms.setGlow(on)
+    this.hemi.color.copy(mix(0xeaf4ff, 0x5272a8, dark).lerp(new THREE.Color(0xffc9a0), dusk * 0.5))
+    this.hemi.groundColor.copy(mix(0x7d6b4f, 0x1b1c24, dark))
+    this.hemi.intensity = 1.3 - 0.75 * dark
+    this.sun.color.copy(mix(0xfff1dc, 0x9fb8ff, dark).lerp(new THREE.Color(0xff9a52), dusk * 0.7))
+    this.sun.intensity = 2.4 - 1.95 * dark
+    // The sun's path: in the east at dawn, overhead at noon, low in the west at dusk; the moon's light at night.
+    const ang = ((Math.min(18, Math.max(6, h)) - 6) / 12) * Math.PI
+    this.sun.position.set(-Math.cos(ang) * 240, Math.max(60, Math.sin(ang) * 230), 120 - Math.sin(ang) * 40)
+    this.site.lampMaterial.emissiveIntensity = dark * 2.4
+    this.site.waterUniforms.uNight.value = dark
+    this.rooms.setGlow(dark > 0.4)
+    this.overlays.alive.setDark(dark)
+    this.night = dark > 0.5
     this.dirty = true
+  }
+
+  // ---------- tour mode: the camera glides around the resort until someone touches it ----------
+  private tourOn = false
+  private tourAngle = 0
+  onTourEnd: () => void = () => {}
+  get touring() { return this.tourOn }
+  startTour() {
+    if (this.tourOn || this.editMode) return
+    this.tourOn = true
+    this.tourAngle = Math.atan2(this.camera.position.z - HOME_TARGET.z, this.camera.position.x - HOME_TARGET.x)
+    this.controls.enabled = false
+    this.dirty = true
+  }
+  stopTour() {
+    if (!this.tourOn) return
+    this.tourOn = false
+    this.controls.enabled = true
+    this.onTourEnd()
   }
 
   setEco(on: boolean) {
@@ -300,7 +338,8 @@ export class World {
       if (e.pointerType === 'mouse' && e.buttons === 0) this.pendingPick = { x: e.clientX, y: e.clientY, pointer: 'hover' }
     })
     el.addEventListener('pointerleave', () => { this.setHover(null, 0, 0, 'mouse') })
-    el.addEventListener('pointerdown', (e) => { this.down = { x: e.clientX, y: e.clientY, t: performance.now() } })
+    el.addEventListener('pointerdown', (e) => { this.stopTour(); this.down = { x: e.clientX, y: e.clientY, t: performance.now() } })
+    el.addEventListener('wheel', () => this.stopTour(), { passive: true })
     el.addEventListener('pointerup', (e) => {
       if (this.editMode) return
       const moved = Math.hypot(e.clientX - this.down.x, e.clientY - this.down.y)
@@ -361,6 +400,17 @@ export class World {
       active = true
       return k < 1
     })
+    if (this.tourOn) {
+      // A slow orbit with a gentle rise and fall, like a drone over the resort.
+      const dt = Math.min(0.1, now - (this.lastFrame || now))
+      this.tourAngle += dt * 0.06
+      const r = 230 + Math.sin(now * 0.09) * 50, y = 125 + Math.sin(now * 0.06) * 40
+      this.camera.position.set(HOME_TARGET.x + Math.cos(this.tourAngle) * r, y, HOME_TARGET.z + Math.sin(this.tourAngle) * r)
+      this.controls.target.copy(HOME_TARGET)
+      this.camera.lookAt(HOME_TARGET)
+      active = true
+    }
+    this.lastFrame = now
     const ambient = !this.eco
     if (ambient) {
       this.site.waterUniforms.uTime.value = now

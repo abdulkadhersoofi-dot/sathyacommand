@@ -5,6 +5,7 @@ import type { Order, Reservation } from '../data/types'
 import { centroid, ease, inPoly, scalePoly } from './geo'
 import type { Site } from './Site'
 import type { Rooms } from './Rooms'
+import { Alive, type Effect } from './Alive'
 
 // Everything drawn on top of the site: venue event overlays, kitchen load
 // ring, room-service markers, HTML labels, and short-lived motion (order arcs,
@@ -13,7 +14,6 @@ import type { Rooms } from './Rooms'
 interface Label { el: HTMLElement; pos: THREE.Vector3; lift: number }
 /** A point drawn on the map for a live layer (staff on duty, faults, assets…), in layout metres. */
 export interface MapPin { id: string; x: number; z: number; colour: number; shape: 'person' | 'marker' | 'dot'; label?: string; detail?: string | null; tone?: string; pulse?: boolean; faded?: boolean; clickable?: boolean }
-interface Effect { start: number; dur: number; update: (k: number) => void; done: () => void }
 
 const MARIGOLD = 0xe8a317
 const ROLE_COLOURS: [RegExp, number][] = [[/security/, 0x3b7be0], [/room_attendant|hk_/, 0x2bb3a3], [/captain|steward|chef|kitchen|bartender/, MARIGOLD],
@@ -27,6 +27,9 @@ export class Overlays {
   group = new THREE.Group()
   private labels = new Map<string, Label>()
   private effects: Effect[] = []
+  private lastTick = 0
+  /** Cars, pandals, crowds, smoke and confetti. */
+  alive: Alive
   private venueLines = new Map<string, THREE.LineLoop>()
   private tables: THREE.InstancedMesh
   private kitchenRing: THREE.Mesh
@@ -68,12 +71,14 @@ export class Overlays {
       new THREE.MeshStandardMaterial({ color: 0xe0533d, emissive: 0xe0533d, emissiveIntensity: 0.9, roughness: 0.4 }), 40,
     )
     this.lateMarkers.count = 0
-    this.group.add(this.tables, this.kitchenRing, this.markers, this.lateMarkers, this.pinGroup)
+    this.alive = new Alive(site)
+    this.group.add(this.tables, this.kitchenRing, this.markers, this.lateMarkers, this.pinGroup, this.alive.group)
     this.buildLabels()
   }
 
   /** Removes this overlay's HTML labels (used when the scene is rebuilt from a new layout). */
   dispose() {
+    this.alive.dispose()
     for (const l of this.labels.values()) l.el.remove()
     this.labels.clear()
     for (const layer of [...this.pins.keys()]) this.setPins(layer, null)
@@ -231,11 +236,13 @@ export class Overlays {
     this.liveVenues.clear()
     let t = 0
     const m = new THREE.Matrix4()
+    const busy: { id: string; ev: (typeof store.events)[number] }[] = []
     for (const [id] of this.site.anchors) {
       const sp = store.spaceById.get(id)
       if (!sp || !['hall', 'lawn', 'pavilion', 'ground'].includes(sp.type)) continue
       const st = store.state(id)
       const ev = st.events[0]
+      if (showEvents && ev && store.isToday) busy.push({ id, ev })
       if (showEvents && ev) {
         this.setLabelDetail(id, `${ev.kind} · ${ev.pax} pax<br><span class="ml-sub">${ev.slot}${ev.setup === 'live' ? ' · <b>LIVE</b>' : ''}</span>`, ev.setup === 'live' ? 'live' : 'event')
         this.outline(id, true)
@@ -249,11 +256,13 @@ export class Overlays {
     this.tables.count = t
     this.tables.instanceMatrix.needsUpdate = true
     this.tables.computeBoundingSphere()
+    this.alive.updateEvents(busy)
 
     // kitchen
     const open = store.orders.filter((o) => o.status !== 'served')
     const late = store.isToday ? open.filter((o) => minutesOpen(o) > 20).length : 0
     this.kitchenRing.visible = showFnb && store.isToday
+    this.alive.setSmoke(showFnb && store.isToday ? open.length : 0, late)
     ;(this.kitchenRing.material as THREE.MeshBasicMaterial).color.setHex(late ? 0xe0533d : open.length > 8 ? MARIGOLD : 0x35a46b)
     this.setLabelDetail('KITCHEN', showFnb && store.isToday ? `${open.length} open KOT${open.length === 1 ? '' : 's'}${late ? ` · <b>${late} late</b>` : ''}` : null, late ? 'alert' : 'fnb')
     // Each outlet's label counts its own orders; the kitchen counts them all.
@@ -375,13 +384,31 @@ export class Overlays {
   }
 
   guestMove(res: Reservation, change: 'check-in' | 'check-out') {
-    const gate = new THREE.Vector3(this.site.layout.gate[0], 1.2, this.site.layout.gate[1])
-    const mid = (x: number, y: number) => { const [a, b] = [(x - 440) * 0.4, (y - 500) * 0.4]; return new THREE.Vector3(a, 1.2, b) }
     const rec = (this.site.anchors.get('RECEPTION')?.pos ?? new THREE.Vector3()).clone().setY(1.2)
     const room = this.anchorOf(res.spaceId)
-    const path = [gate, mid(586, 726), mid(548, 684), rec, new THREE.Vector3(room.x, 1.2, room.z), room]
-    if (change === 'check-out') path.reverse()
-    this.walker(path, change === 'check-in' ? 0x3b7be0 : 0xe0533d, 4.5)
+    const walk = [rec, new THREE.Vector3(room.x, 1.2, room.z), room]
+    const drive = this.alive.route(this.site.layout.gate, [rec.x, rec.z])
+    if (change === 'check-in') {
+      // The car comes up the drive to reception; the guest walks on to the room.
+      this.alive.car(drive, 0x3b7be0, 5, this.effects)
+      this.walker(walk, 0x3b7be0, 4, 4.6)
+    } else {
+      this.walker(walk.slice().reverse(), 0xe0533d, 4)
+      this.alive.car(drive.slice().reverse(), 0xe0533d, 5, this.effects, 3.6)
+    }
+  }
+
+  /** A vehicle logged at the gate drives in to the lobby (or out to the road). */
+  vehicle(direction: 'in' | 'out') {
+    const rec = this.site.anchors.get('RECEPTION')?.pos ?? new THREE.Vector3()
+    const drive = this.alive.route(this.site.layout.gate, [rec.x, rec.z])
+    this.alive.car(direction === 'in' ? drive : drive.slice().reverse(), 0xf6d34a, 5, this.effects)
+  }
+
+  /** Confetti over a venue: an event just became definite. */
+  celebrate(id: string) {
+    const a = this.site.anchors.get(id)
+    if (a) this.alive.celebrate(a.pos.clone().setY(Math.max(4, a.height) + 6), this.effects)
   }
 
   private arc(from: THREE.Vector3, to: THREE.Vector3, color: number, dur: number) {
@@ -409,14 +436,16 @@ export class Overlays {
     })
   }
 
-  private walker(path: THREE.Vector3[], color: number, dur: number) {
+  private walker(path: THREE.Vector3[], color: number, dur: number, delay = 0) {
     const curve = new THREE.CatmullRomCurve3(path, false, 'centripetal', 0.2)
     const dot = this.glowDot(color)
     const trail = new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(80)), new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.35 }))
+    dot.visible = trail.visible = delay === 0
     this.group.add(dot, trail)
     this.effects.push({
-      start: performance.now() / 1000, dur,
+      start: performance.now() / 1000 + delay, dur,
       update: (k) => {
+        dot.visible = trail.visible = true
         dot.position.copy(curve.getPoint(ease.inOutCubic(k)))
         ;(trail.material as THREE.LineBasicMaterial).opacity = 0.35 * (1 - Math.max(0, k - 0.8) * 5)
       },
@@ -435,12 +464,15 @@ export class Overlays {
   tick(t: number, ambient: boolean) {
     const now = performance.now() / 1000
     this.effects = this.effects.filter((e) => {
+      if (now < e.start) return true
       const k = Math.min(1, (now - e.start) / e.dur)
       e.update(k)
       if (k >= 1) { e.done(); return false }
       return true
     })
     let active = this.effects.length > 0
+    if (ambient) active = this.alive.tick(t, Math.min(0.1, t - (this.lastTick || t))) || active
+    this.lastTick = t
     if (ambient) {
       if (this.markerTargets.length) { this.placeMarkers(t); active = true }
       const pulse = 0.55 + 0.45 * Math.sin(t * 3)
