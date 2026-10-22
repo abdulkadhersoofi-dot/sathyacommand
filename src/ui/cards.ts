@@ -2,6 +2,7 @@ import { minutesOpen, orderTotal, type Store } from '../data/store'
 import type { Reservation, Space } from '../data/types'
 import { addDays, fmtDay, fmtTime, inr, todayKey } from '../data/dates'
 import { esc, hkPill, maskPhone, statusPill, tonePill } from './dom'
+import { billHtml, openCount, openItemsHtml, rs } from './stay'
 
 // HTML for the hover / tap card and the full detail drawer.
 
@@ -40,6 +41,7 @@ export function tipHtml(store: Store, id: string, touch: boolean) {
       if (god) body += row('Balance due', g.balance ? inr(g.balance) : 'Settled')
       const open = store.isToday ? store.ordersFor(id).filter((o) => o.status !== 'served').length : 0
       if (open) body += row('Room service', `${open} open order${open > 1 ? 's' : ''}`)
+      if (g.openItems) body += row('Before check-out', `<b class="fd-warn">${g.openItems} open bill${g.openItems > 1 ? 's' : ''}</b>`)
     }
     if (st.departing && st.departing !== g) body += row('Leaving', `${esc(st.departing.guest)} · by 11:00`)
     if (!g && !st.departing) {
@@ -133,16 +135,30 @@ function guestBlock(store: Store, r: Reservation, title: string) {
         ${god ? `<dt>Rate</dt><dd>${inr(r.rate)} / night</dd><dt>Balance due</dt><dd>${r.balance ? inr(r.balance) : 'Settled'}</dd>` : ''}
       </dl>
       ${r.notes ? `<div class="note">${esc(r.notes)}</div>` : ''}
+      ${stayBlock(store, r)}
       ${actionsFor(store, r)}
     </div>`
+}
+
+/** The stay as money, from the HMS: the bill grouped by what it was for, and what is still open elsewhere. */
+function stayBlock(store: Store, r: Reservation) {
+  if (!store.live || r.status === 'cancelled') return ''
+  const d = store.stays.get(r.id)
+  if (!d) return store.stayAllowed ? '<div class="muted small" style="margin-top:8px">Loading the bill…</div>' : ''
+  const open = openCount(d.openItems)
+  return `<div class="sec-title">The stay so far <span>${d.balance > 0 ? `<b class="fd-warn">${rs(d.balance)} due</b>` : d.balance < 0 ? `${rs(-d.balance)} paid ahead` : 'settled'}</span></div>
+    ${billHtml(d.lines, { compact: true })}
+    ${open ? `<div class="sec-title bk-open">Still open <span>${open}</span></div><div class="fd-bill">${openItemsHtml(d.openItems)}</div><p class="muted small">Not on the room bill yet. Check-out waits for these; the desk puts them on the bill from the booking.</p>` : r.status === 'in-house' ? '<p class="muted small">Nothing open elsewhere: everything the guest used is on the room bill.</p>' : ''}`
 }
 
 function actionsFor(store: Store, r: Reservation) {
   if (!store.isToday) return ''
   const btns: string[] = []
   if (r.status === 'confirmed' && r.arrival === store.date) btns.push(`<button class="btn primary" data-act="checkin" data-res="${r.id}">Check in</button>`)
-  if (r.status === 'in-house') btns.push(`<button class="btn" data-act="checkout" data-res="${r.id}">Check out</button>`)
-  if (store.live && r.folioId && (r.status === 'in-house' || r.status === 'confirmed')) btns.push(`<button class="btn" data-act="pay" data-res="${r.id}">Payment</button>`)
+  // Check-out is done from the opened booking only, once everything is on the bill.
+  if (store.live && store.stayAllowed && r.status !== 'cancelled') btns.push(`<button class="btn${r.status === 'in-house' ? ' primary' : ''}" data-fd="open" data-res="${esc(r.id)}">Open the booking</button>`)
+  if (!store.live && r.status === 'in-house') btns.push(`<button class="btn" data-act="checkout" data-res="${r.id}">Check out</button>`)
+  if (!store.live && r.folioId && (r.status === 'in-house' || r.status === 'confirmed')) btns.push(`<button class="btn" data-act="pay" data-res="${r.id}">Payment</button>`)
   if (!store.live && store.godMode && r.balance && r.status !== 'checked-out') btns.push(`<button class="btn god" data-act="waive" data-res="${r.id}">Waive ${inr(r.balance)}</button>`)
   return btns.length ? `<div class="actions">${btns.join('')}</div>` : ''
 }

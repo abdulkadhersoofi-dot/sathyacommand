@@ -26,6 +26,7 @@ import { World } from './scene/World'
 import { roleColour } from './scene/Overlays'
 import { Studio } from './studio/studio'
 import { defaultLayout, type SiteLayout } from './data/layout'
+import type { StayDetail } from './ui/stay'
 import { $, toast, esc } from './ui/dom'
 import { FormModal, val } from './ui/form-modal'
 import { showDemoGuide } from './ui/demo-guide'
@@ -136,9 +137,22 @@ function openDrawer(id: string) {
   store.select(id)
   world.highlight(id)
   renderDrawer()
+  void loadStay(id)
   drawer.classList.add('open')
   drawer.setAttribute('aria-hidden', 'false')
   $('#side').classList.remove('open')
+}
+/** The guest's bill and open items for the room's drawer, from the HMS; nothing on the sample data or without desk access. */
+async function loadStay(spaceId: string) {
+  if (!api || !store.stayAllowed) return
+  const st = store.state(spaceId)
+  const r = st.stay ?? st.departing
+  if (!r) return
+  try {
+    const d = await api.get<{ lines: StayDetail['lines']; balance: number; openItems: StayDetail['openItems']; documents: StayDetail['documents'] }>(`/api/reservations/${encodeURIComponent(r.id)}`)
+    store.stays.set(r.id, { lines: d.lines, balance: d.balance, openItems: d.openItems ?? { orders: [], laundry: [] }, documents: d.documents })
+    if (drawerId === spaceId) renderDrawer()
+  } catch { /* the drawer shows the booking without the bill */ }
 }
 function closeDrawer() {
   drawerId = null
@@ -670,7 +684,8 @@ if (api && me && liveAdapter) {
   }))
   const sep = document.createElement('div'); sep.className = 'menu-sep'
   $('#user-menu').append(sep, pw, out)
-  fd = new FrontDesk(api, store, me, () => renderSide())
+  fd = new FrontDesk(api, store, me, () => { renderSide(); if (drawerId) void loadStay(drawerId) })
+  store.stayAllowed = true
   const outbox = new Outbox(api)
   fnb = new FnbWorkspace(api, me, outbox, () => store.reservations.filter((r) => r.status === 'in-house').map((r) => ({ id: r.id, guest: r.guest, roomNo: r.roomNo ?? null })), () => renderSide())
   // The map's drawer offers "Food orders" at places that are food places and "Serve food here" at the rest.

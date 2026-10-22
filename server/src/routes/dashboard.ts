@@ -24,7 +24,9 @@ export function dashboardRoutes(app: FastifyInstance, ctx: Ctx) {
               (select count(*)::int from reservation p where p.guest_id = r.guest_id and p.status = 'checked_out' and p.id <> r.id) as past_stays,
               (select coalesce(round(avg(amount_paise)), 0)::bigint from room_night rn where rn.reservation_id = r.id) as rate_paise,
               (select coalesce(sum(l.amount_paise), 0)::bigint from folio_line l join folio f on f.id = l.folio_id where f.reservation_id = r.id) as balance_paise,
-              (select id from folio f where f.reservation_id = r.id order by created_at limit 1) as folio_id
+              (select id from folio f where f.reservation_id = r.id order by created_at limit 1) as folio_id,
+              (select count(*)::int from fnb_order o where o.reservation_id = r.id and o.status in ('open', 'billed'))
+                + (select count(*)::int from laundry_order l where l.reservation_id = r.id and l.status = 'picked_up') as open_items
          from reservation r join guest g on g.id = r.guest_id left join space s on s.id = r.space_id
         where r.departure >= $1 and r.arrival <= $2 and r.status <> 'cancelled'
         order by r.arrival`, [q.from, q.to])

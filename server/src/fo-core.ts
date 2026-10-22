@@ -73,3 +73,28 @@ export async function applyDiscount(db: Db, reservationId: string, percent: numb
   }
   return nights.length
 }
+
+/** What a guest still has open besides the room bill: orders not yet charged to the room, laundry not yet delivered. */
+export interface OpenStayItems {
+  orders: { id: string; number: number; outlet: string; kind: string; status: string; subtotal_paise: number; sent_items: number; pending_items: number; opened_at: string }[]
+  laundry: { id: string; items: { name: string; qty: number }[]; express: boolean; total_paise: number; picked_at: string }[]
+}
+export async function openStayItems(db: Db, reservationId: string): Promise<OpenStayItems> {
+  const orders = await db.query<OpenStayItems['orders'][number]>(
+    `select o.id, o.number, ot.name as outlet, o.kind, o.status, o.opened_at,
+            coalesce((select sum(i.price_paise * i.qty) from order_item i where i.order_id = o.id and i.status <> 'void'), 0)::bigint as subtotal_paise,
+            (select count(*)::int from order_item i where i.order_id = o.id and i.status = 'sent') as sent_items,
+            (select count(*)::int from order_item i where i.order_id = o.id and i.status = 'pending') as pending_items
+       from fnb_order o join outlet ot on ot.id = o.outlet_id
+      where o.reservation_id = $1 and o.status in ('open', 'billed') order by o.opened_at`, [reservationId])
+  const laundry = await db.query<OpenStayItems['laundry'][number]>(
+    `select id, items, express, total_paise, picked_at from laundry_order where reservation_id = $1 and status = 'picked_up' order by picked_at`, [reservationId])
+  return { orders: orders.map((o) => ({ ...o, subtotal_paise: Number(o.subtotal_paise) })), laundry: laundry.map((l) => ({ ...l, total_paise: Number(l.total_paise) })) }
+}
+/** One line per open item, for a refusal message. */
+export function describeOpenItems(items: OpenStayItems) {
+  return [
+    ...items.orders.map((o) => `${o.outlet} order ${o.number} (₹${(o.subtotal_paise / 100).toFixed(0)}) is not on the room bill`),
+    ...items.laundry.map((l) => `laundry (${l.items.reduce((a, i) => a + i.qty, 0)} items) is not delivered`),
+  ]
+}

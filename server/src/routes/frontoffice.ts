@@ -6,6 +6,7 @@ import { can, HttpError, type Caller, type Ctx } from '../context'
 import type { Db } from '../db'
 import {
   applyDiscount, businessDate, folioBalance, freeByNight, LODGING, nightsOf, PROPERTY, rateFor, reservationBalance,
+  describeOpenItems, openStayItems,
 } from '../fo-core'
 import { createApproval } from './approvals'
 import { issueReceiptVoucher, issueRefundVoucher, issueStayInvoice } from '../invoicing'
@@ -252,7 +253,8 @@ export function frontOfficeRoutes(app: FastifyInstance, ctx: Ctx) {
     const documents = await db.query(`select id, doc_type, number, issue_date::text, total_paise from tax_document where reservation_id = $1 order by issued_at, number`, [id])
     const [more] = await db.query(`select r.source, r.ota_ref, r.eta, r.requests, r.cancel_reason, r.checked_in_at, r.checked_out_at, s.room_no, t.name as room_type
                                      from reservation r left join space s on s.id = r.space_id join room_type t on t.id = r.room_type_id where r.id = $1`, [id])
-    return { ...r, ...more, guest, nights, folios, lines, balance: await reservationBalance(db, id), formC: formC ?? null, onlineCheckin: online ?? null, paymentLinks, documents }
+    return { ...r, ...more, guest, nights, folios, lines, balance: await reservationBalance(db, id), formC: formC ?? null, onlineCheckin: online ?? null, paymentLinks, documents,
+      openItems: r.status === 'in_house' ? await openStayItems(db, id) : { orders: [], laundry: [] } }
   })
 
   app.post('/api/reservations/:id/assign-room', async (req) => {
@@ -377,6 +379,11 @@ export function frontOfficeRoutes(app: FastifyInstance, ctx: Ctx) {
     return db.tx(async (t) => {
       const r = await loadReservation(t, id, true)
       if (r.status !== 'in_house') throw new HttpError(409, `Reservation is ${r.status}.`)
+      // Nothing may be left behind: every order and every piece of laundry goes on the room bill first.
+      const openItems = await openStayItems(t, id)
+      if (openItems.orders.length || openItems.laundry.length) {
+        throw new HttpError(409, `Not yet: ${describeOpenItems(openItems).join('; ')}. Put them on the room bill first.`, { openItems })
+      }
       const today = await businessDate(t)
       // Leaving on the day they arrived (day use): the first night is charged now, as at the night audit.
       const [{ posted }] = await t.query<{ posted: number }>('select count(*)::int as posted from room_night where reservation_id = $1 and posted_line_id is not null', [id])
@@ -400,6 +407,52 @@ export function frontOfficeRoutes(app: FastifyInstance, ctx: Ctx) {
         after: { early: released.length > 0, releasedNights: released.map((n) => n.night), invoice: invoice?.number ?? null } }, now())
       return { ok: true, releasedNights: released.map((n) => n.night), invoice }
     })
+  })
+
+  /**
+   * Before check-out: everything the guest still has open goes on the room bill. An order with food sent is
+   * billed and charged to the room (items never sent are dropped); an order with nothing sent is cancelled;
+   * laundry is delivered and charged. Each step runs as the desk would, so every rule and audit entry applies.
+   */
+  app.post('/api/reservations/:id/settle-items', async (req) => {
+    const who = await frontDesk(ctx, req)
+    const { id } = req.params as { id: string }
+    const r = await loadReservation(db, id)
+    if (r.status !== 'in_house') throw new HttpError(409, `Reservation is ${r.status}.`)
+    const headers = { authorization: req.headers.authorization ?? '', 'content-type': 'application/json' }
+    const call = async (url: string, payload: unknown = {}) => {
+      const res = await app.inject({ method: 'POST', url, headers, payload: payload as object })
+      const body = res.json() as Record<string, unknown>
+      if (res.statusCode >= 300) throw new HttpError(res.statusCode, String(body.error ?? 'Could not settle.'))
+      return body
+    }
+    const items = await openStayItems(db, id)
+    const done: string[] = []
+    for (const o of items.orders) {
+      if (!o.sent_items) {
+        await db.tx(async (t) => {
+          await t.query(`update order_item set status = 'void', void_reason = 'Order cancelled at check-out', voided_by = $2, voided_at = $3 where order_id = $1 and status = 'pending'`, [o.id, who.userId, now()])
+          await t.query(`update fnb_bill set status = 'void' where order_id = $1 and status = 'open'`, [o.id])
+          await t.query(`update fnb_order set status = 'cancelled', closed_at = $2 where id = $1`, [o.id, now()])
+          await appendAudit(t, { actor: who, action: 'order.cancel', entity: { type: 'fnb_order', id: o.id }, after: { number: o.number }, note: 'Nothing sent to the kitchen; cancelled at check-out' }, now())
+        })
+        done.push(`${o.outlet} order ${o.number}: cancelled (nothing was sent to the kitchen)`)
+        continue
+      }
+      if (o.pending_items) {
+        await db.tx((t) => t.query(`update order_item set status = 'void', void_reason = 'Not sent before check-out', voided_by = $2, voided_at = $3 where order_id = $1 and status = 'pending'`, [o.id, who.userId, now()]))
+      }
+      let bills = (await db.query<{ id: string }>(`select id from fnb_bill where order_id = $1 and status = 'open' order by part`, [o.id]))
+      if (!bills.length) bills = ((await call(`/api/fnb/orders/${o.id}/bill`, {})) as { bills: { id: string }[] }).bills
+      for (const b of bills) await call(`/api/fnb/bills/${b.id}/settle`, { payments: [{ method: 'room', amount: 1 }], reservationId: id })
+      done.push(`${o.outlet} order ${o.number}: charged to the room`)
+    }
+    for (const l of items.laundry) {
+      const out = (await call(`/api/laundry/orders/${l.id}/deliver`)) as { chargedPaise: number }
+      done.push(`Laundry: delivered and ₹${(out.chargedPaise / 100).toFixed(0)} charged`)
+    }
+    await appendAudit(db, { actor: who, action: 'reservation.settle_items', entity: { type: 'reservation', id }, after: { done } }, now())
+    return { done, balance: await reservationBalance(db, id), openItems: await openStayItems(db, id) }
   })
 
   // ---------- folio charges, reversals, payments ----------

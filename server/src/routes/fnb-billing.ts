@@ -121,9 +121,10 @@ export function fnbBillingRoutes(app: FastifyInstance, ctx: Ctx) {
   const db = ctx.db
   const now = () => ctx.now()
 
-  async function biller(req: FastifyRequest) {
+  // The front desk may make a bill and charge it to a room (settling a guest's orders at check-out), nothing more.
+  async function biller(req: FastifyRequest, deskMayToo = true) {
     const who = await requireCaller(ctx, req)
-    if (!can(who, 'fnb.bill')) throw new HttpError(403, 'Your role cannot bill restaurant orders.')
+    if (!can(who, 'fnb.bill') && !(deskMayToo && can(who, 'front_desk'))) throw new HttpError(403, 'Your role cannot bill restaurant orders.')
     return who
   }
 
@@ -243,7 +244,7 @@ export function fnbBillingRoutes(app: FastifyInstance, ctx: Ctx) {
   })
 
   app.post('/api/fnb/orders/:id/unbill', async (req) => {
-    const who = await biller(req)
+    const who = await biller(req, false)
     const { id } = req.params as { id: string }
     return db.tx(async (t) => {
       const o = await orderFor(t, id)
@@ -279,6 +280,7 @@ export function fnbBillingRoutes(app: FastifyInstance, ctx: Ctx) {
     }
     const toRoom = b.payments.some((p) => p.method === 'room')
     if (toRoom && b.payments.length > 1) throw new HttpError(400, 'Charge the whole bill to the room, or take payment for all of it.')
+    if (!toRoom && !can(who, 'fnb.bill')) throw new HttpError(403, 'The front desk can charge a bill to a room; taking payment for it is for the restaurant.')
 
     const result = await db.tx(async (t): Promise<{ blocked: string } | Record<string, unknown>> => {
       const [bill] = await t.query<BillRow>('select * from fnb_bill where id = $1 for update', [id])

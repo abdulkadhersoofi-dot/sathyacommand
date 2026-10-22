@@ -3,9 +3,10 @@ import type { Reservation } from '../data/types'
 import { fmtDay, fmtTime, inr, setToday, todayKey } from '../data/dates'
 import type { Api } from '../live/api'
 import type { Me } from '../live/signin'
-import { esc, showDate, statusPill, toast, tonePill } from './dom'
+import { esc, showDate, toast, tonePill } from './dom'
 import { checked, FormModal, val } from './form-modal'
-import { toolbar as tb } from './toolbar'
+import { steps, toolbar as tb, type Action, type Step } from './toolbar'
+import { billHtml, openCount, openItemsHtml, type OpenItems } from './stay'
 
 /** Where a booking came from; an OTA booking needs the OTA's booking ID to match its payout. */
 const SOURCES: Record<string, string> = { direct: 'Direct', phone: 'Phone', walk_in: 'Walk-in', website: 'Website', travel_agent: 'Travel agent', corporate: 'Corporate', booking_com: 'Booking.com', makemytrip: 'MakeMyTrip', goibibo: 'Goibibo', agoda: 'Agoda', expedia: 'Expedia', airbnb: 'Airbnb', cleartrip: 'Cleartrip', yatra: 'Yatra', easemytrip: 'EaseMyTrip' }
@@ -26,6 +27,8 @@ interface Detail {
   lines: { id: string; kind: string; description: string; amount_paise: number; business_date: string; reverses: string | null; ref: string | null }[]
   balance: number
   documents: { id: string; doc_type: string; number: string; issue_date: string; total_paise: number }[]
+  /** Orders not yet on the room bill and laundry not yet delivered: check-out waits for them. */
+  openItems: OpenItems
   formC: { due_at: string; submitted_at: string | null; reference: string | null } | null
 }
 interface Found { id: string; status: string; guest: string; mobile: string | null; room_no: string | null; arrival: string; departure: string; source: string; ota_ref: string | null }
@@ -47,6 +50,8 @@ interface Cashier { open: boolean; cashTaken?: number; expectedInDrawer?: number
 const can = (me: Me, p: string) => me.permissions.includes('*') || me.permissions.includes(p)
 const rs = (p: number) => inr(Math.round(p / 100))
 
+const initials = (name: string) => name.split(/\s+/).filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase() || '?'
+
 /** 1st, 2nd, 3rd, 4th… */
 const ordinal = (n: number) => { const v = n % 100; return `${n}${['th', 'st', 'nd', 'rd'][(v - 20) % 10] ?? ['th', 'st', 'nd', 'rd'][v] ?? 'th'}` }
 
@@ -64,6 +69,7 @@ export class FrontDesk {
   }
 
   // ---------- desk panel ----------
+  /** The day in four tiles, then every guest as a card with a coloured band: arriving, leaving, staying. */
   html(): string {
     const s = this.store
     const today = todayKey()
@@ -71,6 +77,7 @@ export class FrontDesk {
     const arrivals = res.filter((r) => r.arrival === today && r.status !== 'cancelled').sort((a, b) => (a.eta ?? '').localeCompare(b.eta ?? ''))
     const inHouse = res.filter((r) => r.status === 'in-house')
     const departures = inHouse.filter((r) => r.departure <= today)
+    const staying = inHouse.filter((r) => r.departure > today).sort((a, b) => a.departure.localeCompare(b.departure))
     const c = this.cashier
     const desk = can(this.me, 'front_desk')
     const toolbar = tb({
@@ -79,23 +86,46 @@ export class FrontDesk {
         c.open ? { attrs: 'data-fd="close-shift"', label: `Close my shift · ${rs(c.expectedInDrawer ?? 0)} in drawer` } : { attrs: 'data-fd="open-shift"', label: 'Open my cashier shift' },
         ...(can(this.me, 'night_audit') ? [{ attrs: 'data-fd="night-audit"', label: 'Close the day' }] : []),
       ],
-    }) + `<div class="fd-date">Business date <b>${fmtDay(today)}</b>${c.open ? ' · shift open' : ''}</div>`
-    const card = (r: Reservation, actions: string) => `<div class="row-card" ${r.spaceId ? `data-focus="${esc(r.spaceId)}"` : ''}>
-      <div class="rc-title">${r.vip ? '<span class="vip">VIP</span> ' : ''}${esc(r.guest)}</div>
-      <div class="rc-sub">${r.roomNo ? `Room ${esc(r.roomNo)}` : 'No room yet'} · ${r.pax} pax${r.company ? ` · ${esc(r.company)}` : ''}${r.balance > 0 ? ` · <b>due ${rs(r.balance * 100)}</b>` : r.balance < 0 ? ` · paid ${rs(-r.balance * 100)} ahead` : ''}
-        ${r.pastStays ? ` · <span class="fd-tag ok">Returning guest · ${ordinal(r.pastStays + 1)} stay</span>` : ''}${r.onlineCheckin ? ' · <span class="fd-tag ok">Checked in online</span>' : ''}${r.payBy ? ` · <span class="fd-tag warn">Deposit due by ${new Date(r.payBy).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>` : ''}${r.otaRef ? ` · <span class="fd-tag">${esc(SOURCES[r.source] ?? r.source)} ${esc(r.otaRef)}</span>` : ''}</div>
-      <div class="rc-right">${actions}${desk ? `<button class="btn small ghost" data-fd="open" data-res="${esc(r.id)}" type="button">Open</button>` : ''}</div></div>`
-    const btn = (act: string, id: string, label: string, primary = false) => desk ? `<button class="btn small${primary ? ' primary' : ''}" data-fd="${act}" data-res="${esc(id)}" type="button">${label}</button>` : ''
-    return toolbar + `
-      <div class="sec-title">Arrivals <span>${arrivals.length}</span></div>
-      ${arrivals.length ? arrivals.map((r) => card(r, r.status === 'confirmed'
-        ? `${statusPill('arriving')}<span class="mono">ETA ${r.eta ?? '—'}</span>${btn('checkin', r.id, 'Check in', true)}`
-        : r.status === 'checked-out' ? `${tonePill('Checked out', '--st-ooo')}<span class="mono">${fmtTime(r.checkOutAt)}</span>`
-        : `${statusPill('occupied').replace('In-house', 'Checked in')}<span class="mono">${fmtTime(r.checkInAt)}</span>`)).join('') : '<div class="empty">No arrivals today.</div>'}
-      <div class="sec-title">Due out <span>${departures.length}</span></div>
-      ${departures.length ? departures.map((r) => card(r, `${statusPill('departing')}${btn('pay', r.id, 'Payment')}${btn('checkout', r.id, 'Check out', true)}`)).join('') : '<div class="empty">No departures due.</div>'}
-      <div class="sec-title">In-house <span>${inHouse.length}</span></div>
-      ${inHouse.length ? inHouse.filter((r) => r.departure > today).map((r) => card(r, `<span class="mono">until ${fmtDay(r.departure, { day: 'numeric', month: 'short' })}</span>${btn('pay', r.id, 'Payment')}${btn('checkout', r.id, 'Check out')}`)).join('') : '<div class="empty">Nobody in-house.</div>'}`
+    })
+    const toCome = arrivals.filter((r) => r.status === 'confirmed').length
+    const toSettle = departures.filter((r) => r.balance > 0 || (r.openItems ?? 0) > 0).length
+    const ready = s.lodging.filter((sp) => s.state(sp.id).status === 'vacant' && (!s.hk[sp.id] || s.hk[sp.id] === 'clean' || s.hk[sp.id] === 'inspected')).length
+    const tile = (to: string, label: string, n: number, sub: string, tone: string) => `<button type="button" class="fd-tile" data-fd="jump" data-to="${to}" style="--tone: var(--${tone})"><b>${n}</b><span>${label}</span><small>${esc(sub)}</small></button>`
+    const tiles = `<div class="fd-tiles">
+      ${tile('arrivals', 'Arrivals', arrivals.length, toCome ? `${toCome} still to come` : arrivals.length ? 'all in' : 'none today', 'marigold')}
+      ${tile('dueout', 'Due out', departures.length, toSettle ? `${toSettle} to settle` : departures.length ? 'all settled' : 'none today', 'st-departing')}
+      ${tile('inhouse', 'In-house', staying.length, `${staying.reduce((a, r) => a + r.pax, 0)} guests staying on`, 'st-occupied')}
+      ${tile('ready', 'Rooms ready', ready, `of ${s.lodging.length}`, 'st-vacant')}</div>
+      <div class="fd-date">Hotel day <b>${fmtDay(today)}</b>${c.open ? ' · your shift is open' : desk ? ' · <span class="fd-warn">no cashier shift open</span>' : ''}</div>`
+    const tag = (text: string, tone = '') => `<span class="fd-tag ${tone}">${text}</span>`
+    const money = (r: Reservation) => r.balance > 0 ? tag(`${rs(r.balance * 100)} due`, 'bad') : r.balance < 0 ? tag(`${rs(-r.balance * 100)} paid ahead`, 'ok') : r.status === 'in-house' ? tag('Settled', 'ok') : ''
+    const common = (r: Reservation) => [
+      r.openItems ? tag(`${r.openItems} open bill${r.openItems > 1 ? 's' : ''}`, 'warn') : '',
+      r.company ? tag(esc(r.company)) : '', r.pastStays ? tag(`${ordinal(r.pastStays + 1)} stay`, 'ok') : '',
+      r.onlineCheckin ? tag('Checked in online', 'ok') : '', r.otaRef ? tag(`${esc(SOURCES[r.source] ?? r.source)} ${esc(r.otaRef)}`) : '',
+      r.payBy ? tag(`Deposit by ${new Date(r.payBy).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`, 'warn') : '',
+    ]
+    const card = (r: Reservation, band: string, tags: string[], action: string) => `<div class="fd-guest band-${band}" ${r.spaceId ? `data-focus="${esc(r.spaceId)}"` : ''}>
+      <div class="fd-avatar">${esc(initials(r.guest))}</div>
+      <div class="fd-main"><div class="fd-name">${r.vip ? '<span class="vip">VIP</span> ' : ''}${esc(r.guest)}</div><div class="fd-tags">${tags.filter(Boolean).join('')}</div></div>
+      <div class="fd-roomno">${r.roomNo ? `<b>${esc(r.roomNo)}</b><small>room</small>` : '<b>—</b><small>no room</small>'}</div>
+      <div class="fd-act">${action}</div></div>`
+    const btn = (act: string, id: string, label: string, primary = false) => desk ? `<button class="btn small${primary ? ' primary' : ' ghost'}" data-fd="${act}" data-res="${esc(r(id))}" type="button">${label}</button>` : ''
+    const r = (id: string) => id
+    const nightsOf = (x: Reservation) => Math.max(1, Math.round((+new Date(x.departure) - +new Date(x.arrival)) / 864e5))
+    const sec = (id: string, label: string, n: number, body: string) => `<div class="sec-title" id="fd-sec-${id}">${label} <span>${n}</span></div>${body}`
+    return toolbar + tiles
+      + sec('arrivals', 'Arrivals', arrivals.length, arrivals.length ? arrivals.map((x) => x.status === 'confirmed'
+        ? card(x, 'arriving', [tag(`ETA ${x.eta ?? '—'}`), tag(`${nightsOf(x)} night${nightsOf(x) > 1 ? 's' : ''} · ${x.pax} pax`), money(x), ...common(x)], btn('checkin', x.id, 'Check in', true) + btn('open', x.id, 'Open'))
+        : x.status === 'checked-out' ? card(x, 'done', [tag(`Checked out ${fmtTime(x.checkOutAt)}`)], btn('open', x.id, 'Open'))
+        : card(x, 'occupied', [tag(`In at ${fmtTime(x.checkInAt)}`, 'ok'), tag(`${nightsOf(x)} night${nightsOf(x) > 1 ? 's' : ''} · ${x.pax} pax`), money(x), ...common(x)], btn('open', x.id, 'Open'))).join('')
+        : '<div class="empty">No arrivals today.</div>')
+      + sec('dueout', 'Due out', departures.length, departures.length ? departures.map((x) =>
+        card(x, 'departing', [tag(x.departure < today ? `Was due ${fmtDay(x.departure, { day: 'numeric', month: 'short' })}` : 'Leaving today', x.departure < today ? 'bad' : ''), money(x), ...common(x)], btn('open', x.id, (x.openItems ?? 0) > 0 || x.balance > 0 ? 'Settle & check out' : 'Check out', true))).join('')
+        : '<div class="empty">No departures due.</div>')
+      + sec('inhouse', 'In-house', staying.length, staying.length ? staying.map((x) =>
+        card(x, 'occupied', [tag(`Until ${fmtDay(x.departure, { day: 'numeric', month: 'short' })}`), tag(`${x.pax} pax`), money(x), ...common(x)], btn('open', x.id, 'Open'))).join('')
+        : '<div class="empty">Nobody staying on.</div>')
   }
 
   /** Handles a click on any [data-fd] button. Returns true if it was ours. */
@@ -106,6 +136,7 @@ export class FrontDesk {
     if (act === 'book') void this.newBooking()
     if (act === 'find') void this.findBooking()
     if (act === 'open') void this.openBooking(id)
+    if (act === 'jump') document.getElementById(`fd-sec-${el.dataset.to}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     if (act === 'checkin') void this.checkIn(id)
     if (act === 'pay') void this.payment(id)
     if (act === 'checkout') void this.checkOut(id)
@@ -224,7 +255,7 @@ export class FrontDesk {
     void run()
   }
 
-  /** The whole booking on one screen: the stay, the bill so far, receipts and invoices, and what can be done next. */
+  /** The whole booking as a page: who and where, the steps of the stay, the toolbar, what is still open, the bill, the invoices. */
   async openBooking(id: string) {
     const d = await this.detail(id)
     const today = todayKey()
@@ -232,47 +263,64 @@ export class FrontDesk {
     const charges = d.lines.filter((l) => l.amount_paise > 0 || l.kind === 'reversal').reduce((a, l) => a + Number(l.amount_paise), 0)
     const paid = d.lines.filter((l) => l.kind === 'payment' || l.kind === 'refund').reduce((a, l) => a - Number(l.amount_paise), 0)
     const nights = d.nights.filter((n) => !n.released || n.posted_line_id).length
-    const reversed = new Set(d.lines.map((l) => l.reverses).filter(Boolean))
     const open = d.status === 'confirmed' || d.status === 'in_house'
-    const act = (a: string, label: string, primary = false) => `<button type="button" class="btn small${primary ? ' primary' : ''}" data-bk="${a}">${label}</button>`
-    const actions = d.status === 'confirmed'
-      ? [d.arrival === today ? act('checkin', 'Check in', true) : '', act('pay', 'Take advance'), act('room', d.space_id ? 'Change room' : 'Assign room'), act('bed', 'Extra bed'), act('discount', 'Discount'), act('cancel', 'Cancel booking')]
+    const desk = can(this.me, 'front_desk')
+    const openN = openCount(d.openItems)
+    const gone = d.status === 'cancelled' || d.status === 'no_show'
+    // The stay's steps: booked → checked in → everything on the bill and settled → checked out.
+    const settled = d.status === 'checked_out' || (d.status === 'in_house' && !openN && d.balance <= 0)
+    const flow: Step[] = gone ? [] : [
+      { label: 'Booked', state: 'done' },
+      d.status === 'confirmed' ? { label: 'Checked in', state: d.arrival === today && desk ? 'now' : 'todo', attrs: 'data-bk="checkin"', title: d.arrival === today ? 'Assign the room and record the ID' : `Arrives ${showDate(d.arrival)}` } : { label: 'Checked in', state: 'done' },
+      settled ? { label: 'Bill settled', state: 'done' } : { label: 'Bill settled', state: d.status === 'in_house' ? 'now' : 'todo', attrs: openN ? 'data-bk="settle-items"' : 'data-bk="pay"', title: openN ? 'Put the open orders and laundry on the room bill' : 'Take the balance' },
+      d.status === 'checked_out' ? { label: 'Checked out', state: 'done' } : { label: 'Checked out', state: 'todo' },
+    ]
+    const primary: Action[] = !desk ? [] : d.status === 'confirmed'
+      ? [...(d.arrival === today ? [{ attrs: 'data-bk="checkin"', label: 'Check in' }] : []), { attrs: 'data-bk="pay"', label: 'Take an advance', primary: false }]
       : d.status === 'in_house'
-        ? [act('checkout', 'Check out', true), act('pay', 'Payment'), act('charge', 'Add a charge'), act('room', 'Move room'), act('bed', 'Extra bed'), act('discount', 'Discount')]
+        ? [{ attrs: 'data-bk="checkout"', label: 'Check out', disabled: openN > 0, title: openN ? 'Put the open orders and laundry on the room bill first' : 'Issue the invoice and free the room' }, { attrs: 'data-bk="pay"', label: 'Payment', primary: false }]
         : []
+    const more: Action[] = !desk || !open ? [] : [
+      ...(d.status === 'in_house' ? [{ attrs: 'data-bk="charge"', label: 'Add a charge' }] : []),
+      { attrs: 'data-bk="room"', label: d.space_id ? (d.status === 'in_house' ? 'Move room' : 'Change room') : 'Assign a room' },
+      { attrs: 'data-bk="bed"', label: 'Extra bed' }, { attrs: 'data-bk="discount"', label: 'Discount' },
+      ...(d.formC && !d.formC.submitted_at ? [{ attrs: 'data-bk="formc"', label: 'Record Form C filed' }] : []),
+      ...(d.status === 'confirmed' ? [{ attrs: 'data-bk="cancel"', label: 'Cancel the booking', danger: true }] : []),
+    ]
     const balanceLine = d.balance > 0 ? `<b class="fd-warn">Due now ${rs(d.balance)}</b>` : d.balance < 0 ? `<b>Paid in advance ${rs(-d.balance)}</b>` : 'Nothing due right now'
-    const form = this.open(`${d.guest.vip ? 'VIP · ' : ''}${d.guest.name}`, `
-      <p class="muted">${esc(d.id)} · ${esc(STATUS_NAMES[d.status] ?? d.status)}${d.guest.mobile ? ` · ${esc(d.guest.mobile)}` : ''}${d.cancel_reason ? ` · ${esc(d.cancel_reason)}` : ''}</p>
-      <dl class="kv">
-        <dt>Stay</dt><dd>${esc(showDate(d.arrival))} → ${esc(showDate(d.departure))} · ${nights} night${nights === 1 ? '' : 's'}</dd>
-        <dt>Room</dt><dd>${d.room_no ? `Room ${esc(d.room_no)} · ` : 'Not assigned · '}${esc(d.room_type)} · ${esc(PLANS[d.rate_plan_code] ?? d.rate_plan_code)}</dd>
-        <dt>Guests</dt><dd>${d.adults} adult${d.adults === 1 ? '' : 's'}${d.children ? `, ${d.children} child${d.children === 1 ? '' : 'ren'}` : ''}</dd>
-        <dt>Booked through</dt><dd>${esc(SOURCES[d.source] ?? d.source)}${d.ota_ref ? ` · ${esc(d.ota_ref)}` : ''}</dd>
-        ${d.bill_to_company ? `<dt>Bill to</dt><dd>${esc(d.bill_to_company)}</dd>` : ''}
-        ${d.eta ? `<dt>Arriving</dt><dd>${esc(d.eta)}</dd>` : ''}
-      </dl>
-      <div class="sec-title">Bill</div>
-      ${d.lines.length ? `<div class="fd-bill">${d.lines.map((l) => `<div class="fd-line${reversed.has(l.id) || l.kind === 'reversal' ? ' struck' : ''}">
-          <span>${esc(showDate(l.business_date))}</span><span>${esc(l.description)}${l.ref ? ` <span class="muted small">${esc(l.ref)}</span>` : ''}</span>
-          <span class="num">${l.amount_paise < 0 ? '−' : ''}${rs(Math.abs(Number(l.amount_paise)))}</span>
-          ${open && can(this.me, 'folio.reverse') && !['payment', 'refund', 'reversal'].includes(l.kind) && !reversed.has(l.id) ? `<button type="button" class="btn small ghost" data-bk="reverse" data-line="${esc(l.id)}" title="Reverse this charge">Reverse</button>` : '<span></span>'}</div>`).join('')}</div>`
-        : '<p class="muted small">Nothing charged or paid yet. Room nights are charged each night when the day closes.</p>'}
-      <dl class="kv"><dt>Charged so far</dt><dd>${rs(charges)}</dd><dt>Paid</dt><dd>${rs(paid)}</dd>
-        ${open && pending ? `<dt>Still to be charged</dt><dd>about ${rs(pending)} with GST</dd>` : ''}<dt>Balance</dt><dd>${balanceLine}</dd></dl>
+    const statusTone: Record<string, string> = { confirmed: '--marigold', in_house: '--st-occupied', checked_out: '--muted', cancelled: '--st-departing', no_show: '--st-departing' }
+    this.open('Booking', `
+      <div class="bk-head">
+        <div class="fd-avatar big">${esc(initials(d.guest.name))}</div>
+        <div class="bk-who"><div class="bk-name">${d.guest.vip ? '<span class="vip">VIP</span> ' : ''}${esc(d.guest.name)} ${tonePill(STATUS_NAMES[d.status] ?? d.status, statusTone[d.status] ?? '--muted')}</div>
+          <div class="muted small">${esc(d.id)}${d.guest.mobile ? ` · ${esc(d.guest.mobile)}` : ''} · ${esc(SOURCES[d.source] ?? d.source)}${d.ota_ref ? ` ${esc(d.ota_ref)}` : ''}${d.bill_to_company ? ` · bill to ${esc(d.bill_to_company)}` : ''}${d.cancel_reason ? ` · ${esc(d.cancel_reason)}` : ''}</div>
+          <div class="bk-facts">${esc(showDate(d.arrival))} → ${esc(showDate(d.departure))} · ${nights} night${nights === 1 ? '' : 's'} · ${d.adults} adult${d.adults === 1 ? '' : 's'}${d.children ? `, ${d.children} child${d.children === 1 ? '' : 'ren'}` : ''} · ${esc(d.room_type)} · ${esc(PLANS[d.rate_plan_code] ?? d.rate_plan_code)}${d.eta && d.status === 'confirmed' ? ` · arriving ${esc(d.eta)}` : ''}</div></div>
+        <div class="fd-roomno big">${d.room_no ? `<b>${esc(d.room_no)}</b><small>room</small>` : '<b>—</b><small>no room</small>'}</div>
+      </div>
+      ${flow.length ? steps(flow) : ''}
+      ${tb({ primary, more })}
+      ${openN ? `<div class="sec-title bk-open">Before check-out <span>${openN} open</span></div>
+        <div class="fd-bill">${openItemsHtml(d.openItems)}</div>
+        <p class="small">These are not on the room bill yet. ${desk ? `<button type="button" class="btn primary small" data-bk="settle-items">Put them on the room bill</button>` : ''} <span class="muted">An order with food sent is billed and charged to the room; laundry is delivered and charged; an order with nothing sent is cancelled.</span></p>` : ''}
+      <div class="sec-title">Bill <span>${rs(charges)} charged · ${rs(paid)} paid</span></div>
+      ${billHtml(d.lines, { reverse: open && can(this.me, 'folio.reverse') ? (l) => `<button type="button" class="btn small ghost" data-bk="reverse" data-line="${esc(l.id)}" title="Reverse this charge">Reverse</button>` : undefined })}
+      <dl class="kv bk-totals">${open && pending ? `<dt>Still to be charged</dt><dd>about ${rs(pending)} with GST</dd>` : ''}<dt>Balance</dt><dd>${balanceLine}</dd></dl>
       ${d.documents.length ? `<div class="sec-title">Invoices and receipts</div>${d.documents.map((x) => `<div class="fd-line"><span>${esc(showDate(x.issue_date))}</span><span>${esc(DOC_NAMES[x.doc_type] ?? x.doc_type)} ${esc(x.number)}</span><span class="num">${rs(Number(x.total_paise))}</span>
         <button type="button" class="btn small" data-bk="print" data-doc="${esc(x.id)}">Print</button></div>`).join('')}` : ''}
       ${d.formC ? `<div class="sec-title">Form C (foreign national)</div>${d.formC.submitted_at
         ? `<p class="small">Filed on the FRRO portal · reference ${esc(d.formC.reference)}</p>`
-        : `<p class="small ${new Date(d.formC.due_at) < new Date() ? 'fd-warn' : ''}">To be filed on the FRRO portal by ${esc(new Date(d.formC.due_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }))}. ${act('formc', 'Record Form C filed')}</p>`}` : ''}
-      ${actions.length ? `<div class="fd-actions">${actions.join('')}</div>` : ''}`, 'Done', async () => '')
+        : `<p class="small ${new Date(d.formC.due_at) < new Date() ? 'fd-warn' : ''}">To be filed on the FRRO portal by ${esc(new Date(d.formC.due_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }))}.</p>`}` : ''}`, 'Done', async () => '')
+    const form = this.modal.el.querySelector('form')!
+    form.closest('.fd-card')?.classList.add('bk-page')
     form.addEventListener('click', (e) => {
       const b = (e.target as HTMLElement).closest<HTMLElement>('[data-bk]')
-      if (!b) return
+      if (!b || b.hasAttribute('disabled')) return
       const a = b.dataset.bk
       if (a === 'print') { void this.api.openDocument(`/api/tax-documents/${b.dataset.doc}/print`); return }
       if (a === 'checkin') void this.checkIn(id)
       if (a === 'checkout') void this.checkOut(id)
       if (a === 'pay') void this.payment(id)
+      if (a === 'settle-items') void this.settleItems(d)
       if (a === 'charge') void this.addCharge(d)
       if (a === 'room') void this.changeRoom(d)
       if (a === 'bed') void this.extraBed(d)
@@ -281,6 +329,18 @@ export class FrontDesk {
       if (a === 'reverse') void this.reverse(d, b.dataset.line!)
       if (a === 'formc') void this.formC(d)
     })
+  }
+
+  /** Everything the guest still has open goes on the room bill, then the booking shows again with Check out lit. */
+  async settleItems(d: Detail) {
+    const n = openCount(d.openItems)
+    this.open(`Put ${n} open item${n > 1 ? 's' : ''} on the room bill · ${d.guest.name}`, `
+      <div class="fd-bill">${openItemsHtml(d.openItems)}</div>
+      <p class="muted small">An order with food sent to the kitchen is billed and charged to the room (items never sent are dropped). An order with nothing sent is cancelled. Laundry is marked delivered and charged. All of it goes on the one tax invoice at check-out.</p>`,
+      'Put them on the room bill', async () => {
+        const out = await this.api.post<{ done: string[]; balance: number }>(`/api/reservations/${d.id}/settle-items`)
+        return this.done(d.id, out.done.join(' · '))
+      })
   }
 
   /** After an action on an open booking: refresh, say what happened, and show the booking again. */
@@ -393,6 +453,7 @@ export class FrontDesk {
   async checkOut(id: string) {
     const r = await this.find(id)
     const d = await this.detail(id)
+    if (openCount(d.openItems)) { toast('Put the open orders and laundry on the room bill first.'); void this.openBooking(id); return }
     const today = todayKey()
     const early = d.departure > today
     // Leaving on the day they arrived: tonight's room is charged at check-out.
@@ -402,8 +463,8 @@ export class FrontDesk {
       <p>${d.room_no ? `Room ${esc(d.room_no)} · ` : ''}${fmtDay(d.arrival)} → ${fmtDay(d.departure)}</p>
       ${early && !dayUse ? `<p class="fd-warn">Leaving early: nights from ${fmtDay(today)} are released and not charged.</p>` : ''}
       ${dayUse ? '<p class="fd-warn">Day use: today\'s room charge is added now.</p>' : ''}
-      <div class="fd-bill">${d.lines.map((l) => `<div class="fd-line"><span>${esc(showDate(l.business_date))}</span><span>${esc(l.description)}</span><span class="num">${l.amount_paise < 0 ? '−' : ''}${rs(Math.abs(Number(l.amount_paise)))}</span><span></span></div>`).join('')}
-        ${dayUse ? `<div class="fd-line"><span>${esc(showDate(today))}</span><span>Room (day use), with GST</span><span class="num">about ${rs(toCharge(d, true))}</span><span></span></div>` : ''}</div>
+      ${billHtml(d.lines, { compact: true })}
+      ${dayUse ? `<div class="fd-bill"><div class="fd-line"><span>${esc(showDate(today))}</span><span>Room (day use), with GST</span><span class="num">about ${rs(toCharge(d, true))}</span><span></span></div></div>` : ''}
       <dl class="kv"><dt>${due > 0 ? 'To pay now' : due < 0 ? 'To refund' : 'Balance'}</dt><dd><b>${due ? rs(Math.abs(due)) : 'nil, settled'}</b></dd></dl>
       ${due > 0 ? `<div class="form-grid">
         <label>Paid by<select name="method"><option value="upi">UPI</option><option value="card">Card</option><option value="cash">Cash</option><option value="bank">Bank transfer</option><option value="company">Company account</option></select></label>

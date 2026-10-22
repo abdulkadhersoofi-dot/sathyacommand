@@ -1,5 +1,6 @@
 import type { HmsAdapter } from './adapters/HmsAdapter'
 import type { DomainEvent, EventBooking, HkStatus, Order, Reservation, Space } from './types'
+import type { StayDetail } from '../ui/stay'
 import { addDays, todayKey } from './dates'
 
 export type RoomStatus = 'vacant' | 'dirty' | 'arriving' | 'occupied' | 'departing' | 'ooo'
@@ -29,6 +30,10 @@ export class Store {
   spaceById = new Map<string, Space>()
   reservations: Reservation[] = []
   events: EventBooking[] = []
+  /** A guest's bill and open items (by reservation id), fetched when their room's drawer opens. */
+  stays = new Map<string, StayDetail>()
+  /** Whether this login may see guests' bills (front desk). */
+  stayAllowed = false
   /** Food places by the map place they are at (app space id → outlet), for the drawer's actions. */
   foodPlaces = new Map<string, { id: string; name: string }>()
   orders: Order[] = []

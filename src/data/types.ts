@@ -42,6 +42,8 @@ export interface Reservation {
   roomTypeId?: string
   serverSpaceId?: string | null
   company?: string | null
+  /** Orders not yet on the room bill and laundry not yet delivered: check-out waits for them. */
+  openItems?: number
   /** Filled in by the guest before arrival (Phase 7). */
   onlineCheckin?: boolean
   /** A website booking waiting for its deposit until then. */

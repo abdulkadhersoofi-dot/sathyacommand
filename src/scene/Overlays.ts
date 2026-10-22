@@ -299,6 +299,12 @@ export class Overlays {
         const p = o.kind === 'room' ? this.rooms.anchor(o.origin)?.add(new THREE.Vector3(0, 3.2, 0)) : this.outletTop(o.origin)
         if (p) seen.set(o.origin, { p, late: lateNow, origin: o.origin })
       }
+      // A guest leaving today with an order or laundry still open: red above the room, so the lobby screen sees it.
+      for (const r of store.reservations) {
+        if (r.status !== 'in-house' || r.departure > store.date || !r.openItems || !r.spaceId || seen.has(r.spaceId)) continue
+        const p = this.rooms.anchor(r.spaceId)?.add(new THREE.Vector3(0, 3.2, 0))
+        if (p) seen.set(r.spaceId, { p, late: true, origin: r.spaceId })
+      }
       this.markerTargets = [...seen.values()]
     }
     this.markers.count = this.markerTargets.filter((m) => !m.late).length

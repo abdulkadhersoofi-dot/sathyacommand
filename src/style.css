@@ -1071,3 +1071,42 @@ button.link { background: none; border: 0; padding: 0; color: var(--accent); fon
 .bk-summary { margin-bottom: 12px; }
 .bk-line { padding: 6px 0; border-bottom: 1px dashed var(--line); font-size: 13.5px; }
 .fd-card.bk-card { width: 640px; }
+
+/* ---------- the front desk: the day in tiles, guests as cards, the booking as a page ---------- */
+.fd-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 10px 0 6px; }
+.fd-tile { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 9px 10px 8px; border-radius: 12px; border: 1px solid var(--line); border-top: 4px solid var(--tone, var(--accent)); background: var(--surface); text-align: left; cursor: pointer; min-width: 0; }
+.fd-tile:hover { border-color: var(--tone, var(--accent)); }
+.fd-tile b { font: 800 22px/1.1 var(--f-display); color: var(--fg); }
+.fd-tile span { font-size: 12px; font-weight: 700; color: var(--fg); }
+.fd-tile small { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.fd-guest { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 4px 10px; align-items: center; padding: 9px 10px 9px 12px; margin-bottom: 7px; border: 1px solid var(--line); border-left: 5px solid var(--band, var(--line)); border-radius: var(--r); background: var(--surface); cursor: pointer; }
+.fd-guest:hover { border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); border-left-color: var(--band, var(--line)); }
+.fd-guest.band-arriving { --band: var(--marigold); }
+.fd-guest.band-occupied { --band: var(--st-occupied); }
+.fd-guest.band-departing { --band: var(--st-departing); }
+.fd-guest.band-done { --band: var(--muted); opacity: .8; }
+.fd-avatar { width: 34px; height: 34px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font: 800 12.5px var(--f-display); color: var(--accent-fg); background: var(--band, var(--accent)); flex: none; }
+.fd-avatar.big { width: 44px; height: 44px; font-size: 15px; background: var(--accent); }
+.fd-main { min-width: 0; }
+.fd-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fd-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.fd-tag.bad { background: color-mix(in srgb, var(--st-departing) 20%, transparent); color: var(--st-departing); }
+.fd-roomno { display: flex; flex-direction: column; align-items: center; line-height: 1; min-width: 44px; }
+.fd-roomno b { font: 800 20px var(--f-display); }
+.fd-roomno small { font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.fd-roomno.big b { font-size: 30px; }
+.fd-act { display: flex; flex-direction: column; gap: 4px; align-items: stretch; }
+.fd-act .btn { white-space: nowrap; }
+.fd-card.bk-page { width: 720px; }
+.bk-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; margin-bottom: 4px; }
+.bk-name { font: 700 18px/1.2 var(--f-display); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.bk-facts { font-size: 13px; margin-top: 4px; }
+.bk-page .steps { margin: 10px 0 8px; }
+.bk-page .tb { margin-bottom: 4px; }
+.bk-open { color: var(--st-departing); }
+.stay-group { margin-bottom: 8px; }
+.stay-group-head { display: flex; justify-content: space-between; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 6px 0 2px; border-bottom: 1px solid var(--line); }
+.stay-group-head .num { font-family: var(--f-mono); letter-spacing: 0; text-transform: none; font-size: 12px; color: var(--fg); }
+.fd-line.compact { padding: 3px 0; font-size: 12.5px; }
+.bk-totals { margin-top: 6px; }
+@media (max-width: 820px) { .fd-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .fd-guest { grid-template-columns: auto minmax(0, 1fr) auto; } .fd-act { grid-column: 1 / -1; flex-direction: row; justify-content: flex-end; } .bk-head { grid-template-columns: auto minmax(0, 1fr); } .fd-roomno.big { grid-column: 2; justify-self: start; flex-direction: row; gap: 6px; align-items: baseline; } }
