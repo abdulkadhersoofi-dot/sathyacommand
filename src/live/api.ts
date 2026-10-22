@@ -27,8 +27,20 @@ export class Api {
     return h
   }
 
+  /** How long a request may take before the screen gives up on it (Render waking from sleep takes up to ~30 s). */
+  timeoutMs = 25_000
+
   async req<T = unknown>(method: string, path: string, body?: unknown, extraHeaders?: Record<string, string>): Promise<T> {
-    const res = await fetch(this.base + path, { method, headers: this.headers(body !== undefined, extraHeaders), body: body === undefined ? undefined : JSON.stringify(body) })
+    // A request that never answers must not leave a screen waiting for ever.
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), this.timeoutMs)
+    let res: Response
+    try {
+      res = await fetch(this.base + path, { method, headers: this.headers(body !== undefined, extraHeaders), body: body === undefined ? undefined : JSON.stringify(body), signal: ctrl.signal })
+    } catch (e) {
+      if (ctrl.signal.aborted) throw new ApiError(0, 'The server did not answer in time. Check the connection, wait a moment and try again.', { timeout: true })
+      throw new TypeError('No connection to the HMS. Check the internet connection and try again.')
+    } finally { clearTimeout(timer) }
     const text = await res.text()
     const data = text && res.headers.get('content-type')?.includes('json') ? JSON.parse(text) : text
     if (!res.ok) {
@@ -90,7 +102,7 @@ export class Api {
 }
 
 /** The server could not be reached at all (Wi-Fi down, server restarting), as opposed to it refusing the request. */
-export const isNetworkError = (e: unknown) => e instanceof TypeError || (e instanceof ApiError && [502, 503, 504].includes(e.status) && !e.body.error)
+export const isNetworkError = (e: unknown) => e instanceof TypeError || (e instanceof ApiError && (e.status === 0 || ([502, 503, 504].includes(e.status) && !e.body.error)))
 
 /** True when an HMS server answers at `base` (the app then runs on live data instead of the sample). */
 export async function serverAvailable(base: string): Promise<boolean> {

@@ -1,3 +1,4 @@
+import { steps, toolbar, type Action, type Step } from '../ui/toolbar'
 import { esc, toast, tonePill, showDate } from '../ui/dom'
 import { checked, val } from '../ui/form-modal'
 import { money } from '../acc/books'
@@ -71,13 +72,15 @@ export class EventsView {
     const pipeline = this.rows.filter((r) => ['enquiry', 'quoted', 'hold'].includes(r.status)).reduce((a, r) => a + r.quotePaise, 0)
     const lost = this.rows.filter((r) => r.status === 'lost')
     const won = this.rows.filter((r) => ['definite', 'billed', 'closed'].includes(r.status))
-    return `<div class="ws-toolbar">${FILTERS.map(([id, label]) => `<button type="button" class="chip" data-evf="${id}" aria-pressed="${id === this.filter}">${esc(label)}</button>`).join('')}
-        ${this.h.can('events.manage') ? '<button type="button" class="btn primary" data-evact="book">Book an event</button><button type="button" class="btn" data-evact="new">New enquiry</button>' : ''}</div>
+    return `${toolbar({
+      primary: this.h.can('events.manage') ? [{ attrs: 'data-evact="book"', label: 'Book an event' }, { attrs: 'data-evact="new"', label: 'New enquiry', primary: false }] : [],
+      filters: FILTERS.map(([id, label]) => `<button type="button" class="chip" data-evf="${id}" aria-pressed="${id === this.filter}">${esc(label)}</button>`).join(''),
+    })}
       <div class="row-card mc-card"><div class="mc-figs"><span><small>Open pipeline</small><b class="mono">${money(pipeline)}</b></span><span><small>Won</small><b class="mono">${won.length}</b></span>
         <span><small>Lost</small><b class="mono">${lost.length}</b></span><span><small>Conversion</small><b class="mono">${won.length + lost.length ? Math.round((won.length * 100) / (won.length + lost.length)) : 0}%</b></span></div></div>
       ${rows.map((r) => `<div class="row-card bq-row" data-ev="${esc(r.id)}" role="button" tabindex="0">
         <div class="rc-title"><span class="mono muted">${esc(r.number)}</span> ${esc(r.title)}</div>
-        <div class="rc-sub">${esc(r.company ?? r.client)} · ${r.date ? esc(r.date === r.lastDate || !r.lastDate ? r.date : `${r.date} to ${r.lastDate}`) : 'no date yet'}${r.venues.length ? ` · ${esc(r.venues.join(', '))}` : ''}${r.pax ? ` · ${r.pax} guests` : ''}${r.owner ? ` · ${esc(r.owner)}` : ''}
+        <div class="rc-sub">${esc(r.company ?? r.client)} · ${r.date ? esc(r.date === r.lastDate || !r.lastDate ? showDate(r.date) : `${showDate(r.date)} to ${showDate(r.lastDate)}`) : 'no date yet'}${r.venues.length ? ` · ${esc(r.venues.join(', '))}` : ''}${r.pax ? ` · ${r.pax} guests` : ''}${r.owner ? ` · ${esc(r.owner)}` : ''}
           ${r.status === 'lost' && r.lostReason ? ` · lost: ${esc(r.lostReason)}` : ''}</div>
         <div class="rc-right">${pill(r.status)}${r.status === 'hold' && r.holdUntil ? `<small class="muted">until ${esc(showDate(r.holdUntil))}</small>` : ''}
           ${r.quotePaise ? `<small class="mono">${money(r.billedPaise ?? r.quotePaise)}${r.paidPaise ? ` · paid ${money(r.paidPaise)}` : ''}</small>` : ''}
@@ -88,22 +91,43 @@ export class EventsView {
     const manage = this.h.can('events.manage'), pay = this.h.can('events.payment'), bill = this.h.can('events.bill')
     const live = ['enquiry', 'quoted', 'hold'].includes(d.status), editable = live || d.status === 'definite'
     const accepted = d.quotes.find((q) => q.status === 'accepted')
-    const btn = (a: string, label: string, primary = false) => `<button type="button" class="btn${primary ? ' primary' : ''}" data-evact="${a}">${esc(label)}</button>`
-    const actions = [
-      manage && editable ? btn('client', 'Client details') : '',
-      manage && editable ? btn('fn', 'Add function') : '', manage && editable ? btn('item', 'Add item') : '',
-      manage && live ? btn('quote', d.quotes.length ? 'New quote' : 'Issue quote', !d.quotes.length) : '',
-      manage && (d.status === 'enquiry' || d.status === 'quoted') ? btn('hold', 'Hold dates') : '', manage && d.status === 'hold' ? btn('release', 'Release hold') : '',
-      manage && live && accepted ? btn('contract', 'Contract signed', true) : '',
-      manage && d.status === 'definite' ? btn('beo', d.beo.revisions.length ? 'Send revised event order' : 'Send event order (BEO)', !d.beo.revisions.length || d.beo.changed) : '',
-      manage && editable ? btn('instructions', 'Department instructions') : '',
-      manage && editable ? btn('vendor', 'Add supplier') : '', manage && editable && this.h.can('sales.manage') ? btn('block', 'Hold rooms for guests') : '',
-      manage && !['closed', 'lost', 'cancelled'].includes(d.status) ? btn('follow', 'Follow-up') : '',
-      pay && ['enquiry', 'quoted', 'hold', 'definite', 'billed'].includes(d.status) ? btn('pay', 'Payment') : '',
-      bill && d.status === 'definite' ? btn('served', 'Guests served') : '', bill && d.status === 'definite' ? btn('bill', 'Final bill', true) : '',
-      (manage || bill) && d.status === 'billed' ? btn('feedback', 'Feedback & close') : '',
-      manage && live ? btn('lost', 'Lost') : '', manage && (live || d.status === 'definite') ? btn('cancel', 'Cancel event') : '',
-    ].join('')
+    // The event's steps in the order they happen; the current one is the button to press.
+    const issued = d.quotes.find((q) => q.status === 'issued')
+    const gone = ['lost', 'cancelled'].includes(d.status)
+    const signed = ['definite', 'billed', 'closed'].includes(d.status)
+    const served = d.functions.length > 0 && d.functions.every((f) => !f.menu || f.actualPax != null)
+    const beoSent = d.beo.revisions.length > 0
+    const st = (done: boolean, nowIf: boolean, label: string, attrs?: string, title?: string): Step =>
+      ({ label, state: done ? 'done' : nowIf && attrs ? 'now' : 'todo', attrs: nowIf ? attrs : undefined, title })
+    const flow: Step[] = gone ? [] : [
+      { label: 'Enquiry', state: 'done' },
+      st(d.quotes.length > 0, manage && live, d.quotes.length ? 'Quoted' : 'Quote', 'data-evact="quote"', 'Price the functions and send the quote'),
+      st(!!accepted, manage && !!issued, 'Client accepts', issued ? `data-qaccept="${esc(issued.id)}"` : undefined, 'The client agreed to the quote'),
+      st(signed, manage && live && !!accepted, 'Contract signed', 'data-evact="contract"', 'The event becomes definite and its venues are booked'),
+      st(d.paidPaise > 0, pay && signed && d.status !== 'closed', 'Advance', 'data-evact="pay"', 'Advances are receipted with GST'),
+      st(beoSent, manage && d.status === 'definite', 'Event order', 'data-evact="beo"', 'Tells every department what to do'),
+      st(served, bill && d.status === 'definite' && beoSent, 'Guests served', 'data-evact="served"', 'Entered on the day, for the bill'),
+      st(!!d.invoice, bill && d.status === 'definite' && served, 'Final bill', 'data-evact="bill"', 'The tax invoice, after the event'),
+      st(d.status === 'closed', (manage || bill) && d.status === 'billed', 'Closed', 'data-evact="feedback"', 'Feedback and close'),
+    ]
+    const more: Action[] = [
+      manage && editable ? { attrs: 'data-evact="client"', label: 'Client details' } : null,
+      manage && editable ? { attrs: 'data-evact="fn"', label: 'Add a function' } : null,
+      manage && editable ? { attrs: 'data-evact="item"', label: 'Add an item' } : null,
+      manage && d.quotes.length && live ? { attrs: 'data-evact="quote"', label: 'New quote' } : null,
+      manage && (d.status === 'enquiry' || d.status === 'quoted') ? { attrs: 'data-evact="hold"', label: 'Hold the dates' } : null,
+      manage && d.status === 'hold' ? { attrs: 'data-evact="release"', label: 'Release the hold' } : null,
+      manage && editable ? { attrs: 'data-evact="instructions"', label: 'Department instructions' } : null,
+      manage && editable ? { attrs: 'data-evact="vendor"', label: 'Add a supplier' } : null,
+      manage && editable && this.h.can('sales.manage') ? { attrs: 'data-evact="block"', label: 'Hold rooms for guests' } : null,
+      manage && !gone && d.status !== 'closed' ? { attrs: 'data-evact="follow"', label: 'Follow-up' } : null,
+      manage && live ? { attrs: 'data-evact="lost"', label: 'Lost to another venue', danger: true } : null,
+      manage && (live || d.status === 'definite') ? { attrs: 'data-evact="cancel"', label: 'Cancel the event', danger: true } : null,
+    ].filter((x): x is Action => !!x)
+    const primary: Action[] = [
+      pay && !gone && d.status !== 'closed' && d.paidPaise > 0 ? { attrs: 'data-evact="pay"', label: d.invoice ? 'Take the balance' : 'Take a payment' } : null,
+      manage && d.status === 'definite' && beoSent && d.beo.changed ? { attrs: 'data-evact="beo"', label: 'Send revised event order' } : null,
+    ].filter((x): x is Action => !!x)
     const fnRows = d.functions.map((f) => `<tr><td><b>${esc(f.name)}</b>${f.clashes.length ? `<div class="${f.clashes.some((c) => c.firm) ? 'fd-warn' : 'muted'} small">${f.clashes.map((c) => `${c.firm ? 'Clashes with' : 'Also pencilled'}: ${esc(c.title)} (${esc(STATUS_LABEL[c.status])})`).join('<br>')}</div>` : ''}</td>
         <td>${esc(f.venue)}</td><td>${esc(showDate(f.date))} <span class="mono">${esc(f.from)}–${esc(f.to)}</span></td><td>${esc(STYLE_LABEL[f.style] ?? f.style)}${f.capacity ? ` <small class="muted">(seats ${f.capacity})</small>` : ''}</td>
         <td class="n">${f.expectedPax}${f.guaranteedPax ? ` / <b>${f.guaranteedPax}</b>` : ''}${f.actualPax != null ? ` / served ${f.actualPax}` : ''}</td><td>${esc(f.menu ?? '—')}</td><td class="n">${money(f.rentalPaise)}</td>
@@ -111,7 +135,7 @@ export class EventsView {
     const itemRows = d.items.map((i) => `<tr><td>${esc(i.description)}${i.functionId ? ` <small class="muted">${esc(d.functions.find((f) => f.id === i.functionId)?.name ?? '')}</small>` : ''}</td><td class="n">${i.qty}</td><td class="n">${money(i.ratePaise)}</td>
         <td>${esc({ hall: 'Venue', catering: 'Food', other: 'Services' }[i.gstKind] ?? i.gstKind)}</td><td>${manage && live ? `<button type="button" class="btn small ghost" data-itdel="${esc(i.id)}">Remove</button>` : ''}</td></tr>`).join('')
     const lastBeo = d.beo.revisions[0]
-    return `<div class="ws-toolbar"><button type="button" class="btn ghost" data-evact="back">← All events</button></div>
+    return `<div class="tb"><button type="button" class="btn ghost" data-evact="back">← All events</button></div>
       <div class="bq-head"><div><div class="muted mono small">${esc(d.number)} · ${esc(KINDS.find((k) => k[0] === d.kind)?.[1] ?? d.kind)}</div><h2>${esc(d.title)}</h2>
         <div class="small">${esc(d.client.name)}${d.client.company ? `, ${esc(d.client.company)}` : ''}${d.client.mobile ? ` · <a href="tel:${esc(d.client.mobile)}">${esc(d.client.mobile)}</a>` : ''}${d.client.email ? ` · ${esc(d.client.email)}` : ''}${d.client.gstin ? ` · GSTIN <span class="mono">${esc(d.client.gstin)}</span>` : ''}</div>
         ${d.account ? `<div class="small">Account: <b>${esc(d.account.name)}</b></div>` : ''}
@@ -120,7 +144,8 @@ export class EventsView {
       ${d.lostReason ? `<p class="fd-warn">Lost: ${esc(d.lostReason)}${d.lostTo ? ` (to ${esc(d.lostTo)})` : ''}</p>` : ''}${d.cancelReason ? `<p class="fd-warn">Cancelled: ${esc(d.cancelReason)}</p>` : ''}
       ${d.feedback ? `<p>Feedback: <b>${'★'.repeat(d.feedback.score)}${'☆'.repeat(5 - d.feedback.score)}</b> ${esc(d.feedback.note ?? '')}</p>` : ''}
       ${d.notes ? `<p class="small">${esc(d.notes)}</p>` : ''}
-      <div class="ws-toolbar bq-actions">${actions}</div>
+      ${flow.length ? steps(flow) : ''}
+      ${toolbar({ primary, more })}
 
       <div class="sec-title">Functions</div>
       <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Function</th><th>Venue</th><th>When</th><th>Setup</th><th class="n">Guests (expected / guaranteed)</th><th>Menu</th><th class="n">Rental</th><th></th></tr></thead>

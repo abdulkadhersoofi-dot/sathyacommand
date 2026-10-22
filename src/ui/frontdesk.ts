@@ -5,6 +5,7 @@ import type { Api } from '../live/api'
 import type { Me } from '../live/signin'
 import { esc, showDate, statusPill, toast, tonePill } from './dom'
 import { checked, FormModal, val } from './form-modal'
+import { toolbar as tb } from './toolbar'
 
 /** Where a booking came from; an OTA booking needs the OTA's booking ID to match its payout. */
 const SOURCES: Record<string, string> = { direct: 'Direct', phone: 'Phone', walk_in: 'Walk-in', website: 'Website', travel_agent: 'Travel agent', corporate: 'Corporate', booking_com: 'Booking.com', makemytrip: 'MakeMyTrip', goibibo: 'Goibibo', agoda: 'Agoda', expedia: 'Expedia', airbnb: 'Airbnb', cleartrip: 'Cleartrip', yatra: 'Yatra', easemytrip: 'EaseMyTrip' }
@@ -72,13 +73,13 @@ export class FrontDesk {
     const departures = inHouse.filter((r) => r.departure <= today)
     const c = this.cashier
     const desk = can(this.me, 'front_desk')
-    const toolbar = `<div class="fd-toolbar">
-      ${desk ? '<button class="btn primary" data-fd="book" type="button">New booking</button>' : ''}
-      ${desk ? '<button class="btn" data-fd="find" type="button">Find a booking</button>' : ''}
-      ${c.open ? `<button class="btn" data-fd="close-shift" type="button">Close shift · ${rs(c.expectedInDrawer ?? 0)} in drawer</button>` : `<button class="btn" data-fd="open-shift" type="button">Open cashier shift</button>`}
-      ${can(this.me, 'night_audit') ? '<button class="btn" data-fd="night-audit" type="button">Close the day</button>' : ''}
-    </div>
-    <div class="fd-date">Business date <b>${fmtDay(today)}</b></div>`
+    const toolbar = tb({
+      primary: desk ? [{ attrs: 'data-fd="book"', label: 'New booking' }, { attrs: 'data-fd="find"', label: 'Find a booking', primary: false }] : [],
+      more: [
+        c.open ? { attrs: 'data-fd="close-shift"', label: `Close my shift · ${rs(c.expectedInDrawer ?? 0)} in drawer` } : { attrs: 'data-fd="open-shift"', label: 'Open my cashier shift' },
+        ...(can(this.me, 'night_audit') ? [{ attrs: 'data-fd="night-audit"', label: 'Close the day' }] : []),
+      ],
+    }) + `<div class="fd-date">Business date <b>${fmtDay(today)}</b>${c.open ? ' · shift open' : ''}</div>`
     const card = (r: Reservation, actions: string) => `<div class="row-card" ${r.spaceId ? `data-focus="${esc(r.spaceId)}"` : ''}>
       <div class="rc-title">${r.vip ? '<span class="vip">VIP</span> ' : ''}${esc(r.guest)}</div>
       <div class="rc-sub">${r.roomNo ? `Room ${esc(r.roomNo)}` : 'No room yet'} · ${r.pax} pax${r.company ? ` · ${esc(r.company)}` : ''}${r.balance > 0 ? ` · <b>due ${rs(r.balance * 100)}</b>` : r.balance < 0 ? ` · paid ${rs(-r.balance * 100)} ahead` : ''}

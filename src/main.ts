@@ -5,6 +5,7 @@ import { Api, serverAvailable } from './live/api'
 import { signIn, type Me } from './live/signin'
 import { FrontDesk } from './ui/frontdesk'
 import { Approvals } from './ui/approvals'
+import { watchMenus } from './ui/toolbar'
 import { FnbWorkspace } from './fnb/workspace'
 import { HkWorkspace } from './hk/workspace'
 import { StaffWorkspace } from './staff/workspace'
@@ -25,7 +26,7 @@ import { World } from './scene/World'
 import { roleColour } from './scene/Overlays'
 import { Studio } from './studio/studio'
 import { defaultLayout, type SiteLayout } from './data/layout'
-import { $, toast } from './ui/dom'
+import { $, toast, esc } from './ui/dom'
 import { FormModal, val } from './ui/form-modal'
 import { showDemoGuide } from './ui/demo-guide'
 import { drawerHtml, tipHtml } from './ui/cards'
@@ -157,6 +158,7 @@ function renderSide() {
   const scroll = body.scrollTop
   body.innerHTML = fd && tab === 'arrivals' ? fd.html() : sideHtml(store, tab, fresh)
   body.scrollTop = scroll
+  markRail()
   fresh.clear()
   const k = store.kpis()
   const c = $('#kot-count')
@@ -355,6 +357,23 @@ async function checkEmergency() {
 }
 
 function hideWorkspaces() { for (const w of [fnb, hkWs, staffWs, engWs, secWs, invWs, accWs, bqWs, guestWs, hrWs, settingsWs]) if (w?.open) w.hide() }
+
+type Ws = { open: boolean; hide(): void; show(): Promise<void> }
+const railOf: [string, () => Ws | null][] = []
+/** A module button on the rail: opens its screen, closes the others, and shows which one is open. */
+function wire(id: string, ws: () => Ws) {
+  const btn = $(id)
+  btn.hidden = false
+  railOf.push([id, ws])
+  btn.addEventListener('click', () => { const w = ws(); if (w.open) w.hide(); else { hideWorkspaces(); void w.show() } markRail() })
+}
+/** The open module is marked on the rail; with none open, the map (or the front desk tab) is. */
+function markRail() {
+  let any = false
+  for (const [id, ws] of railOf) { const on = !!ws()?.open; any ||= on; document.querySelector(id)?.setAttribute('aria-current', String(on)) }
+  $('#btn-map').setAttribute('aria-current', String(!any && tab !== 'arrivals'))
+  $('#btn-frontdesk').setAttribute('aria-current', String(!any && tab === 'arrivals'))
+}
 
 // ---------- interactions ----------
 document.addEventListener('click', async (e) => {
@@ -573,16 +592,16 @@ if (api && me && liveAdapter) {
   badge.title = 'Connected to the Sathya HMS server'
   godBtn.hidden = !me.godMode
   const out = document.createElement('button')
-  out.className = 'icon-btn'
+  out.className = 'menu-row danger'
   out.type = 'button'
   out.textContent = 'Sign out'
   out.addEventListener('click', async () => { try { await api!.post('/auth/sign-out') } finally { api!.setToken(null); location.reload() } })
   // Changing one's own password; other devices are signed out.
   const pw = document.createElement('button')
-  pw.className = 'icon-btn'
+  pw.className = 'menu-row'
   pw.type = 'button'
   pw.id = 'btn-password'
-  pw.textContent = 'Password'
+  pw.textContent = 'Change password'
   pw.title = `Signed in as ${me.name}: change your password`
   const pwModal = new FormModal()
   pw.addEventListener('click', () => pwModal.open('Change your password', `<div class="form-grid"><label class="span2">Current password<input name="current" type="password" autocomplete="current-password" required></label>
@@ -593,17 +612,14 @@ if (api && me && liveAdapter) {
     await api!.post('/auth/password', { current: (f.elements.namedItem('current') as HTMLInputElement).value, next: (f.elements.namedItem('next') as HTMLInputElement).value })
     return 'Password changed'
   }))
-  document.querySelector('.topbar-actions')!.append(pw, out)
+  const sep = document.createElement('div'); sep.className = 'menu-sep'
+  $('#user-menu').append(sep, pw, out)
   fd = new FrontDesk(api, store, me, () => renderSide())
   const outbox = new Outbox(api)
   fnb = new FnbWorkspace(api, me, outbox, () => store.reservations.filter((r) => r.status === 'in-house').map((r) => ({ id: r.id, guest: r.guest, roomNo: r.roomNo ?? null })), () => renderSide())
   hkWs = new HkWorkspace(api, me, outbox, () => renderSide())
-  const hkBtn = $('#btn-hk')
-  hkBtn.hidden = !HkWorkspace.allowed(me)
-  hkBtn.addEventListener('click', () => { if (hkWs!.open) hkWs!.hide(); else { hideWorkspaces(); void hkWs!.show() } })
-  const fnbBtn = $('#btn-fnb')
-  fnbBtn.hidden = false
-  fnbBtn.addEventListener('click', () => { if (fnb!.open) fnb!.hide(); else { hideWorkspaces(); void fnb!.show() } })
+  if (HkWorkspace.allowed(me)) wire('#btn-hk', () => hkWs!)
+  wire('#btn-fnb', () => fnb!)
 
   // Staff app: everyone clocks in and out here; managers and security also see the team on the map.
   store.staffAllowed = me.permissions.includes('*') || me.permissions.includes('staff.track')
@@ -620,9 +636,7 @@ if (api && me && liveAdapter) {
       void loadStaff().then(() => { if (userId && !world.focusPin('staff', userId)) toast('The map has no position for this person yet.') })
     },
   }, () => renderSide())
-  const staffBtn = $('#btn-staff')
-  staffBtn.hidden = false
-  staffBtn.addEventListener('click', () => { if (staffWs!.open) staffWs!.hide(); else { hideWorkspaces(); void staffWs!.show() } })
+  wire('#btn-staff', () => staffWs!)
   // While on duty the phone shares its location: say so on every screen.
   const duty = document.createElement('button')
   duty.type = 'button'
@@ -638,65 +652,49 @@ if (api && me && liveAdapter) {
   // Engineering: anyone reports a fault; engineering sees assets and every open ticket on the map.
   store.engAllowed = me.permissions.includes('*') || me.permissions.includes('eng.work') || me.permissions.includes('eng.manage')
   engWs = new EngWorkspace(api, me, outbox, () => renderSide())
-  const engBtn = $('#btn-eng')
-  engBtn.hidden = false
-  engBtn.addEventListener('click', () => { if (engWs!.open) engWs!.hide(); else { hideWorkspaces(); void engWs!.show() } })
+  wire('#btn-eng', () => engWs!)
 
   // Security: guards and managers get the full workspace and map layer; everyone can report an incident and answer a roll-call.
   store.secAllowed = ['*', 'security.gate', 'security.view'].some((x) => me!.permissions.includes(x))
   secWs = new SecurityWorkspace(api, me, outbox, () => renderSide())
-  const secBtn = $('#btn-sec')
-  secBtn.hidden = false
-  secBtn.addEventListener('click', () => { if (secWs!.open) secWs!.hide(); else { hideWorkspaces(); void secWs!.show() } })
+  wire('#btn-sec', () => secWs!)
   void checkEmergency()
 
   // Stores & purchase: stores, accounts and managers.
   if (InventoryWorkspace.allowed(me)) {
     invWs = new InventoryWorkspace(api, me, outbox, () => renderSide())
-    const invBtn = $('#btn-inv')
-    invBtn.hidden = false
-    invBtn.addEventListener('click', () => { if (invWs!.open) invWs!.hide(); else { hideWorkspaces(); void invWs!.show() } })
+    wire('#btn-inv', () => invWs!)
   }
   // Accounts: accounts, the GM, the MD and the auditor.
   if (AccountsWorkspace.allowed(me)) {
     accWs = new AccountsWorkspace(api, me, outbox, () => renderSide())
-    const accBtn = $('#btn-acc')
-    accBtn.hidden = false
-    accBtn.addEventListener('click', () => { if (accWs!.open) accWs!.hide(); else { hideWorkspaces(); void accWs!.show() } })
+    wire('#btn-acc', () => accWs!)
   }
   // Banquets: sales, the GM and the MD; departments read their event orders here.
   if (BanquetsWorkspace.allowed(me)) {
     bqWs = new BanquetsWorkspace(api, me, outbox, () => renderSide())
-    const bqBtn = $('#btn-bq')
-    bqBtn.hidden = false
-    bqBtn.addEventListener('click', () => { if (bqWs!.open) bqWs!.hide(); else { hideWorkspaces(); void bqWs!.show() } })
+    wire('#btn-bq', () => bqWs!)
   }
   // Guests: requests from rooms, messages, feedback, activities (front office, housekeeping, F&B, managers).
   if (GuestsWorkspace.allowed(me)) {
     guestWs = new GuestsWorkspace(api, me, outbox, () => renderSide())
-    const gBtn = $('#btn-guests')
-    gBtn.hidden = false
-    gBtn.addEventListener('click', () => { if (guestWs!.open) guestWs!.hide(); else { hideWorkspaces(); void guestWs!.show() } })
+    wire('#btn-guests', () => guestWs!)
   }
   // People: HR, the GM and department heads (leave approval).
   if (PeopleWorkspace.allowed(me)) {
     hrWs = new PeopleWorkspace(api, me, outbox, () => renderSide())
-    const hBtn = $('#btn-hr')
-    hBtn.hidden = false
-    hBtn.addEventListener('click', () => { if (hrWs!.open) hrWs!.hide(); else { hideWorkspaces(); void hrWs!.show() } })
+    wire('#btn-hr', () => hrWs!)
   }
   // Settings: the resort profile and the getting-started checklist (MD).
   if (SettingsWorkspace.allowed(me)) {
     settingsWs = new SettingsWorkspace(api, me, outbox, () => renderSide())
-    const sBtn = $('#btn-settings')
-    sBtn.hidden = false
-    sBtn.addEventListener('click', () => { if (settingsWs!.open) settingsWs!.hide(); else { hideWorkspaces(); void settingsWs!.show() } })
+    wire('#btn-settings', () => settingsWs!)
     void setupBanner()
     window.addEventListener('sathya:setup-changed', () => void setupBanner())
   }
   // The approval inbox: shows itself when something waits for this person (or for someone else on their behalf).
   approvals = new Approvals(api, $('#btn-approvals') as HTMLButtonElement)
-  addModulesMenu()
+  $('#btn-frontdesk').hidden = !fd
   setTab('arrivals')
 }
 
@@ -769,39 +767,19 @@ async function setupBanner() {
   } catch { /* the checklist is a convenience: never block the app */ }
 }
 
-/** One labelled menu of every module this person can open: the top-bar icons alone are easy to miss. */
-function addModulesMenu() {
-  const btn = document.createElement('button')
-  btn.className = 'icon-btn modules-btn'
-  btn.type = 'button'
-  btn.setAttribute('aria-haspopup', 'menu')
-  btn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg><b>Modules</b>'
-  const menu = document.createElement('div')
-  menu.className = 'modules-menu'
-  menu.setAttribute('role', 'menu')
-  menu.hidden = true
+// The rail's Map and Front desk entries, and the person's own menu (night, eco, password, sign out).
+$('#btn-map').addEventListener('click', () => { hideWorkspaces(); if (tab === 'arrivals') setTab('live'); $('#side').classList.remove('open'); markRail() })
+$('#btn-frontdesk').addEventListener('click', () => { hideWorkspaces(); setTab('arrivals'); $('#side').classList.add('open'); markRail() })
+{
+  const btn = $('#btn-user'), menu = $('#user-menu')
+  const name = me?.name ?? adapter.name
+  $('#user-avatar').textContent = name.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase()
+  $('#user-name').textContent = name
+  $('#menu-who').innerHTML = `<b>${esc(name)}</b>${me ? esc(me.roles.map((r) => r.replace(/_/g, ' ')).join(', ')) : 'Sample data'}`
   const close = () => { menu.hidden = true; btn.setAttribute('aria-expanded', 'false') }
-  btn.addEventListener('click', (e) => {
-    e.stopPropagation()
-    if (!menu.hidden) { close(); return }
-    const targets = [...document.querySelectorAll<HTMLElement>('.topbar-actions [id^="btn-"]:not([hidden]), #btn-studio:not([hidden])')]
-      .filter((b) => !['btn-night', 'btn-eco'].includes(b.id))
-    menu.innerHTML = targets.map((b) => {
-      const [name, what] = b.id === 'btn-god' ? ['God Mode', 'every change, approvals and alerts'] : (b.getAttribute('title') ?? b.textContent ?? '').split(/:\s*/)
-      return `<button type="button" role="menuitem" data-open="${b.id}"><b>${name}</b>${what ? `<small>${what}</small>` : ''}</button>`
-    }).join('')
-    menu.hidden = false
-    btn.setAttribute('aria-expanded', 'true')
-  })
-  menu.addEventListener('click', (e) => {
-    const id = (e.target as HTMLElement).closest<HTMLElement>('[data-open]')?.dataset.open
-    if (!id) return
-    close()
-    document.getElementById(id)?.click()
-  })
+  btn.addEventListener('click', (e) => { e.stopPropagation(); if (menu.hidden) { menu.hidden = false; btn.setAttribute('aria-expanded', 'true') } else close() })
   document.addEventListener('click', (e) => { if (!menu.hidden && !menu.contains(e.target as Node)) close() })
-  const bar = document.querySelector('.topbar-actions')!
-  bar.prepend(btn)
-  bar.appendChild(menu)
+  menu.addEventListener('click', (e) => { if ((e.target as HTMLElement).closest('.menu-row:not([role=menuitemcheckbox])')) close() })
 }
+watchMenus()
 store.load().then(renderAll).catch((err) => toast(`Couldn't load HMS data: ${err.message}`))

@@ -131,10 +131,12 @@ export abstract class Workspace<Tab extends string> implements WorkspaceHost {
     this.views[this.tab].mounted?.(body)
   }
 
+  /** One action at a time. While it runs a "Working…" mark shows, and a tap says so rather than vanishing. */
   protected async guard(fn: () => Promise<void>) {
-    if (this.busy) return
+    if (this.busy) { toast('Still working on the last action…'); return }
     this.busy = true
-    try { await fn() } catch (e) { toast((e as Error).message) } finally { this.busy = false }
+    const mark = setTimeout(() => this.el.classList.add('ws-busy'), 400)
+    try { await fn() } catch (e) { toast((e as Error).message) } finally { this.busy = false; clearTimeout(mark); this.el.classList.remove('ws-busy') }
   }
 
   private async onClick(e: MouseEvent) {
