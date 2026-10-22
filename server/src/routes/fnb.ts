@@ -40,7 +40,7 @@ async function nextCounter(t: Db, date: string, kind: string) {
 /** Refuses a liquor sale on a dry day, outside licensed hours, or before the hours are set. */
 export async function checkLiquorAllowed(ctx: Ctx, t: Db) {
   const [p] = await t.query<{ bar_open: string | null; bar_close: string | null }>('select bar_open, bar_close from property limit 1')
-  if (!p.bar_open || !p.bar_close) throw new HttpError(409, 'Set the licensed bar hours under Restaurant → Licences & tax → Bar licence hours before selling liquor.')
+  if (!p.bar_open || !p.bar_close) throw new HttpError(409, 'Set the licensed bar hours under Settings → Licences & tax → Bar licence hours before selling liquor.')
   const dry = (await t.query<{ day: string }>('select day::text from dry_day')).map((d) => d.day)
   const r = liquorSaleAllowed(ctx.tax, istLocal(ctx.now()), { open: p.bar_open, close: p.bar_close, dryDays: dry })
   if (!r.allowed) throw new HttpError(409, r.reason!)

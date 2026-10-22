@@ -233,10 +233,10 @@ export function fnbBillingRoutes(app: FastifyInstance, ctx: Ctx) {
       }
       // A bill with liquor is not made (or printed with a UPI QR) until the VAT set-up lets it be paid.
       const missing = [...new Set(bills.flatMap((x) => x.amounts.vatMissing))]
-      if (missing.length) throw new HttpError(409, `Set the TN VAT rate for ${missing.join(', ')} under Restaurant → Licences & tax first, then make the bill.`)
+      if (missing.length) throw new HttpError(409, `Set the TN VAT rate for ${missing.join(', ')} under Settings → Licences & tax first, then make the bill.`)
       if (bills.some((x) => x.amounts.liquor.length)) {
         const tin = (await licencesFor(t, 'vat_bill')).find((l) => l.kind === 'tn_vat')
-        if (!tin) throw new HttpError(409, 'Add the TN VAT registration (TIN) under Restaurant → Licences & tax first: every liquor bill prints it.')
+        if (!tin) throw new HttpError(409, 'Add the TN VAT registration (TIN) under Settings → Licences & tax first: every liquor bill prints it.')
       }
       return reply.status(201).send({ bills })
     })

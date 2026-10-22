@@ -50,3 +50,18 @@ Prompted by the MD's review of the live site on 22 October 2026: ordering food i
 ## What would help from you
 - The names of your food places and where each is: the cafeterias, the lawns that serve food, the pool. I will set them up as food places on the right spots once they exist (you can also add them yourself from the map after step 1).
 - The status of the Pavilion event you expected to see (enquiry, quoted, on hold or signed), so I can confirm step 3 covers it.
+
+## Status (22 Oct 2026)
+
+All six steps are done and on `main`.
+
+| Step | What changed |
+|---|---|
+| 1. Food places | Restaurant → Orders → **More ▾ → Add a food place** (also Menu → Food places, and **Serve food here…** on any lawn, hall, ground, the pool or the restaurant on the map). One form: name, where on the map, what it is (restaurant, café, bar, poolside, lawn or ground, room service, banquet), the menu it serves (its own or another place's), tables made at once (how many, seats, labels), liquor. A place can be closed for the day and reopened. The pool's counts sit on the pool deck. |
+| 2. One-screen ordering | Orders shows every place's tables on one page grouped by place, with a search for a table, room or guest; the place chips filter; room-service and takeaway orders below. **New order** asks only where. The order screen shows the whole menu with section headings; the chips jump, the search narrows. |
+| 3. Events on the map | Every function of the day on its venue in time order, the live one in bold; pencilled enquiries and quotes in grey dashes, holds in amber, signed bookings in marigold. The pandal, lights and crowd follow the live or next firm function. Tap a venue: each function with its status and **Open the event**, **Book this venue**, and the food action. |
+| 4. Booking | **Book an event** is one sheet in three steps: Who · Where and when · Confirm. The venue is checked as the fields change; a clash names who has it and when and offers the other venues of that size that are free, one tap each. Reached from Events, the venue calendar and the map. |
+| 5. Licences & tax | Under Settings → Licences & tax. Accounts, the bar manager and the F&B manager open Settings for that tab only. |
+| 6. Release | 438 tests (5 new for food places); the ordering, booking, map and settings walk-throughs on PGlite and PostgreSQL 16; desktop and phone screenshots. |
+
+Still needed from you: the names of your food places and where each one is, and the status of the Pavilion event you expected (an enquiry or quote now shows as pencilled; if it still does not show, send me its number).
