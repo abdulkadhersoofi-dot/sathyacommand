@@ -339,7 +339,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 }
 
 /* ---------- tablet / phone ---------- */
-@media (max-width: 1100px) { #app { grid-template-columns: minmax(0, 1fr) 320px; } }
+@media (max-width: 1100px) { #app { grid-template-columns: var(--rail-w) minmax(0, 1fr) 320px; } .notices { right: 320px; } }
 @media (max-width: 820px) {
   #app { --rail-w: 0px; --rail-h: calc(58px + env(safe-area-inset-bottom, 0px)); grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; padding-bottom: var(--rail-h); box-sizing: border-box; }
   .rail { position: fixed; left: 0; right: 0; bottom: 0; height: var(--rail-h); grid-row: auto; grid-column: auto; flex-direction: row; gap: 0; padding: 4px 4px calc(4px + env(safe-area-inset-bottom, 0px)); border-right: 0; border-top: 1px solid var(--line); overflow-x: auto; overflow-y: hidden; z-index: 12; }
@@ -832,8 +832,9 @@ button.link { background: none; border: 0; padding: 0; color: var(--accent); fon
 .row-card.bank-line .rc-right span { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
 @media (max-width: 600px) { .row-card.bank-line { grid-template-columns: 1fr; } .row-card.bank-line .rc-right { grid-row: auto; grid-column: 1; align-items: flex-start; } }
 /* Accounts has many books: its tabs wrap onto a second row rather than scroll out of sight. */
-.ws[aria-label="Accounts"] .ws-tabs { flex-wrap: wrap; overflow-x: visible; }
-@media (max-width: 700px) { .ws[aria-label="Accounts"] .ws-tabs { flex-wrap: nowrap; overflow-x: auto; } }
+/* Tab rows wrap on a desk so no tab is ever hidden off the edge; on a phone they scroll sideways. */
+.ws-tabs { flex-wrap: wrap; overflow-x: visible; }
+@media (max-width: 820px) { .ws-tabs { flex-wrap: nowrap; overflow-x: auto; } }
 
 /* Staff logins */
 .login-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 1.3fr) 190px 210px !important; }

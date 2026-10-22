@@ -50,3 +50,17 @@ Prompted by the MD's review of the live site on 22 October 2026. Work goes in th
 ## What would help from you
 - The names of the places where food is served: the cafeterias, lawns and any other outlet, and which building each is in on the map. I will add them as outlets and link them.
 - Whether the tour mode is for a lobby or office screen, so it fits that screen size.
+
+## Status (22 Oct 2026)
+
+All five steps are done and on `main`.
+
+| Step | What changed |
+|---|---|
+| 1. Bugs | Every request to the server gives up after 25 s with a plain message instead of leaving the screen stuck; a tap while the last action is still running says "Still working on the last action…" and the screen shows a moving line; no internet gives a one-line notice. |
+| 2. One frame | Top bar: brand · business date and clock · Approvals · God Mode · your name (menu: Night, Eco, Resort tour, Change password, Sign out). Module rail down the left (icons only on narrow desks, a bar along the bottom on a phone). Every screen of every module uses one toolbar: the one or two things done most on the left in green, filters and search in the middle, everything else under **More ▾** with the dangerous ones last in red. Detail pages (an event, an order, a ticket, a purchase order, a payroll run, a room block) show their steps in order, the next one as the button to press. Tab rows wrap on a desk so no tab is hidden. |
+| 3. Food places | Each outlet has a place on the map (Restaurant → Menu → Outlets → edit → "Where on the map"). Orders show above their own outlet with a count, open and late; tapping the marker or the place opens those orders. |
+| 4. The resort alive | The map follows the Indian clock through dusk into night (lamps, lit windows, water). Check-ins and check-outs send a car down the drive and a walker to reception; gate entries too. Today's functions on a lawn or ground raise a pandal with string lights and a crowd; signing a contract throws confetti. The kitchen smokes while orders are open. Resort tour: an orbiting camera with a ticker of today's numbers, from your menu or after five idle minutes. |
+| 5. Release | 433 tests; fresh-install walk-through and the 3D checks on PGlite and PostgreSQL 16; desktop and phone screenshots of all 87 module tabs; merged and deployed. |
+
+Still needed from you: the names of the other food outlets (cafeterias, lawns, pool) and which map place each one is at, and whether the tour is meant for a lobby screen.

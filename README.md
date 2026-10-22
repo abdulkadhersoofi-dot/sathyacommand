@@ -4,7 +4,7 @@ Hotel management system for Sathya Park & Resorts, around an animated 3D twin of
 
 **Two ways to open it:**
 
-- **The live HMS** (web service + PostgreSQL, started on Render with the one-click Blueprint in `render.yaml`, see [Deploying](docs/DEPLOY.md)): sign in with your email and password; the **Modules** button lists everything your role can use: front desk, restaurant & bar, housekeeping, staff, engineering, security, stores & purchase, accounts, banquets & sales, guests, God Mode.
+- **The live HMS** (web service + PostgreSQL, started on Render with the one-click Blueprint in `render.yaml`, see [Deploying](docs/DEPLOY.md)): sign in with your email and password; the module rail on the left lists everything your role can use: front desk, restaurant & bar, housekeeping, staff, engineering, security, stores & purchase, accounts, banquets & sales, guests, God Mode.
 - **The booking page** (`/book` on the live HMS): guests book a room and check in online, without a login.
 - **The sample demo** (static site): the 3D map on made-up bookings and the layout editor only. It has no server, so the modules are not there; its **Where are the modules?** button says so.
 

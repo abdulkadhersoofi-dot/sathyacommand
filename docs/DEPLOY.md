@@ -61,7 +61,7 @@ To point the old demo at it: on the **Static Site**, add the environment variabl
 1. Open the service's address (`https://<name>.onrender.com`).
 2. Enter `MD_EMAIL` and `MD_PASSWORD`.
 3. Choose your own password (at least 8 characters). The one in Render's settings stops working, so nobody who can see the settings can sign in as you.
-   Once signed in, the **Modules** button in the top bar lists every module your role can open. **Password** in the top bar changes it later.
+   Once signed in, the module rail down the left lists every module your role can open (a bar along the bottom on a phone). Your name at the top right opens your own menu: Night, Eco, Resort tour, **Change password** and Sign out.
 4. Enter the company's legal name, GSTIN, address and PIN code (check-out is blocked until they are set).
 5. Load the real room list (`POST /api/rooms/import`, or ask Claude to do it from your list).
 6. Add staff logins: **Staff → Logins → Add login** (name, email, roles). It shows a temporary password once; give it to the person with their email. They choose their own at the first sign-in. **Reset password** there gives a new temporary one to someone who forgot theirs (or got locked out by 5 wrong passwords, which otherwise clears after 15 minutes).
