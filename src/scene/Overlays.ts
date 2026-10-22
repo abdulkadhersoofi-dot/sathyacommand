@@ -394,17 +394,18 @@ export class Overlays {
 
   /** An order sent: the waiter walks from the table (or the room's wing) to the kitchen with the ticket, and the ticket arcs in. */
   orderArc(o: Order) {
+    // The walk runs over the roofs (the straight line between two buildings is indoors), so it stays in view.
     const from = this.anchorOf(o.origin)
-    const k = (this.site.anchors.get('KITCHEN')?.pos ?? new THREE.Vector3())
-    this.walker([from.clone().setY(1.2), new THREE.Vector3(k.x, 1.2, k.z)], MARIGOLD, 2.6, 0, true)
-    this.arc(from, k.clone().setY(4.2), MARIGOLD, 1.8)
+    const k = this.anchorOf('KITCHEN')
+    this.walker([from.clone(), from.clone().lerp(k, 0.5).setY(Math.max(from.y, k.y) + 0.6), k.clone()], MARIGOLD, 2.6, 0, true)
+    this.arc(from, k.clone().setY(k.y + 3), MARIGOLD, 1.8)
   }
 
   /** Food ready: the waiter walks from the kitchen back to the table or the room with the tray. */
   foodRunner(o: Order) {
-    const k = (this.site.anchors.get('KITCHEN')?.pos ?? new THREE.Vector3())
+    const k = this.anchorOf('KITCHEN')
     const to = this.anchorOf(o.origin)
-    this.walker([k.clone().setY(1.2), new THREE.Vector3(to.x, 1.2, to.z), to], 0x35a46b, 3.2, 0, true)
+    this.walker([k.clone(), k.clone().lerp(to, 0.5).setY(Math.max(to.y, k.y) + 0.6), to], 0x35a46b, 3.2, 0, true)
   }
 
   guestMove(res: Reservation, change: 'check-in' | 'check-out') {
