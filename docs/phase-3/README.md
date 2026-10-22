@@ -27,5 +27,5 @@ Weeks 13–20 of the [blueprint](../HMS_BLUEPRINT.md). **All six steps are done.
 ## Waiting on
 
 - **Resort**: the real menu for each outlet (an export from Champagne is enough), table numbers per outlet, which outlets may serve liquor
-- **Licence numbers**: FSSAI, FL-3 and the TN VAT registration, with validity dates (enter them under Restaurant → Licences & tax)
-- **CA**: TN VAT rates for beer, wine and spirits (enter them under Licences & tax; needed before the liquor bill in 3.3)
+- **Licence numbers**: FSSAI, FL-3 and the TN VAT registration, with validity dates (enter them under Settings → Licences & tax)
+- **CA**: TN VAT rates for beer, wine and spirits (enter them under Settings → Licences & tax; needed before the liquor bill in 3.3)

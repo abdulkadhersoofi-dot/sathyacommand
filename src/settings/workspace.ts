@@ -5,11 +5,13 @@ import type { Outbox } from '../live/outbox'
 import { esc, showDate, tonePill } from '../ui/dom'
 import { checked, val } from '../ui/form-modal'
 import { Workspace, type View, type WorkspaceHost } from '../ui/workspace'
+import { LicencesView } from './licences'
 
-// Settings for the MD: the resort's profile (names, GSTIN, PAN, TAN, address, contact, invoice prefix, who
-// signs TDS returns, when the day closes by itself), room types and rates, and the getting-started checklist.
+// Settings: for the MD, the resort's profile (names, GSTIN, PAN, TAN, address, contact, invoice prefix, who
+// signs TDS returns, when the day closes by itself), room types and rates, and the getting-started checklist;
+// for accounts, the bar and the F&B manager too, Licences & tax.
 
-type Tab = 'start' | 'profile' | 'rates'
+type Tab = 'start' | 'profile' | 'rates' | 'licences'
 interface Profile { name: string; legal_name: string | null; gstin: string | null; pan: string | null; tan: string | null; address: string | null; city: string | null; pin: string | null; phone: string | null; email: string | null
   website: string | null; invoice_prefix: string; tds_responsible: string | null; tds_responsible_designation: string | null; auto_close: boolean; day_close_at: string }
 export interface SetupStep { key: string; title: string; why: string; done: boolean; open: string }
@@ -192,10 +194,16 @@ export class SettingsWorkspace extends Workspace<Tab> {
   protected views: Record<Tab, View>
   constructor(api: Api, me: Me, outbox: Outbox, onClose: () => void) {
     super(api, me, outbox, 'Settings', onClose)
-    this.views = { start: new StartView(this), profile: new ProfileView(this), rates: new RatesView(this) }
-    this.tab = 'start'
+    this.views = { start: new StartView(this), profile: new ProfileView(this), rates: new RatesView(this), licences: new LicencesView(this) }
+    this.tab = this.tabs()[0][0]
   }
-  static allowed(me: Me) { return me.permissions.includes('*') }
-  tabs(): [Tab, string][] { return [['start', 'Getting started'], ['profile', 'Resort profile'], ['rates', 'Rooms & rates']] }
+  /** Who may keep licences, VAT rates, bar hours and the bill's UPI details. */
+  static readonly LICENCE_PERMS = ['licences.edit', 'tax.vat', 'bar.settings', 'menu.price']
+  static allowed(me: Me) { return me.permissions.includes('*') || SettingsWorkspace.LICENCE_PERMS.some((p) => me.permissions.includes(p)) }
+  tabs(): [Tab, string][] {
+    const t: [Tab, string][] = this.me.permissions.includes('*') ? [['start', 'Getting started'], ['profile', 'Resort profile'], ['rates', 'Rooms & rates']] : []
+    if (this.can(...SettingsWorkspace.LICENCE_PERMS)) t.push(['licences', 'Licences & tax'])
+    return t
+  }
   go(tab: Tab) { void this.show(tab) }
 }

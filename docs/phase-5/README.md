@@ -31,7 +31,7 @@ The kitchen, bar, engineering and linen already keep their own stock books (Phas
 - **CA / excise**: the register format the Prohibition & Excise department wants (columns, bottles or bulk litres, daily or monthly); TCS base (the invoice value with or without VAT)
 - **CA**: GST on damage charged to guests (18%, SAC 999794 assumed)
 - **CA**: confirm TDS on the value before GST when GST is shown separately, and deduction at payment (rather than at booking the bill) until the accounts module books bills to ledgers in Phase 6
-- **Resort**: peg measures and scales with their last stamping certificates; the FL-3 licence number (Restaurant → Licences & tax)
+- **Resort**: peg measures and scales with their last stamping certificates; the FL-3 licence number (Settings → Licences & tax)
 - **Resort / MD**: the agreed stock variance limit for each store (now 1% of what the store gives out in a month), and the day of the month-end count
 - **Resort**: opening stock in each store (a full count on the go-live day); the counting limit for stores staff (now ₹0: every difference goes to the GM)
 - **Resort**: the vendor list with GSTIN / PAN, MSME certificates (Udyam) and whether each has a written payment agreement; current rates

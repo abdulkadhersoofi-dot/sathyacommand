@@ -61,7 +61,7 @@ export class Billing {
           ${a.roundOff ? `<dt>Round off</dt><dd>${rs(a.roundOff)}</dd>` : ''}
           <dt><b>${b.status === 'settled' ? 'Paid' : 'To pay'}</b></dt><dd><b>${rs(b.reservation_id ? a.total : a.payable)}</b></dd>
         </dl>
-        ${a.vatMissing.length ? `<p class="fd-warn small">No VAT rate set for ${a.vatMissing.map(esc).join(', ')}. Set it under Licences &amp; tax, then bill again.</p>` : ''}
+        ${a.vatMissing.length ? `<p class="fd-warn small">No VAT rate set for ${a.vatMissing.map(esc).join(', ')}. Set it under Settings → Licences &amp; tax, then bill again.</p>` : ''}
         ${b.status === 'settled' ? `<p class="muted small">${b.payments.map((p) => `${METHOD[p.method] ?? p.method} ${rs(p.amount)}`).join(' · ')}${b.gst_number ? ` · Tax invoice ${esc(b.gst_number)}` : ''}${b.vat_number ? ` · VAT invoice ${esc(b.vat_number)}` : ''}</p>` : ''}
         <div class="actions">
           ${b.status === 'open' && this.ws.can('fnb.bill') ? `<button type="button" class="btn primary small" data-settle="${esc(b.id)}">Take payment</button>` : ''}

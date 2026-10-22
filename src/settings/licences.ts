@@ -1,10 +1,11 @@
 import { esc, tonePill } from '../ui/dom'
 import { checked, val } from '../ui/form-modal'
-import type { Ws } from './common'
+import type { WorkspaceHost } from '../ui/workspace'
 import { toolbar } from '../ui/toolbar'
 
-// Licences & tax: licence and permit numbers (printed on bills) with renewal dates, TN VAT rates for
-// each liquor class with their history, and the bar's licensed hours and dry days.
+// Settings → Licences & tax: licence and permit numbers (printed on bills) with renewal dates, TN VAT
+// rates for each liquor class with their history, the bar's licensed hours and dry days, and the bill's
+// UPI and service charge. Resort-wide settings, kept by accounts, the bar and the F&B manager.
 
 interface Licence { id: string; kind: string; name: string; number: string; authority: string | null; valid_from: string | null; valid_until: string | null; print_on: string[]; notes: string | null; active: boolean; state: string; updated_by: string }
 interface VatClass { id: string; label: string; active: boolean; rate: number | null; upcoming: VatRow[]; history: VatRow[] }
@@ -23,14 +24,14 @@ const STATE: Record<string, [string, string]> = {
 }
 const fmt = (d: string | null) => (d ? new Date(d + 'T12:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—')
 
-export class SettingsView {
+export class LicencesView {
   private licences: Licence[] = []
   private vat: VatClass[] = []
   private bar: Bar | null = null
   private billing: BillingSettings | null = null
   private businessDate = ''
 
-  constructor(private ws: Ws) {}
+  constructor(private ws: WorkspaceHost) {}
 
   async load() {
     const api = this.ws.api

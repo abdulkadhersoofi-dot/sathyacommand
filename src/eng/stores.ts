@@ -84,7 +84,7 @@ export class ComplianceView {
       ['Later', (i) => i.daysLeft != null && i.daysLeft > 60], ['No expiry date entered', (i) => i.due == null],
     ]
     const tone = (i: Item) => (i.daysLeft == null ? '--muted' : i.daysLeft < 0 ? '--st-departing' : i.daysLeft <= 30 ? '--marigold' : '--st-vacant')
-    return `<p class="muted small">Reminders go out 60, 30 and 7 days before each date, and when it has passed. Add or renew licences under Restaurant → Licences &amp; tax.</p>
+    return `<p class="muted small">Reminders go out 60, 30 and 7 days before each date, and when it has passed. Add or renew licences under Settings → Licences &amp; tax.</p>
       ${groups.map(([title, test]) => { const list = this.items.filter(test); return list.length ? `<div class="sec-title">${title} <span>${list.length}</span></div>${list.map((i) => `<div class="row-card cal-card" ${i.type === 'licence' && this.h.can('licences.edit') ? `data-cal="${esc(i.id)}"` : ''}>
         <div class="rc-title">${esc(i.name)}</div><div class="rc-sub">${esc(TYPE[i.type] ?? i.type)}${i.detail ? ` · ${esc(i.detail)}` : ''}${i.owner ? ` · owner ${esc(i.owner)}` : i.type === 'licence' ? ' · <b>no owner</b>' : ''}</div>
         <div class="rc-right">${tonePill(i.due ? (i.daysLeft! < 0 ? `${-i.daysLeft!} days late` : i.daysLeft === 0 ? 'today' : `${i.due}`) : 'no date', tone(i))}</div></div>`).join('')}` : '' }).join('') || '<div class="empty">Nothing on the calendar yet.</div>'}`

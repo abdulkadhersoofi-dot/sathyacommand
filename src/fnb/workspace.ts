@@ -6,15 +6,14 @@ import { CaptainView } from './captain'
 import type { Outlet, Station, Ws } from './common'
 import { KitchenView } from './kitchen'
 import { MenuView } from './menu'
-import { SettingsView } from './settings'
 import { BarView } from './bar'
 import { KitchenStockView } from './kitchen-stock'
 import { foodPlaceForm } from './places'
 
-// The restaurant workspace: Orders (captain tablet), Kitchen & bar screens, Menu, Bar stock, Kitchen
-// stock and Licences & tax. Each tab shows only to roles that use it.
+// The restaurant workspace: Orders (captain tablet), Kitchen & bar screens, Menu, Bar stock and Kitchen
+// stock. Each tab shows only to roles that use it. Licences & tax live under Settings.
 
-type Tab = 'orders' | 'kitchen' | 'menu' | 'bar' | 'kstock' | 'settings'
+type Tab = 'orders' | 'kitchen' | 'menu' | 'bar' | 'kstock'
 
 export class FnbWorkspace extends Workspace<Tab> implements Ws {
   outlets: Outlet[] = []
@@ -25,8 +24,8 @@ export class FnbWorkspace extends Workspace<Tab> implements Ws {
   constructor(api: Api, me: Me, outbox: Outbox, public inHouse: Ws['inHouse'], onClose: () => void) {
     super(api, me, outbox, 'Restaurant', onClose)
     this.captain = new CaptainView(this)
-    this.views = { orders: this.captain, kitchen: new KitchenView(this), menu: new MenuView(this), bar: new BarView(this), kstock: new KitchenStockView(this), settings: new SettingsView(this) }
-    this.tab = this.tabs()[0]?.[0] ?? 'settings'
+    this.views = { orders: this.captain, kitchen: new KitchenView(this), menu: new MenuView(this), bar: new BarView(this), kstock: new KitchenStockView(this) }
+    this.tab = this.tabs()[0]?.[0] ?? 'orders'
   }
 
   tabs(): [Tab, string][] {
@@ -36,7 +35,6 @@ export class FnbWorkspace extends Workspace<Tab> implements Ws {
     if (this.can('menu.edit', 'menu.price')) t.push(['menu', 'Menu'])
     if (this.can('bar.stock', 'bar.approve') || this.me.roles.includes('bartender')) t.push(['bar', 'Bar stock'])
     if (this.can('kitchen.stock', 'kitchen', 'food_cost.view')) t.push(['kstock', 'Kitchen stock'])
-    t.push(['settings', 'Licences & tax'])
     return t
   }
 

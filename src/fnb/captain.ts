@@ -277,7 +277,7 @@ export class CaptainView {
       ${t.liquorBeforeVat ? `<dt>Liquor</dt><dd>${rs(t.liquorBeforeVat)}</dd><dt>TN VAT</dt><dd>${rs(t.vat)}${t.vatMissing.length ? ' <span class="fd-warn">+ rate not set</span>' : ''}</dd>` : ''}
       <dt><b>Total so far</b></dt><dd><b>${rs(t.payable)}</b></dd>
       ${this.cart.size ? `<dt>Not sent yet (before tax)</dt><dd>${rs([...this.cart].reduce((a, [id, c]) => a + (this.menu.items.find((m) => m.id === id)?.price_paise ?? 0) * c.qty, 0))}</dd>` : ''}</dl>
-      ${t.vatMissing.length ? `<p class="muted small">No VAT rate yet for ${t.vatMissing.map(esc).join(', ')}. Accounts set it under Licences &amp; tax.</p>` : ''}`
+      ${t.vatMissing.length ? `<p class="muted small">No VAT rate yet for ${t.vatMissing.map(esc).join(', ')}. Accounts set it under Settings → Licences &amp; tax.</p>` : ''}`
   }
 
   // ---------- actions ----------
