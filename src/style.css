@@ -1053,3 +1053,21 @@ button.link { background: none; border: 0; padding: 0; color: var(--accent); fon
 .ord-items .ws-chips { position: sticky; top: 0; background: var(--bg); z-index: 2; padding: 4px 0 8px; margin: 0; }
 .fp-tables .sec-title { margin-top: 4px; }
 .fp-tables label small { display: block; }
+
+/* ---------- booking sheet: three steps on one sheet ---------- */
+.bk-steps .steps { margin: 0 0 12px; }
+.bk-chips { margin: 0; }
+.venue-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-bottom: 12px; }
+.venue-tile { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; text-align: left; padding: 9px 11px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); }
+.venue-tile b { font: 700 14px var(--f-body); }
+.venue-tile span { font-size: 11.5px; color: var(--muted); }
+.venue-tile[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); box-shadow: inset 0 0 0 1px var(--accent); }
+.bk-avail { margin: 8px 0 4px; font-size: 13px; padding: 8px 10px; border-radius: 8px; background: var(--surface-2); }
+.bk-avail:empty { display: none; }
+.bk-avail[data-state="free"] { background: color-mix(in srgb, var(--st-vacant) 16%, var(--surface)); }
+.bk-avail[data-state="clash"] { background: color-mix(in srgb, var(--st-departing) 14%, var(--surface)); }
+.bk-avail[data-state="warn"] { background: color-mix(in srgb, var(--marigold) 20%, var(--surface)); }
+.bk-avail .linkish { font-weight: 700; }
+.bk-summary { margin-bottom: 12px; }
+.bk-line { padding: 6px 0; border-bottom: 1px dashed var(--line); font-size: 13.5px; }
+.fd-card.bk-card { width: 640px; }
