@@ -26,6 +26,9 @@ export class EngWorkspace extends Workspace<Tab> {
     this.tab = 'tickets'
   }
 
+  /** Engineering itself, compliance, and the department heads and the desk who raise and follow faults; everyone else reports a fault from the room on the map. */
+  static allowed(me: Me) { return ['*', 'eng.work', 'eng.manage', 'eng.approve', 'compliance.view', 'licences.edit', 'hk.manage', 'front_desk', 'security.manage', 'bar.settings', 'kitchen.approve'].some((p) => me.permissions.includes(p)) }
+
   tabs(): [Tab, string][] {
     const t: [Tab, string][] = [['tickets', 'Tickets']]
     const eng = this.can('eng.work', 'eng.manage')

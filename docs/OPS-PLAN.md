@@ -39,3 +39,16 @@ Prompted by the MD's review on 22 October 2026. Work goes in this order; each st
 **Step 6. Release**
 - Checks: tests, the walk-throughs, PGlite and PostgreSQL 16, desktop and phone screenshots.
 - Docs, merge, deploy, report.
+
+## Status (22 Oct 2026)
+
+All six steps are done and on `main`.
+
+| Step | What changed |
+|---|---|
+| 1. Kitchen and desk | The desk's Kitchen tab has the kitchen's columns (New · Cooking · Ready, waiting for the waiter) and says why an order sits where it does. After a dropped connection the live feed reloads everything; the day's orders are fetched again every minute regardless. The kitchen screen says how many tickets wait at the stations not shown. |
+| 2. Getting started | A finished item keeps a **Change** button to its screen. |
+| 3. Restaurant screens | Bar stock and Kitchen stock are under **Stores**. Orders: the place filter is a dropdown; occupied rooms are tiles under Room service, one tap to start or open the room's order. Kitchen & bar: a station picker of tick-boxes; each ticked station gets its own row. |
+| 4. The map | Tap a room: **Do** — Open the booking, Room-service order, Housekeeping & laundry, Report a fault, New booking. Tap a food place: its own tables. Tap a venue: Book this venue. A waiter walks from the table or wing to the kitchen when an order is sent, and back with the tray when the food is ready. |
+| 5. Logins | Add a login groups the roles by department with one line on what each sees and may do. Reception no longer carries `fnb.bill`. Roles follow the file on every start. Every role was signed in and what it sees is recorded in `docs/ROLES.md`. |
+| 6. Release | 443 tests; the walk-through (settings, orders with room tiles, kitchen lanes, stores tabs, the room's Do row, a room-service order from the map, the role picker) on PGlite and PostgreSQL 16; desktop screenshots. |

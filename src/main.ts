@@ -702,7 +702,7 @@ if (api && me && liveAdapter) {
   void api.get<{ outlets: Parameters<typeof placeFoodPlaces>[0] }>('/api/fnb/outlets').then((r) => placeFoodPlaces(r.outlets)).catch(() => {})
   hkWs = new HkWorkspace(api, me, outbox, () => renderSide())
   if (HkWorkspace.allowed(me)) wire('#btn-hk', () => hkWs!)
-  wire('#btn-fnb', () => fnb!)
+  if (fnb.tabs().length) wire('#btn-fnb', () => fnb!)   // the workspace itself stays, for orders from the map
 
   // Staff app: everyone clocks in and out here; managers and security also see the team on the map.
   store.staffAllowed = me.permissions.includes('*') || me.permissions.includes('staff.track')
@@ -735,12 +735,12 @@ if (api && me && liveAdapter) {
   // Engineering: anyone reports a fault; engineering sees assets and every open ticket on the map.
   store.engAllowed = me.permissions.includes('*') || me.permissions.includes('eng.work') || me.permissions.includes('eng.manage')
   engWs = new EngWorkspace(api, me, outbox, () => renderSide())
-  wire('#btn-eng', () => engWs!)
+  if (EngWorkspace.allowed(me)) wire('#btn-eng', () => engWs!)   // everyone else reports a fault from the room on the map
 
   // Security: guards and managers get the full workspace and map layer; everyone can report an incident and answer a roll-call.
   store.secAllowed = ['*', 'security.gate', 'security.view'].some((x) => me!.permissions.includes(x))
   secWs = new SecurityWorkspace(api, me, outbox, () => renderSide())
-  wire('#btn-sec', () => secWs!)
+  if (SecurityWorkspace.allowed(me)) wire('#btn-sec', () => secWs!)
   void checkEmergency()
 
   // Stores & purchase: stores, accounts and managers.

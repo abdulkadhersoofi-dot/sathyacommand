@@ -23,6 +23,9 @@ export class SecurityWorkspace extends Workspace<Tab> {
     this.tab = this.tabs()[0][0]
   }
 
+  /** Security itself, and the desk and department heads who raise incidents or start an emergency. */
+  static allowed(me: Me) { return ['*', 'security.gate', 'security.view', 'security.manage', 'emergency.start', 'front_desk', 'hk.manage', 'eng.manage'].some((p) => me.permissions.includes(p)) }
+
   tabs(): [Tab, string][] {
     const sec = this.can('security.gate', 'security.view')
     const t: [Tab, string][] = []
