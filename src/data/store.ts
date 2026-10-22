@@ -29,6 +29,8 @@ export class Store {
   spaceById = new Map<string, Space>()
   reservations: Reservation[] = []
   events: EventBooking[] = []
+  /** Food places by the map place they are at (app space id → outlet), for the drawer's actions. */
+  foodPlaces = new Map<string, { id: string; name: string }>()
   orders: Order[] = []
   hk: Record<string, HkStatus> = {}
   feed: FeedItem[] = []

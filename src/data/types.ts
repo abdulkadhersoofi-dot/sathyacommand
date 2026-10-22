@@ -79,9 +79,14 @@ export interface EventBooking {
   kind: string
   pax: number
   slot: string          // "18:00–23:00"
+  from?: string         // "18:00", for sorting the day's functions
   setup: 'pending' | 'in-progress' | 'ready' | 'live' | 'done'
   value: number
   advance: number
+  /** The HMS event's status (enquiry, quoted, hold, definite, billed, closed); firm when it keeps the venue. */
+  status?: string
+  firm?: boolean
+  eventId?: string
 }
 
 export type HkStatus = 'clean' | 'dirty' | 'inspected' | 'out-of-order'

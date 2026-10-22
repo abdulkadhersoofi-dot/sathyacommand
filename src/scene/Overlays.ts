@@ -38,6 +38,8 @@ export class Overlays {
   /** One marker per place with open orders: above the room, or above the outlet (bar, poolside, cafeteria…). */
   private markerTargets: { p: THREE.Vector3; late: boolean; origin: string }[] = []
   private labelledOutlets = new Set<string>()
+  /** Places whose label carries a detail (events, orders), to clear when they no longer do. */
+  private detailed = new Set<string>()
   private liveVenues = new Set<string>()
   private pinGroup = new THREE.Group()
   private pins = new Map<string, Map<string, { obj: THREE.Group; ring: THREE.Mesh | null; shape: MapPin['shape']; colour: number }>>()
@@ -238,21 +240,26 @@ export class Overlays {
     let t = 0
     const m = new THREE.Matrix4()
     const busy: { id: string; ev: (typeof store.events)[number] }[] = []
+    // A place may carry both its events and its food orders (a lawn café on a wedding day): the label shows both.
+    const detail = new Map<string, { html: string[]; tone: string }>()
+    const add = (id: string, html: string, tone: string) => { const d = detail.get(id) ?? { html: [], tone }; d.html.push(html); if (tone === 'alert' || tone === 'live') d.tone = tone; detail.set(id, d) }
     for (const [id] of this.site.anchors) {
       const sp = store.spaceById.get(id)
       if (!sp || !['hall', 'lawn', 'pavilion', 'ground'].includes(sp.type)) continue
       const st = store.state(id)
-      const ev = st.events[0]
-      if (showEvents && ev && store.isToday) busy.push({ id, ev })
+      // Every function of the day, in time order: the pandal and crowd follow the live one (else the next firm one).
+      const evs = st.events
+      const firm = evs.filter((e) => e.firm !== false)
+      const ev = firm.find((e) => e.setup === 'live') ?? firm.find((e) => e.setup !== 'done') ?? firm[0] ?? evs[0]
+      if (showEvents && ev && store.isToday && ev.firm !== false) busy.push({ id, ev })
       if (showEvents && ev) {
-        this.setLabelDetail(id, `${ev.kind} · ${ev.pax} pax<br><span class="ml-sub">${ev.slot}${ev.setup === 'live' ? ' · <b>LIVE</b>' : ''}</span>`, ev.setup === 'live' ? 'live' : 'event')
-        this.outline(id, true)
+        const tone = firm.some((e) => e.setup === 'live') ? 'live' : firm.some((e) => e.status !== 'hold') ? 'event' : firm.length ? 'hold' : 'pencil'
+        const line = (e: (typeof evs)[number]) => `<span class="ml-line${e.setup === 'live' ? ' now' : ''}"><span class="ml-sub">${e.slot}</span> ${e.kind} · ${e.pax} pax${e.setup === 'live' ? ' · <b>LIVE</b>' : e.firm === false ? ' · pencilled' : e.status === 'hold' ? ' · on hold' : ''}</span>`
+        add(id, evs.length > 1 ? `${evs.length} functions today<br>${evs.map(line).join('<br>')}` : line(ev), tone)
+        this.outline(id, true, tone)
         if (ev.setup === 'live' || ev.setup === 'ready') this.liveVenues.add(id)
-        if (VENUE_TABLE_TYPES.has(id)) t = this.placeTables(id, Math.min(160, Math.round(ev.pax / 8)), t, m)
-      } else {
-        this.setLabelDetail(id, null)
-        this.outline(id, false)
-      }
+        if (VENUE_TABLE_TYPES.has(id) && ev.firm !== false) t = this.placeTables(id, Math.min(160, Math.round(ev.pax / 8)), t, m)
+      } else this.outline(id, false)
     }
     this.tables.count = t
     this.tables.instanceMatrix.needsUpdate = true
@@ -265,19 +272,21 @@ export class Overlays {
     this.kitchenRing.visible = showFnb && store.isToday
     this.alive.setSmoke(showFnb && store.isToday ? open.length : 0, late)
     ;(this.kitchenRing.material as THREE.MeshBasicMaterial).color.setHex(late ? 0xe0533d : open.length > 8 ? MARIGOLD : 0x35a46b)
-    this.setLabelDetail('KITCHEN', showFnb && store.isToday ? `${open.length} open KOT${open.length === 1 ? '' : 's'}${late ? ` · <b>${late} late</b>` : ''}` : null, late ? 'alert' : 'fnb')
+    if (showFnb && store.isToday) add('KITCHEN', `${open.length} open KOT${open.length === 1 ? '' : 's'}${late ? ` · <b>${late} late</b>` : ''}`, late ? 'alert' : 'fnb')
     // Each outlet's label counts its own orders; the kitchen counts them all.
     const byOutlet = new Map<string, Order[]>()
     for (const o of store.orders.filter((x) => x.kind === 'table')) byOutlet.set(o.origin, [...(byOutlet.get(o.origin) ?? []), o])
-    for (const id of this.labelledOutlets) if (!byOutlet.has(id) || !showFnb) { this.setLabelDetail(id, null); this.outline(id, false) }
     this.labelledOutlets.clear()
     if (showFnb) {
       for (const [id, list] of byOutlet) {
         const openHere = list.filter((o) => o.status !== 'served'), lateHere = store.isToday ? openHere.filter((o) => minutesOpen(o) > 20).length : 0
-        this.setLabelDetail(id, `${list.length} order${list.length === 1 ? '' : 's'}${store.isToday ? ` · ${openHere.length} open${lateHere ? ` · <b>${lateHere} late</b>` : ''}` : ''}`, lateHere ? 'alert' : 'fnb')
+        add(id, `${list.length} order${list.length === 1 ? '' : 's'}${store.isToday ? ` · ${openHere.length} open${lateHere ? ` · <b>${lateHere} late</b>` : ''}` : ''}`, lateHere ? 'alert' : 'fnb')
         this.labelledOutlets.add(id)
       }
     }
+    for (const id of this.detailed) if (!detail.has(id)) this.setLabelDetail(id, null)
+    this.detailed.clear()
+    for (const [id, d] of detail) { this.setLabelDetail(id, d.html.join('<br>'), d.tone); this.detailed.add(id) }
 
     // markers above every room and outlet with an open order: red when one is late
     this.markerTargets = []
@@ -298,20 +307,26 @@ export class Overlays {
 
     // reception & lodging summaries
     const k = store.kpis()
-    this.setLabelDetail('RECEPTION', store.layers.has('rooms') ? `${k.arrivals} arriving · ${k.departures} leaving` : null, 'rooms')
+    if (store.layers.has('rooms')) { this.setLabelDetail('RECEPTION', `${k.arrivals} arriving · ${k.departures} leaving`, 'rooms'); this.detailed.add('RECEPTION') }
   }
 
-  private outline(id: string, on: boolean) {
+  /** The venue's outline says what its day is: marigold for a signed event, amber for a hold, grey dashes for a pencilled enquiry. */
+  private outline(id: string, on: boolean, tone = 'event') {
     let line = this.venueLines.get(id)
     if (!on) { if (line) line.visible = false; return }
     if (!line) {
       const poly = this.site.anchors.get(id)!.poly!
       const p = scalePoly(poly, 1.04)
-      const g = new THREE.BufferGeometry().setFromPoints(p.map(([x, z]) => new THREE.Vector3(x, 0.35, z)))
-      line = new THREE.LineLoop(g, new THREE.LineBasicMaterial({ color: MARIGOLD, transparent: true, opacity: 0.95 }))
+      const g = new THREE.BufferGeometry().setFromPoints([...p, p[0]].map(([x, z]) => new THREE.Vector3(x, 0.35, z)))
+      line = new THREE.LineLoop(g, new THREE.LineDashedMaterial({ color: MARIGOLD, transparent: true, opacity: 0.95, dashSize: 3, gapSize: 0 }))
+      line.computeLineDistances()
       this.venueLines.set(id, line)
       this.group.add(line)
     }
+    const mat = line.material as THREE.LineDashedMaterial
+    mat.color.setHex(tone === 'pencil' ? 0x8a8f99 : tone === 'hold' ? 0xf0c04a : MARIGOLD)
+    mat.gapSize = tone === 'pencil' ? 2 : 0
+    mat.needsUpdate = true
     line.visible = true
   }
 

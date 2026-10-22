@@ -18,7 +18,7 @@ interface ServerReservation {
   bill_to_company: string | null; rate_paise: number; balance_paise: number; folio_id: string
   online_checkin?: boolean; pay_by?: string | null; ota_ref?: string | null; past_stays?: number
 }
-interface ServerBooking { name: string; venueId: string; date: string; from: string; to: string; startsAt: string; endsAt: string; pax: number; number: string; title: string; status: string; kind: string; firm: boolean
+interface ServerBooking { name: string; venueId: string; eventId: string; date: string; from: string; to: string; startsAt: string; endsAt: string; pax: number; number: string; title: string; status: string; kind: string; firm: boolean
   client: string; turnaroundMinutes: number; valuePaise: number; paidPaise: number }
 const addDaysIso = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10)
 interface ServerOrder {
@@ -80,20 +80,20 @@ export class LiveAdapter implements HmsAdapter {
     }))
   }
 
-  // Banquet functions on their venues (Phase 7): pencilled ones are left off the map. Roles without the
-  // banquets screens see none.
+  // Every function on its venue, pencilled ones too (an enquiry or a quote shows as pencilled; a hold or a
+  // signed contract keeps the venue). Roles without the banquets screens see none.
   async getEvents(range: DateRange): Promise<EventBooking[]> {
     const to = range.to < addDaysIso(range.from, 92) ? range.to : addDaysIso(range.from, 92)
     let r: { bookings: ServerBooking[] }
     if (!this.canSeeEvents) return []
     try { r = await this.api.get(`/api/banquets/calendar?from=${range.from}&to=${to}`) } catch { return [] }
     const now = Date.now()
-    return r.bookings.filter((b) => b.firm).map((b) => {
+    return r.bookings.map((b) => {
       const start = Date.parse(b.startsAt), end = Date.parse(b.endsAt), setupFrom = start - b.turnaroundMinutes * 60_000
-      const setup: EventBooking['setup'] = now >= end ? 'done' : now >= start ? 'live' : now >= setupFrom ? 'in-progress' : b.status === 'hold' ? 'pending' : 'ready'
+      const setup: EventBooking['setup'] = !b.firm ? 'pending' : now >= end ? 'done' : now >= start ? 'live' : now >= setupFrom ? 'in-progress' : b.status === 'hold' ? 'pending' : 'ready'
       return { id: `${b.number} · ${b.name}`, spaceId: this.appIdOf.get(b.venueId) ?? b.venueId, date: b.date, title: `${b.title}: ${b.name}`, client: b.client, kind: b.kind,
-        pax: b.pax, slot: `${b.from}–${b.to}`, setup, value: b.valuePaise / 100, advance: b.paidPaise / 100 }
-    })
+        pax: b.pax, slot: `${b.from}–${b.to}`, from: b.from, setup, value: b.valuePaise / 100, advance: b.paidPaise / 100, status: b.status, firm: b.firm, eventId: b.eventId }
+    }).sort((a, b) => a.date.localeCompare(b.date) || a.from.localeCompare(b.from))
   }
   // Restaurant, bar and room-service orders that reached the kitchen, for the 3D map and the kitchen panel.
   async getOrders(date: string): Promise<Order[]> {

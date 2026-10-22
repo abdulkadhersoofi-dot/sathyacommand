@@ -436,6 +436,20 @@ document.addEventListener('click', async (e) => {
   if (engRoom && engWs && liveAdapter) { e.stopPropagation(); engWs.report(liveAdapter.serverIdOf.get(engRoom.dataset.engRoom!) ?? engRoom.dataset.engRoom!, engRoom.dataset.engName ?? ''); return }
   const fnbOrder = t.closest<HTMLElement>('[data-fnb-order]')
   if (fnbOrder && fnb) { e.stopPropagation(); void fnb.openOrder(fnbOrder.dataset.fnbOrder!); return }
+  // The map's drawer: a venue's events, booking it, and food orders at any place.
+  const bqEvent = t.closest<HTMLElement>('[data-bq-event]')
+  if (bqEvent && bqWs) { e.stopPropagation(); hideWorkspaces(); bqWs.openEvent(bqEvent.dataset.bqEvent!); return }
+  const bqBook = t.closest<HTMLElement>('[data-bq-book]')
+  if (bqBook && bqWs && liveAdapter) { e.stopPropagation(); hideWorkspaces(); bqWs.newBooking(liveAdapter.serverIdOf.get(bqBook.dataset.bqBook!) ?? bqBook.dataset.bqBook!, store.date); return }
+  const fnbPlace = t.closest<HTMLElement>('[data-fnb-place]')
+  if (fnbPlace && fnb) { e.stopPropagation(); hideWorkspaces(); fnb.openPlace(fnbPlace.dataset.fnbPlace!); return }
+  const fnbServe = t.closest<HTMLElement>('[data-fnb-serve]')
+  if (fnbServe && fnb && liveAdapter) {
+    e.stopPropagation(); hideWorkspaces()
+    const id = fnbServe.dataset.fnbServe!, sp = store.spaceById.get(id)
+    fnb.newPlace(liveAdapter.serverIdOf.get(id) ?? id, sp?.name ?? id, sp?.type ?? 'hall')
+    return
+  }
   const fdBtn = t.closest<HTMLElement>('[data-fd]')
   if (fdBtn && fd) { e.stopPropagation(); fd.handle(fdBtn); return }
 
@@ -659,6 +673,14 @@ if (api && me && liveAdapter) {
   fd = new FrontDesk(api, store, me, () => renderSide())
   const outbox = new Outbox(api)
   fnb = new FnbWorkspace(api, me, outbox, () => store.reservations.filter((r) => r.status === 'in-house').map((r) => ({ id: r.id, guest: r.guest, roomNo: r.roomNo ?? null })), () => renderSide())
+  // The map's drawer offers "Food orders" at places that are food places and "Serve food here" at the rest.
+  const placeFoodPlaces = (outlets: { id: string; name: string; space_id: string | null; active: boolean }[]) => {
+    store.foodPlaces.clear()
+    for (const o of outlets) if (o.active && o.space_id) store.foodPlaces.set(liveAdapter!.appIdOf.get(o.space_id) ?? o.space_id, { id: o.id, name: o.name })
+    if (drawerId) renderDrawer()
+  }
+  window.addEventListener('sathya:outlets-changed', (ev) => placeFoodPlaces((ev as CustomEvent).detail))
+  void api.get<{ outlets: Parameters<typeof placeFoodPlaces>[0] }>('/api/fnb/outlets').then((r) => placeFoodPlaces(r.outlets)).catch(() => {})
   hkWs = new HkWorkspace(api, me, outbox, () => renderSide())
   if (HkWorkspace.allowed(me)) wire('#btn-hk', () => hkWs!)
   wire('#btn-fnb', () => fnb!)

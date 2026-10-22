@@ -48,9 +48,13 @@ export function tipHtml(store: Store, id: string, touch: boolean) {
       body += row('Next arrival', n ? `${fmtDay(n.arrival, { day: 'numeric', month: 'short' })} · ${esc(n.guest)}` : 'None booked')
     }
   } else if (['hall', 'lawn', 'pavilion', 'ground'].includes(s.type)) {
-    const ev = st.events[0]
-    if (ev) {
-      head = tonePill(ev.setup === 'live' ? 'Live now' : ev.setup === 'done' ? 'Done' : 'Booked', '--marigold')
+    const evs = st.events
+    const ev = evs.find((e) => e.setup === 'live') ?? evs.find((e) => e.firm !== false) ?? evs[0]
+    if (ev && evs.length > 1) {
+      head = tonePill(`${evs.length} functions`, '--marigold')
+      for (const e of evs) body += row(e.slot, `${esc(e.title)}${e.firm === false ? ' · pencilled' : e.setup === 'live' ? ' · <b>live</b>' : ''}`)
+    } else if (ev) {
+      head = tonePill(ev.setup === 'live' ? 'Live now' : ev.setup === 'done' ? 'Done' : ev.firm === false ? 'Pencilled' : ev.status === 'hold' ? 'On hold' : 'Booked', ev.firm === false ? '--muted' : '--marigold')
       body += row('Event', esc(ev.title))
       body += row('When', ev.slot)
       body += row('Guests', `${ev.pax}`)
@@ -169,6 +173,12 @@ export function kotCard(store: Store, orderId: string, withFrom = false) {
     </div>`
 }
 
+/** Food orders at this place, or the button that makes it a food place. */
+function foodAction(store: Store, id: string) {
+  const fp = store.foodPlaces.get(id)
+  return fp ? `<button class="btn" data-fnb-place="${esc(fp.id)}">Food orders · ${esc(fp.name)}</button>` : `<button class="btn" data-fnb-serve="${esc(id)}">Serve food here…</button>`
+}
+
 export function drawerHtml(store: Store, id: string) {
   const st = store.state(id)
   const s = st.space
@@ -201,19 +211,21 @@ export function drawerHtml(store: Store, id: string) {
     body += `<div class="sec-title">Room service</div>${ordersList(store, id)}`
   } else if (['hall', 'lawn', 'pavilion', 'ground'].includes(s.type)) {
     const evs = st.events
-    body += `<div class="sec-title">${fmtDay(store.date)}</div>`
+    const STATUS: Record<string, [string, string]> = { enquiry: ['Enquiry · pencilled', '--muted'], quoted: ['Quoted · pencilled', '--st-inspected'], hold: ['On hold', '--marigold'], definite: ['Booked', '--st-vacant'], billed: ['Billed', '--st-occupied'], closed: ['Closed', '--muted'] }
+    body += `<div class="sec-title">${fmtDay(store.date)} <span>${evs.length ? `${evs.length} function${evs.length > 1 ? 's' : ''}` : ''}</span></div>`
     body += evs.length ? evs.map((e) => `
       <div class="guest">
-        <div class="dr-kicker">${esc(e.kind)}</div>
+        <div class="dr-kicker">${esc(e.slot)} · ${esc(e.kind)} ${e.setup === 'live' ? tonePill('Live now', '--marigold') : e.status ? tonePill(...(STATUS[e.status] ?? [e.status, '--muted'])) : ''}</div>
         <div class="guest-name">${esc(e.title)}</div>
         <dl class="kv">
           <dt>Client</dt><dd>${esc(e.client)}</dd>
-          <dt>Time</dt><dd>${e.slot}</dd>
           <dt>Guests</dt><dd>${e.pax}</dd>
           <dt>Setup</dt><dd>${e.setup.replace('-', ' ')}</dd>
           ${god ? `<dt>Contract</dt><dd>${inr(e.value)}</dd><dt>Advance paid</dt><dd>${inr(e.advance)}</dd><dt>Outstanding</dt><dd>${inr(e.value - e.advance)}</dd>` : ''}
         </dl>
+        ${e.eventId && store.live ? `<div class="actions"><button class="btn small" data-bq-event="${esc(e.eventId)}">Open the event</button></div>` : ''}
       </div>`).join('') : `<div class="empty">Free on this date.</div>`
+    if (store.live) body += `<div class="actions"><button class="btn primary" data-bq-book="${esc(id)}">Book this venue</button>${foodAction(store, id)}</div>`
     const upcoming = store.events.filter((e) => e.spaceId === id && e.date > store.date).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 8)
     body += `<div class="sec-title">Upcoming</div>` + (upcoming.length ? upcoming.map((e) => `
       <div class="row-card" data-date="${e.date}"><div class="rc-title">${esc(e.title)}</div><div class="rc-sub">${fmtDay(e.date)} · ${e.slot}</div><div class="rc-right"><span class="mono">${e.pax} pax</span>${god ? `<span class="mono">${inr(e.value)}</span>` : ''}</div></div>`).join('') : `<div class="empty">Nothing booked.</div>`)
@@ -225,6 +237,9 @@ export function drawerHtml(store: Store, id: string) {
     body += `<div class="sec-title">Served <span>${list.length - open.length}</span></div>` + list.filter((o) => o.status === 'served').slice(0, 12).map((o) => kotCard(store, o.id, s.type === 'kitchen')).join('')
   } else if (s.type === 'restaurant') {
     body += `<div class="sec-title">Orders</div><div class="empty">No orders on this date.</div>`
+    if (store.live) body += `<div class="actions">${foodAction(store, id)}</div>`
+  } else if (s.type === 'pool' && store.live) {
+    body += `<div class="note" style="margin-top:12px">${tipHtml(store, id, false)}</div><div class="actions">${foodAction(store, id)}</div>`
   } else {
     body += `<div class="note" style="margin-top:12px">${tipHtml(store, id, false)}</div>`
   }

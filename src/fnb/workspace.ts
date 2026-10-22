@@ -44,7 +44,11 @@ export class FnbWorkspace extends Workspace<Tab> implements Ws {
   async refreshOutlets() {
     const r = await this.cached<{ outlets: Outlet[]; stations: Station[] }>('/api/fnb/outlets')
     this.outlets = r.outlets; this.stations = r.stations
+    window.dispatchEvent(new CustomEvent('sathya:outlets-changed', { detail: r.outlets }))
   }
+
+  /** The captain screen on one place's tables (from the map). */
+  openPlace(id: string) { this.captain.showPlace(id); void this.show('orders') }
 
   /** From the map: a lawn, hall or the pool becomes a food place, then the captain screen opens on it. */
   newPlace(spaceId: string, name: string, kind: string) {

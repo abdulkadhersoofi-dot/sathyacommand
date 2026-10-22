@@ -137,6 +137,10 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .map-label[data-tone="live"] .ml-detail b { color: #7a1f0c; }
 .map-label[data-tone="alert"] .ml-detail { background: var(--st-departing); color: #fff; }
 .map-label[data-tone="alert"] .ml-detail b { color: #fff; }
+.map-label[data-tone="hold"] .ml-detail { background: #f0c04a; color: #1d1404; }
+.map-label[data-tone="pencil"] .ml-detail { background: var(--surface); color: var(--muted); border: 1px dashed var(--muted); box-shadow: none; }
+.ml-line { display: block; text-align: left; }
+.ml-line.now { font-weight: 800; }
 
 .layers {
   position: absolute; z-index: 2; top: 14px; left: max(14px, env(safe-area-inset-left, 0px));
