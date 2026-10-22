@@ -688,8 +688,11 @@ if (api && me && liveAdapter) {
   }))
   const sep = document.createElement('div'); sep.className = 'menu-sep'
   $('#user-menu').append(sep, pw, out)
-  fd = new FrontDesk(api, store, me, () => { renderSide(); if (drawerId) void loadStay(drawerId) })
-  store.stayAllowed = true
+  // The desk, guests' bills and the Front desk panel are for front-desk logins only.
+  if (me.permissions.includes('*') || me.permissions.includes('front_desk')) {
+    fd = new FrontDesk(api, store, me, () => { renderSide(); if (drawerId) void loadStay(drawerId) })
+    store.stayAllowed = true
+  }
   const outbox = new Outbox(api)
   fnb = new FnbWorkspace(api, me, outbox, () => store.reservations.filter((r) => r.status === 'in-house').map((r) => ({ id: r.id, guest: r.guest, roomNo: r.roomNo ?? null, pax: r.pax })), () => renderSide())
   // The map's drawer offers "Food orders" at places that are food places and "Serve food here" at the rest.
@@ -778,7 +781,8 @@ if (api && me && liveAdapter) {
   // The approval inbox: shows itself when something waits for this person (or for someone else on their behalf).
   approvals = new Approvals(api, $('#btn-approvals') as HTMLButtonElement)
   $('#btn-frontdesk').hidden = !fd
-  setTab('arrivals')
+  $('#tabs [data-tab="arrivals"]')!.hidden = !fd
+  if (fd) setTab('arrivals')
 }
 
 /** The notices under the top bar (a day left open, setup still to do), stacked. */
