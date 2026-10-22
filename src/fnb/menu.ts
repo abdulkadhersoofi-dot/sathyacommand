@@ -2,6 +2,7 @@ import { esc, tonePill } from '../ui/dom'
 import { checked, val } from '../ui/form-modal'
 import { chips, DIET, dietDot, rs, type Category, type MenuItem, type Outlet, type Station, type Table, type Ws } from './common'
 import { toolbar, type Action } from '../ui/toolbar'
+import { foodPlaceForm, KIND_LABEL } from './places'
 
 // Menu editor: outlets, menu sections and dishes (English and Tamil), prices, kitchen stations and
 // tables. Price changes by anyone but the GM wait in the approval inbox; everything is logged.
@@ -9,7 +10,6 @@ import { toolbar, type Action } from '../ui/toolbar'
 type Sub = 'items' | 'tables' | 'stations' | 'outlets' | 'printers'
 interface Printer { id: string; name: string; host: string; port: number; width: number; active: boolean }
 interface PrintJob { id: string; kind: string; ref: string; status: string; attempts: number; error: string | null; created_at: string; printer: string }
-const OUTLET_KIND: Record<string, string> = { restaurant: 'Restaurant', room_service: 'Room service', bar: 'Bar', poolside: 'Poolside', banquet: 'Banquet' }
 
 export class MenuView {
   outletId = ''
@@ -28,7 +28,9 @@ export class MenuView {
   async load() {
     const all = await this.ws.api.get<{ outlets: Outlet[]; stations: Station[] }>('/api/fnb/outlets?all=true')
     this.allOutlets = all.outlets; this.allStations = all.stations
-    if (!this.allOutlets.some((o) => o.id === this.outletId)) this.outletId = (this.allOutlets.find((o) => o.active && o.kind === 'restaurant') ?? this.allOutlets[0])?.id ?? ''
+    // Dishes are edited on the place that owns the menu; a place serving another's menu is not offered.
+    const own = this.allOutlets.filter((o) => !o.menu_of)
+    if (!this.allOutlets.some((o) => o.id === this.outletId)) this.outletId = (own.find((o) => o.active && o.kind === 'restaurant') ?? own[0] ?? this.allOutlets[0])?.id ?? ''
     if (this.outletId) {
       this.menu = await this.ws.api.get(`/api/fnb/menu?outletId=${this.outletId}&all=true`)
       this.tables = (await this.ws.api.get<(Table & { active?: boolean })[]>(`/api/fnb/tables?outletId=${this.outletId}`))
@@ -43,15 +45,15 @@ export class MenuView {
   private station = (id: string) => this.allStations.find((s) => s.id === id)?.name ?? id
 
   html() {
-    const subs: [Sub, string][] = [['items', 'Dishes'], ['tables', 'Tables'], ['stations', 'Kitchen stations'], ['outlets', 'Outlets'], ['printers', 'Printers']]
-    const outletChips = this.sub === 'items' || this.sub === 'tables'
-      ? chips(this.allOutlets.filter((o) => o.active).map((o) => [o.id, o.name]), this.outletId, 'moutlet') : ''
+    const subs: [Sub, string][] = [['items', 'Dishes'], ['tables', 'Tables'], ['stations', 'Kitchen stations'], ['outlets', 'Food places'], ['printers', 'Printers']]
+    const outletChips = this.sub === 'items' ? chips(this.allOutlets.filter((o) => o.active && !o.menu_of).map((o) => [o.id, o.name]), this.outletId, 'moutlet')
+      : this.sub === 'tables' ? chips(this.allOutlets.filter((o) => o.active).map((o) => [o.id, o.name]), this.outletId, 'moutlet') : ''
     // One toolbar for the whole Menu tab: the sub-tab's main action on the left, the sub-tab and outlet chips in the middle.
     const primary: Action[] = this.sub === 'items' ? (this.canEdit ? [{ attrs: 'data-m="add-item"', label: 'Add dish' }, { attrs: 'data-m="add-cat"', label: 'Add section', primary: false }] : [])
       : this.sub === 'tables' ? (this.canEdit ? [{ attrs: 'data-m="add-table"', label: 'Add table' }] : [])
       : this.sub === 'stations' ? (this.canEdit ? [{ attrs: 'data-m="add-station"', label: 'Add station' }] : [])
       : this.sub === 'printers' ? (this.ws.can('printers.manage') ? [{ attrs: 'data-m="add-printer"', label: 'Add printer' }] : [])
-      : this.canEdit ? [{ attrs: 'data-m="add-outlet"', label: 'Add outlet' }] : []
+      : this.canEdit ? [{ attrs: 'data-m="add-outlet"', label: 'Add a food place' }] : []
     const more: Action[] = this.sub === 'items' && this.canPrice ? [{ attrs: 'data-m="import"', label: 'Import menu' }] : []
     return toolbar({ primary, filters: chips(subs, this.sub, 'msub') + outletChips, more }) + (
       this.sub === 'items' ? this.itemsHtml() : this.sub === 'tables' ? this.tablesHtml() : this.sub === 'stations' ? this.stationsHtml() : this.sub === 'printers' ? this.printersHtml() : this.outletsHtml())
@@ -130,8 +132,10 @@ export class MenuView {
   }
 
   private outletsHtml() {
-    return `<div class="m-table">${this.allOutlets.map((o) => `<div class="m-row m-row-4${o.active ? '' : ' retired'}"><span class="mono">${esc(o.id)}</span><b>${esc(o.name)}</b>
-        <span class="muted">${OUTLET_KIND[o.kind] ?? o.kind}${o.serves_liquor ? ' · serves liquor' : ''}${o.active ? '' : ' · closed'}</span>
+    const menuName = (id: string | null) => this.allOutlets.find((x) => x.id === id)?.name ?? id
+    return `<p class="muted small">Any place on the map can take food orders: a lawn or hall on a day without an event, a cafeteria, the pool deck. A place serves its own menu or another place's.</p>
+      <div class="m-table">${this.allOutlets.map((o) => `<div class="m-row m-row-4${o.active ? '' : ' retired'}"><span class="mono">${esc(o.id)}</span><b>${esc(o.name)}</b>
+        <span class="muted">${KIND_LABEL[o.kind] ?? o.kind}${o.place ? ` · ${esc(o.place)}` : ' · <span class="fd-warn">not on the map</span>'}${o.menu_of ? ` · menu of ${esc(menuName(o.menu_of) ?? '')}` : ''}${o.serves_liquor ? ' · liquor' : ''}${o.active ? '' : ' · closed'}</span>
         ${this.canEdit ? `<button type="button" class="btn small" data-edit-outlet="${esc(o.id)}">Edit</button>` : '<span></span>'}</div>`).join('')}</div>`
   }
 
@@ -267,25 +271,7 @@ export class MenuView {
   }
 
   private outletForm(o?: Outlet) {
-    this.ws.modal.open(o ? `Edit ${o.name}` : 'Add outlet', `<div class="form-grid">
-      <label>Code<input name="id" maxlength="10" value="${esc(o?.id ?? '')}" ${o ? 'disabled' : 'placeholder="CAFE"'}></label>
-      <label>Kind<select name="kind">${Object.entries(OUTLET_KIND).map(([k, v]) => `<option value="${k}" ${k === (o?.kind ?? 'restaurant') ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
-      <label class="span2">Name<input name="name" maxlength="60" value="${esc(o?.name ?? '')}"></label>
-      <label class="span2">Where on the map (its orders show there)<select name="space" data-places><option value="">Choose the place…</option></select></label>
-      <label class="check"><input type="checkbox" name="liquor" ${o?.serves_liquor ? 'checked' : ''}> Serves liquor (within the bar licence)</label>
-      ${o ? `<label class="check"><input type="checkbox" name="active" ${o.active ? 'checked' : ''}> Open</label>` : ''}</div>`, o ? 'Save' : 'Add outlet', async (f) => {
-      const body = { name: val(f, 'name'), kind: val(f, 'kind'), spaceId: val(f, 'space') || null, servesLiquor: checked(f, 'liquor') }
-      if (o) await this.ws.api.req('PATCH', `/api/fnb/outlets/${o.id}`, { ...body, active: checked(f, 'active') })
-      else await this.ws.api.post('/api/fnb/outlets', { ...body, id: val(f, 'id').toUpperCase() })
-      await this.reload()
-      return o ? 'Saved' : 'Outlet added'
-    })
-    // Every hall, lawn, building and pool on the map, by name: an outlet's orders are shown above the place chosen.
-    const sel = this.ws.modal.el.querySelector<HTMLSelectElement>('[data-places]')!
-    void this.ws.api.get<{ id: string; kind: string; name: string | null; room_no: string | null }[]>('/api/spaces').then((sp) => {
-      const places = sp.filter((x) => !x.room_no && !['room', 'villa', 'suite'].includes(x.kind)).sort((a, b) => (a.name ?? a.id).localeCompare(b.name ?? b.id))
-      sel.insertAdjacentHTML('beforeend', places.map((x) => `<option value="${esc(x.id)}" ${x.id === o?.space_id ? "selected" : ""}>${esc(x.name ?? x.id)} · ${esc(x.kind)}</option>`).join(''))
-    }).catch(() => {})
+    foodPlaceForm(this.ws, async () => { await this.ws.refreshOutlets(); await this.reload() }, o)
   }
 
   /** Paste rows from a spreadsheet or the Champagne export: code, name, Tamil name, price, station, diet, liquor class, section. */

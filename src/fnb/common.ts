@@ -3,7 +3,7 @@ import { esc } from '../ui/dom'
 
 // Shared pieces for the restaurant screens (orders, kitchen, menu, licences & tax).
 
-export interface Outlet { id: string; name: string; kind: string; space_id: string | null; serves_liquor: boolean; active: boolean }
+export interface Outlet { id: string; name: string; kind: string; space_id: string | null; serves_liquor: boolean; active: boolean; menu_of: string | null; place: string | null }
 export interface Station { id: string; name: string; kind: 'kitchen' | 'bar'; active: boolean }
 export interface Category { id: string; name: string; sort: number }
 export interface MenuItem {
@@ -20,6 +20,8 @@ export interface Ws extends WorkspaceHost {
   stations: Station[]
   /** Checked-in guests, for room-service orders. */
   inHouse(): { id: string; guest: string; roomNo: string | null }[]
+  /** Fetches the food places again (after one is added or changed). */
+  refreshOutlets(): Promise<void>
 }
 
 export const rs = (paise: number) => (paise < 0 ? '−' : '') + '₹' + (Math.abs(paise) / 100).toLocaleString('en-IN', { minimumFractionDigits: paise % 100 ? 2 : 0, maximumFractionDigits: 2 })

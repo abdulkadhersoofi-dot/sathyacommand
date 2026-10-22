@@ -6,9 +6,10 @@ import { Billing } from './billing'
 import { isNetworkError } from '../live/api'
 import { newKey } from '../live/outbox'
 import { steps, toolbar, type Action, type Step } from '../ui/toolbar'
+import { foodPlaceForm, SEATED } from './places'
 
-// The captain's tablet: tables of an outlet, then the order screen. Items go into a cart on the tablet
-// and reach the kitchen only on "Send", one ticket per station.
+// The captain's tablet: every table of every food place on one screen, then the order screen with the
+// whole menu. Items go into a cart on the tablet and reach the kitchen only on "Send", one ticket per station.
 
 interface OrderLine { id: string; item_id: string; name: string; price_paise: number; qty: number; liquor_class: string | null; note: string | null; status: 'pending' | 'sent' | 'void'; kot_id: string | null; kot_number: number | null; kot_kind: string | null; kot_status: string | null; void_reason: string | null }
 interface OrderKot { id: string; number: number; kind: string; station_id: string; status: string; prints: number; created_at: string }
@@ -19,12 +20,15 @@ export interface OrderView {
   offline?: boolean
   totals: { food: number; gstRate: number; cgst: number; sgst: number; liquorBeforeVat: number; vat: number; vatMissing: string[]; payable: number }
 }
-interface RoomOrder { id: string; number: number; room_no: string | null; guest: string | null; opened_at: string; kitchen: string | null; subtotal_paise: number; pending_items: number; kind: string; table_label: string | null }
+interface RoomOrder { id: string; number: number; outlet_id: string; outlet: string; room_no: string | null; guest: string | null; opened_at: string; kitchen: string | null; subtotal_paise: number; pending_items: number; kind: string; table_label: string | null }
 
 const KITCHEN_STATE: Record<string, [string, string]> = { new: ['Sent', '--st-arriving'], cooking: ['Cooking', '--st-occupied'], ready: ['Ready', '--st-vacant'], served: ['Served', '--st-ooo'] }
 
 export class CaptainView {
+  /** The place new orders open at; '' shows every place's tables. */
   outletId = ''
+  private filter = ''
+  private tsearch = ''
   private tables: Table[] = []
   private roomOrders: RoomOrder[] = []
   private order: OrderView | null = null
@@ -42,13 +46,10 @@ export class CaptainView {
     this.billing = new Billing(ws, async () => { await this.load(); this.ws.render() })
   }
 
-  private get outlet() { return this.ws.outlets.find((o) => o.id === this.outletId) }
-
   async load() {
     // Bar staff start on the bar; everyone else on the restaurant.
     const barRole = this.ws.me.roles?.some((r) => r === 'bartender' || r === 'bar_manager')
     if (!this.ws.outlets.some((o) => o.id === this.outletId)) this.outletId = (this.ws.outlets.find((o) => o.kind === (barRole ? 'bar' : 'restaurant')) ?? this.ws.outlets[0])?.id ?? ''
-    if (!this.outletId) return
     const queuedFor = (id: string) => this.ws.outbox.queue.some((q) => q.path.includes(id) || (q.body as { id?: string })?.id === id)
     if (this.order && !(this.order.offline && queuedFor(this.order.id))) {
       try {
@@ -57,14 +58,15 @@ export class CaptainView {
       } catch (e) { if (!isNetworkError(e)) throw e; this.ws.offline = true }
     }
     const outletId = this.order?.outlet_id ?? this.outletId
-    if (this.menuFor !== outletId || this.order) {
+    if (outletId && (this.menuFor !== outletId || this.order)) {
       this.menu = await this.ws.cached(`/api/fnb/menu?outletId=${outletId}`)
       if (this.menuFor !== outletId) this.cat = ''
       this.menuFor = outletId
     }
     if (!this.order) {
-      this.tables = await this.ws.cached(`/api/fnb/tables?outletId=${this.outletId}`)
-      this.roomOrders = await this.ws.cached(`/api/fnb/orders?outletId=${this.outletId}`)
+      // One screen for the whole resort: every place's tables and every open room-service and takeaway order.
+      this.tables = await this.ws.cached('/api/fnb/tables')
+      this.roomOrders = await this.ws.cached('/api/fnb/orders')
       // Tables opened on this tablet while offline.
       for (const q of this.ws.outbox.queue.filter((x) => x.path === '/api/fnb/orders')) {
         const b = q.body as { id: string; tableId?: string; covers: number }
@@ -74,6 +76,9 @@ export class CaptainView {
     }
     if (!this.ws.offline) await this.billing.load(this.order?.status === 'billed' ? this.order.id : null)
   }
+
+  /** Shows one place's tables (after it was just added from the map). */
+  showPlace(id: string) { this.outletId = id; this.filter = id; this.order = null; this.cart.clear() }
 
   /** Opens a specific order (e.g. from the kitchen panel). */
   async openOrder(id: string) {
@@ -92,34 +97,87 @@ export class CaptainView {
   }
 
   html(): string {
-    if (!this.outletId) return '<div class="empty">No outlets yet. Add one under Menu.</div>'
     return this.order ? this.orderHtml(this.order) : this.tablesHtml()
   }
 
   // ---------- tables ----------
   private tablesHtml() {
-    const o = this.outlet!
-    const outletChips = chips(this.ws.outlets.filter((x) => x.active).map((x) => [x.id, x.name]), this.outletId, 'outlet')
+    const places = this.ws.outlets.filter((x) => x.active)
     const shift = this.billing.shiftAction()
-    if (o.kind === 'room_service') {
-      return toolbar({ primary: [{ attrs: 'data-cap="new-room"', label: 'New room-service order' }], filters: outletChips, more: shift ? [shift] : [] }) + `
-        <div class="sec-title">Open room-service orders <span>${this.roomOrders.length}</span></div>
-        ${this.roomOrders.length ? this.roomOrders.map((r) => `<button type="button" class="row-card ws-row" data-order="${esc(r.id)}">
-          <div class="rc-title">Room ${esc(r.room_no ?? '?')} · ${esc(r.guest ?? '')}</div>
-          <div class="rc-sub">Order ${r.number} · ${minutesAgo(r.opened_at)} min · ${rs(Number(r.subtotal_paise))}${r.pending_items ? ` · ${r.pending_items} not sent` : ''}</div>
-          <div class="rc-right">${r.kitchen ? tonePill(...KITCHEN_STATE[r.kitchen]) : tonePill('Delivered', '--st-ooo')}</div></button>`).join('') : '<div class="empty">No open room-service orders.</div>'}`
+    const more: Action[] = [
+      ...(this.ws.can('menu.edit') ? [{ attrs: 'data-cap="add-place"', label: 'Add a food place' }] : []),
+      ...(shift ? [shift] : []),
+    ]
+    const placeChips = chips([['', 'All places'], ...places.map((x): [string, string] => [x.id, x.name])], this.filter, 'outlet')
+    return toolbar({ primary: [{ attrs: 'data-cap="new"', label: 'New order' }], filters: `<input class="ws-search" type="search" data-tsearch placeholder="Table, room or guest" value="${esc(this.tsearch)}" aria-label="Find a table, room or guest">${placeChips}`, more })
+      + `<div class="cap-tables">${this.tablesBody()}</div>`
+  }
+
+  /** Every place's tables in sections, then room-service and takeaway orders; the search and the chips narrow it. */
+  private tablesBody() {
+    const q = this.tsearch.toLowerCase()
+    const places = this.ws.outlets.filter((x) => x.active && (!this.filter || x.id === this.filter))
+    const open = this.roomOrders.filter((r) => !this.filter || r.outlet_id === this.filter)
+    const hit = (...parts: (string | number | null | undefined)[]) => !q || parts.some((p) => String(p ?? '').toLowerCase().includes(q))
+    let h = ''
+    for (const o of places) {
+      if (!SEATED.has(o.kind)) continue
+      const tables = this.tables.filter((t) => t.outlet_id === o.id && hit(t.label, t.section, t.order_number, t.covers && `order ${t.order_number}`))
+      if (!tables.length && (q || !this.tables.some((t) => t.outlet_id === o.id))) {
+        if (!q) h += `<div class="sec-title">${esc(o.name)}</div><div class="empty">No tables yet: add them under Menu → Tables, or take a takeaway order.</div>`
+        continue
+      }
+      const openHere = tables.filter((t) => t.order_id).length
+      h += `<div class="sec-title">${esc(o.name)} <span>${openHere ? `${openHere} open · ` : ''}${tables.length} tables</span></div><div class="tables">${tables.map((t) => {
+        const state = !t.order_id ? 'free' : t.order_status === 'billed' ? 'billed' : t.ready_tickets ? 'ready' : 'open'
+        return `<button type="button" class="tbl" data-table="${esc(t.id)}" data-state="${state}">
+          <b>${esc(t.label)}</b>
+          <span>${t.order_id ? `Order ${t.order_number} · ${t.covers} pax · ${minutesAgo(t.opened_at!)} min` : `${t.seats} seats${t.section ? ` · ${esc(t.section)}` : ''}`}</span>
+          ${state === 'billed' ? '<em>Bill out</em>' : t.ready_tickets ? '<em>Food ready</em>' : ''}</button>`
+      }).join('')}</div>`
     }
-    const sections = [...new Set(this.tables.map((t) => t.section ?? ''))]
-    const takeaway = this.roomOrders.filter((r) => r.kind === 'takeaway')
-    return toolbar({ primary: [{ attrs: 'data-cap="takeaway"', label: 'Takeaway order' }], filters: outletChips, more: shift ? [shift] : [] })
-      + sections.map((sec) => `<div class="sec-title">${esc(sec || 'Tables')}</div><div class="tables">${this.tables.filter((t) => (t.section ?? '') === sec).map((t) => {
-      const state = !t.order_id ? 'free' : t.order_status === 'billed' ? 'billed' : t.ready_tickets ? 'ready' : 'open'
-      return `<button type="button" class="tbl" data-table="${esc(t.id)}" data-state="${state}">
-        <b>${esc(t.label)}</b>
-        <span>${t.order_id ? `Order ${t.order_number} · ${t.covers} pax · ${minutesAgo(t.opened_at!)} min` : `${t.seats} seats`}</span>
-        ${state === 'billed' ? '<em>Bill out</em>' : t.ready_tickets ? '<em>Food ready</em>' : ''}</button>`
-    }).join('')}</div>`).join('')
-      + (takeaway.length ? `<div class="sec-title">Takeaway</div>` + takeaway.map((r) => `<button type="button" class="row-card ws-row" data-order="${esc(r.id)}"><div class="rc-title">Order ${r.number}</div><div class="rc-sub">${minutesAgo(r.opened_at)} min · ${rs(Number(r.subtotal_paise))}</div></button>`).join('') : '')
+    const rooms = open.filter((r) => r.kind === 'room_service' && hit(r.room_no, r.guest, r.number, 'room'))
+    const takeaway = open.filter((r) => r.kind === 'takeaway' && hit(r.number, r.outlet, 'takeaway'))
+    const card = (r: RoomOrder, title: string) => `<button type="button" class="row-card ws-row" data-order="${esc(r.id)}">
+      <div class="rc-title">${title}</div>
+      <div class="rc-sub">${esc(r.outlet)} · order ${r.number} · ${minutesAgo(r.opened_at)} min · ${rs(Number(r.subtotal_paise))}${r.pending_items ? ` · ${r.pending_items} not sent` : ''}</div>
+      <div class="rc-right">${r.kitchen ? tonePill(...KITCHEN_STATE[r.kitchen]) : tonePill('Delivered', '--st-ooo')}</div></button>`
+    if (rooms.length || (!q && places.some((o) => o.kind === 'room_service'))) h += `<div class="sec-title">Room service <span>${rooms.length}</span></div>` + (rooms.map((r) => card(r, `Room ${esc(r.room_no ?? '?')} · ${esc(r.guest ?? '')}`)).join('') || '<div class="empty">No open room-service orders.</div>')
+    if (takeaway.length) h += `<div class="sec-title">Takeaway <span>${takeaway.length}</span></div>` + takeaway.map((r) => card(r, `Takeaway ${r.number}`)).join('')
+    return h || `<div class="empty">${q ? 'Nothing matches.' : 'No food places yet. Add one under More ▾.'}</div>`
+  }
+
+  /** One question: where is the order? A free table, a guest's room, or takeaway from a place. */
+  private newOrderForm() {
+    const places = this.ws.outlets.filter((x) => x.active)
+    const free = this.tables.filter((t) => !t.order_id).filter((t) => places.some((p) => p.id === t.outlet_id))
+    const guests = this.ws.inHouse().filter((g) => g.roomNo)
+    const roomPlace = places.find((p) => p.kind === 'room_service')
+    const group = (label: string, opts: string) => (opts ? `<optgroup label="${esc(label)}">${opts}</optgroup>` : '')
+    const tableOpts = places.filter((p) => SEATED.has(p.kind)).map((p) => group(p.name, free.filter((t) => t.outlet_id === p.id).map((t) => `<option value="t:${esc(t.id)}" ${t.outlet_id === this.outletId ? '' : ''}>${esc(p.name)} · ${esc(t.label)} (${t.seats} seats)</option>`).join(''))).join('')
+    const roomOpts = roomPlace ? group('Room service', guests.map((g) => `<option value="r:${esc(g.id)}">Room ${esc(g.roomNo!)} · ${esc(g.guest)}</option>`).join('')) : ''
+    const takeOpts = group('Takeaway', places.filter((p) => p.kind !== 'room_service').map((p) => `<option value="k:${esc(p.id)}">Takeaway from ${esc(p.name)}</option>`).join(''))
+    this.ws.modal.open('New order', `<div class="form-grid">
+      <label class="span2">Where<select name="where">${tableOpts}${roomOpts}${takeOpts}</select></label>
+      <label>Guests (covers)<input name="covers" type="number" min="1" max="200" value="2" inputmode="numeric"></label></div>`, 'Open order', async (f) => {
+      const [kind, id] = val(f, 'where').split(':')
+      const covers = Number(val(f, 'covers')) || 1
+      if (kind === 't') { await this.openTable(this.tables.find((x) => x.id === id)!, covers); return '' }
+      if (kind === 'r') this.order = await this.ws.api.post<OrderView>('/api/fnb/orders', { outletId: roomPlace!.id, reservationId: id, covers })
+      if (kind === 'k') this.order = await this.ws.api.post<OrderView>('/api/fnb/orders', { outletId: id, kind: 'takeaway', covers })
+      this.cart.clear(); await this.load(); this.ws.render()
+      return ''
+    })
+  }
+
+  private async openTable(tb: Table, covers: number) {
+    // The tablet names the order, so items can follow it even if the connection drops right now.
+    const id = `ORD-${newKey().replace(/[^a-z0-9]/gi, '').slice(-12).toUpperCase()}`
+    this.outletId = tb.outlet_id
+    const o = await this.ws.outbox.send<OrderView>('POST', '/api/fnb/orders', { id, outletId: tb.outlet_id, tableId: tb.id, covers }, `open table ${tb.label}`)
+    this.order = o ?? this.offlineOrder(id, tb, covers)
+    this.cart.clear(); await this.load(); this.ws.render()
+    if (!o) toast('No connection: the order is kept on this tablet and goes to the HMS when it is back.')
   }
 
   // ---------- order ----------
@@ -149,7 +207,7 @@ export class CaptainView {
     ]
     return `<div class="ord">
       <div class="ord-menu">
-        <div class="ord-top"><button type="button" class="btn small" data-cap="back">← ${esc(this.outlet?.kind === 'room_service' ? 'Orders' : 'Tables')}</button>
+        <div class="ord-top"><button type="button" class="btn small" data-cap="back">← All orders</button>
           <input class="ws-search" type="search" placeholder="Search dishes or code" value="${esc(this.search)}" aria-label="Search the menu"></div>
         <div class="ord-items">${this.itemsHtml()}</div>
       </div>
@@ -163,16 +221,21 @@ export class CaptainView {
       </div></div>`
   }
 
+  /** The whole menu on one page, section by section; the chips jump to a section, the search narrows every section. */
   private itemsHtml() {
     const q = this.search.toLowerCase()
-    const items = this.menu.items.filter((i) => (!this.cat || i.category_id === this.cat) && (!q || i.name.toLowerCase().includes(q) || i.code.toLowerCase().includes(q) || (i.name_ta ?? '').includes(this.search)))
-    const cats: [string, string][] = [['', 'All'], ...this.menu.categories.filter((c) => this.menu.items.some((i) => i.category_id === c.id)).map((c): [string, string] => [c.id, c.name])]
-    return chips(cats, this.cat, 'cat') + `<div class="menu-grid">${items.map((i) => {
+    const match = (i: MenuItem) => !q || i.name.toLowerCase().includes(q) || i.code.toLowerCase().includes(q) || (i.name_ta ?? '').includes(this.search)
+    const sections = [...this.menu.categories.map((c) => ({ id: c.id, name: c.name, items: this.menu.items.filter((i) => i.category_id === c.id && match(i)) })),
+      { id: '', name: 'Other', items: this.menu.items.filter((i) => (!i.category_id || !this.menu.categories.some((c) => c.id === i.category_id)) && match(i)) }].filter((sec) => sec.items.length)
+    const dish = (i: MenuItem) => {
       const inCart = this.cart.get(i.id)?.qty
       return `<button type="button" class="dish" data-item="${esc(i.id)}" ${i.available && this.order?.status !== 'billed' ? '' : 'disabled'}>
         <span class="dish-name">${dietDot(i.diet)}${esc(i.name)}</span>${i.name_ta ? `<span class="dish-ta">${esc(i.name_ta)}</span>` : ''}
         <span class="dish-foot"><span class="mono">${rs(i.price_paise)}</span>${!i.available ? '<em>Sold out</em>' : i.liquor_class ? '<em>Liquor</em>' : ''}${inCart ? `<b class="dish-qty">${inCart}</b>` : ''}</span></button>`
-    }).join('') || '<div class="empty">No dishes match.</div>'}</div>`
+    }
+    return (q ? '' : chips(sections.map((sec): [string, string] => [sec.id || '-', sec.name]), this.cat, 'cat'))
+      + sections.map((sec) => `<div class="menu-sec" data-sec="${esc(sec.id || '-')}"><div class="sec-title">${esc(sec.name)} <span>${sec.items.length}</span></div><div class="menu-grid">${sec.items.map(dish).join('')}</div></div>`).join('')
+      || '<div class="empty">No dishes match.</div>'
   }
 
   private linesHtml(o: OrderView) {
@@ -223,21 +286,16 @@ export class CaptainView {
     const d = (k: string) => t.closest<HTMLElement>(`[data-${k}]`)?.dataset[k.replace(/-(.)/g, (_, c) => c.toUpperCase())]
     const api = this.ws.api
     if (await this.billing.click(t, this.order)) return true
-    const outlet = d('outlet'); if (outlet !== undefined) { this.outletId = outlet; this.order = null; await this.load(); return true }
-    const cat = d('cat'); if (cat !== undefined) { this.cat = cat; this.refreshItems(); return true }
+    const outlet = d('outlet'); if (outlet !== undefined) { this.filter = outlet; if (outlet) this.outletId = outlet; return true }
+    const cat = d('cat'); if (cat !== undefined) { this.cat = cat; this.jumpTo(cat); return false }
     const table = d('table')
     if (table) {
       const tb = this.tables.find((x) => x.id === table)!
       if (tb.order_id && tb.order_number === 0) { this.order = this.offlineOrder(tb.order_id, tb, tb.covers ?? 1); await this.load(); return true }
       if (tb.order_id) { await this.openOrder(tb.order_id); await this.load(); return true }
-      this.ws.modal.open(`Table ${tb.label}`, `<div class="form-grid"><label>Guests (covers)<input name="covers" type="number" min="1" max="200" value="${Math.min(2, tb.seats)}"></label></div>`, 'Open order', async (f) => {
-        // The tablet names the order, so items can follow it even if the connection drops right now.
-        const id = `ORD-${newKey().replace(/[^a-z0-9]/gi, '').slice(-12).toUpperCase()}`
-        const covers = Number(val(f, 'covers'))
-        const o = await this.ws.outbox.send<OrderView>('POST', '/api/fnb/orders', { id, outletId: this.outletId, tableId: tb.id, covers }, `open table ${tb.label}`)
-        this.order = o ?? this.offlineOrder(id, tb, covers)
-        this.cart.clear(); await this.load(); this.ws.render()
-        return o ? '' : 'No connection: the order is kept on this tablet and goes to the HMS when it is back.'
+      this.ws.modal.open(`${this.ws.outlets.find((x) => x.id === tb.outlet_id)?.name ?? ''} · table ${tb.label}`, `<div class="form-grid"><label>Guests (covers)<input name="covers" type="number" min="1" max="200" value="${Math.min(2, tb.seats)}"></label></div>`, 'Open order', async (f) => {
+        await this.openTable(tb, Number(val(f, 'covers')) || 1)
+        return ''
       })
       return true
     }
@@ -320,21 +378,19 @@ export class CaptainView {
         this.order = null; this.cart.clear(); await this.load(); this.ws.render(); return 'Order cancelled'
       })
     }
-    if (act === 'takeaway') { this.order = await api.post<OrderView>('/api/fnb/orders', { outletId: this.outletId, kind: 'takeaway' }); this.cart.clear(); await this.load() }
-    if (act === 'new-room') {
-      const guests = this.ws.inHouse().filter((g) => g.roomNo)
-      this.ws.modal.open('Room-service order', guests.length ? `<div class="form-grid"><label class="span2">Room<select name="res">${guests.map((g) => `<option value="${esc(g.id)}">Room ${esc(g.roomNo!)} · ${esc(g.guest)}</option>`).join('')}</select></label></div>` : '<p>No guests are checked in.</p>',
-        guests.length ? 'Open order' : 'Done', async (f) => {
-          if (!guests.length) return ''
-          this.order = await api.post<OrderView>('/api/fnb/orders', { outletId: this.outletId, reservationId: val(f, 'res') })
-          this.cart.clear(); await this.load(); this.ws.render(); return ''
-        })
-    }
+    if (act === 'new') this.newOrderForm()
+    if (act === 'add-place') foodPlaceForm(this.ws, async (id, created) => { await this.ws.refreshOutlets(); if (created) this.showPlace(id); await this.load(); this.ws.render() })
     return true
   }
 
   onInput(t: HTMLElement) {
     if (!t.classList.contains('ws-search')) return
+    if (t.hasAttribute('data-tsearch')) {
+      this.tsearch = (t as HTMLInputElement).value
+      const box = document.querySelector('.ws .cap-tables')
+      if (box) box.innerHTML = this.tablesBody()
+      return
+    }
     this.search = (t as HTMLInputElement).value
     this.refreshItems()
   }
@@ -342,5 +398,10 @@ export class CaptainView {
   private refreshItems() {
     const box = document.querySelector('.ws .ord-items')
     if (box) box.innerHTML = this.itemsHtml()
+  }
+
+  private jumpTo(sec: string) {
+    document.querySelectorAll<HTMLElement>('.ws .ord-items [data-cat]').forEach((c) => c.setAttribute('aria-pressed', String(c.dataset.cat === sec)))
+    document.querySelector<HTMLElement>(`.ws .ord-items [data-sec="${CSS.escape(sec)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 }

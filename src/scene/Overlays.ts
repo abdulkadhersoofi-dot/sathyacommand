@@ -152,14 +152,7 @@ export class Overlays {
     const l = this.site.layout
     const GROUND_NAMES: Record<string, string> = { 'LAWN-GRAND': 'Grand Lawn', 'LAWN-GARDEN': 'Garden Lawn', 'GROUND-CRICKET': 'Cricket Ground', 'GROUND-NORTH': 'North Ground', POOL: 'Pool' }
     const seen = new Set<string>()
-    // A building drawn in parts (a hall and its annex) is labelled once; the label key is its HMS space when it has one, so live figures attach to it.
-    for (const b of l.buildings) {
-      const name = b.label?.trim()
-      if (!name || seen.has(name)) continue
-      seen.add(name)
-      const [cx, cz] = centroid(b.poly)
-      this.addLabel(b.spaceId && !this.labels.has(b.spaceId) ? b.spaceId : `b:${b.id}`, name, new THREE.Vector3(cx, b.height + 2, cz), b.spaceId)
-    }
+    // A space with ground or water (the pool deck, a lawn) is labelled there, so its live figures never land on a shed beside it.
     for (const g of l.ground) {
       const name = g.label?.trim() || (g.spaceId ? GROUND_NAMES[g.spaceId] : undefined)
       if (!name) continue
@@ -170,6 +163,14 @@ export class Overlays {
       const name = p.label?.trim() || (p.spaceId ? GROUND_NAMES[p.spaceId] : 'Pool')
       const [cx, cz] = centroid(p.poly)
       if (!this.labels.has(p.spaceId ?? `p:${p.id}`)) this.addLabel(p.spaceId ?? `p:${p.id}`, name ?? 'Pool', new THREE.Vector3(cx, 2, cz), p.spaceId)
+    }
+    // A building drawn in parts (a hall and its annex) is labelled once; the label key is its HMS space when it has one and nothing else took it, so live figures attach to it.
+    for (const b of l.buildings) {
+      const name = b.label?.trim()
+      if (!name || seen.has(name)) continue
+      seen.add(name)
+      const [cx, cz] = centroid(b.poly)
+      this.addLabel(b.spaceId && !this.labels.has(b.spaceId) ? b.spaceId : `b:${b.id}`, name, new THREE.Vector3(cx, b.height + 2, cz), b.spaceId)
     }
     for (const b of l.blocks) {
       const [cx, cz] = centroid(rectPoly(b.rect))

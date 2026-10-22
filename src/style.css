@@ -1041,3 +1041,11 @@ button.link { background: none; border: 0; padding: 0; color: var(--accent); fon
 @keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 .tour-hint { position: absolute; right: 14px; bottom: 50px; font: 600 11px var(--f-body); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: var(--glass); padding: 4px 10px; border-radius: 999px; }
 .touring .layers, .touring .legend, .touring .hint, .touring .notices { opacity: 0; transition: opacity .6s; }
+
+/* ---------- one-screen ordering and food places ---------- */
+.cap-tables .sec-title { margin-top: 14px; }
+.menu-sec { margin-bottom: 14px; }
+.menu-sec .sec-title { position: sticky; top: 0; background: var(--bg); z-index: 1; padding-top: 4px; }
+.ord-items .ws-chips { position: sticky; top: 0; background: var(--bg); z-index: 2; padding: 4px 0 8px; margin: 0; }
+.fp-tables .sec-title { margin-top: 4px; }
+.fp-tables label small { display: block; }

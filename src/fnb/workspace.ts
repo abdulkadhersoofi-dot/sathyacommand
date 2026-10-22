@@ -9,6 +9,7 @@ import { MenuView } from './menu'
 import { SettingsView } from './settings'
 import { BarView } from './bar'
 import { KitchenStockView } from './kitchen-stock'
+import { foodPlaceForm } from './places'
 
 // The restaurant workspace: Orders (captain tablet), Kitchen & bar screens, Menu, Bar stock, Kitchen
 // stock and Licences & tax. Each tab shows only to roles that use it.
@@ -39,9 +40,15 @@ export class FnbWorkspace extends Workspace<Tab> implements Ws {
     return t
   }
 
-  protected async beforeLoad() {
+  protected async beforeLoad() { await this.refreshOutlets() }
+  async refreshOutlets() {
     const r = await this.cached<{ outlets: Outlet[]; stations: Station[] }>('/api/fnb/outlets')
     this.outlets = r.outlets; this.stations = r.stations
+  }
+
+  /** From the map: a lawn, hall or the pool becomes a food place, then the captain screen opens on it. */
+  newPlace(spaceId: string, name: string, kind: string) {
+    void this.show('orders').then(() => foodPlaceForm(this, async (id) => { await this.refreshOutlets(); this.captain.showPlace(id); await this.show('orders') }, undefined, { spaceId, name, kind }))
   }
 
   protected canLeave() { return !this.captain.dirty || confirm('Leave without sending the new items?') }

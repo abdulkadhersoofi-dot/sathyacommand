@@ -166,33 +166,67 @@ export function fnbRoutes(app: FastifyInstance, ctx: Ctx) {
   app.get('/api/fnb/outlets', async (req) => {
     await requireCaller(ctx, req)
     const all = (req.query as { all?: string }).all === 'true'
-    const outlets = await db.query(`select id, name, kind, space_id, serves_liquor, active from outlet ${all ? '' : 'where active'} order by active desc, name`)
+    const outlets = await db.query(`select o.id, o.name, o.kind, o.space_id, o.serves_liquor, o.active, o.menu_of, s.name as place
+                                      from outlet o left join space s on s.id = o.space_id ${all ? '' : 'where o.active'} order by o.active desc, o.name`)
     const stations = await db.query(`select id, name, kind, active from station ${all ? '' : 'where active'} order by active desc, kind, name`)
     return { outlets, stations }
   })
 
-  const OUTLET_KINDS = ['restaurant', 'room_service', 'bar', 'poolside', 'banquet']
+  const OUTLET_KINDS = ['restaurant', 'cafe', 'bar', 'poolside', 'lawn', 'room_service', 'banquet']
+  /** The outlet whose menu this one serves: its own, or the one it points at (never a chain). */
+  async function menuOutlet(t: Db, outletId: string) {
+    const [o] = await t.query<{ menu_of: string | null }>('select menu_of from outlet where id = $1', [outletId])
+    return o?.menu_of ?? outletId
+  }
+  /** A food place may serve another place's own menu, not itself and not a place that borrows its menu in turn. */
+  async function checkMenuOf(t: Db, id: string | null, menuOf: string | null | undefined) {
+    if (!menuOf) return null
+    if (menuOf === id) throw new HttpError(400, 'A place cannot serve its own menu through itself.')
+    const [m] = await t.query<{ menu_of: string | null; name: string }>('select menu_of, name from outlet where id = $1', [menuOf])
+    if (!m) throw new HttpError(400, `No food place ${menuOf}.`)
+    if (m.menu_of) throw new HttpError(400, `${m.name} serves another place's menu; pick that place instead.`)
+    return menuOf
+  }
+  // Any place on the map can serve food. The code is made from the name when none is given; the tables, if any, are made at once.
   app.post('/api/fnb/outlets', async (req, reply) => {
     const who = await need(ctx, req, 'menu.edit')
-    const b = req.body as { id?: string; name?: string; kind?: string; spaceId?: string | null; servesLiquor?: boolean }
-    if (!/^[A-Z0-9]{2,10}$/.test(b?.id ?? '')) throw new HttpError(400, 'Outlet code: 2–10 capital letters or digits (e.g. CAFE).')
-    if (!b.name?.trim() || b.name.length > 60) throw new HttpError(400, 'Give the outlet a name (up to 60 characters).')
+    const b = req.body as { id?: string; name?: string; kind?: string; spaceId?: string | null; servesLiquor?: boolean; menuOf?: string | null; tables?: { count?: number; seats?: number; prefix?: string; section?: string } }
+    if (b?.id !== undefined && b.id !== '' && !/^[A-Z0-9]{2,10}$/.test(b.id)) throw new HttpError(400, 'Outlet code: 2–10 capital letters or digits (e.g. CAFE).')
+    if (!b?.name?.trim() || b.name.length > 60) throw new HttpError(400, 'Give the food place a name (up to 60 characters).')
     if (!OUTLET_KINDS.includes(b.kind ?? '')) throw new HttpError(400, `Kind: ${OUTLET_KINDS.join(', ')}.`)
+    const tb = b.tables
+    if (tb && tb.count) {
+      if (!(Number.isInteger(tb.count) && tb.count >= 1 && tb.count <= 200)) throw new HttpError(400, 'Tables: 1–200.')
+      if (tb.seats !== undefined && !(Number.isInteger(tb.seats) && tb.seats >= 1 && tb.seats <= 50)) throw new HttpError(400, 'Seats per table: 1–50.')
+      if (tb.prefix !== undefined && !/^[A-Za-z0-9-]{0,6}$/.test(tb.prefix)) throw new HttpError(400, 'Table prefix: up to 6 letters or digits.')
+    }
     return db.tx(async (t) => {
-      const [dup] = await t.query('select 1 from outlet where id = $1', [b.id])
-      if (dup) throw new HttpError(409, `Outlet ${b.id} already exists.`)
+      let id = b.id || b.name!.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 8)
+      if (id.length < 2) id = `FP${id}`
+      if (b.id) { const [dup] = await t.query('select 1 from outlet where id = $1', [id]); if (dup) throw new HttpError(409, `Outlet ${id} already exists.`) }
+      else for (let n = 2; (await t.query('select 1 from outlet where id = $1', [id])).length; n++) id = `${id.replace(/\d+$/, '').slice(0, 8)}${n}`
       if (b.spaceId) { const [sp] = await t.query('select 1 from space where id = $1', [b.spaceId]); if (!sp) throw new HttpError(400, `No place ${b.spaceId}.`) }
-      await t.query('insert into outlet (id, name, kind, space_id, serves_liquor) values ($1, $2, $3, $4, $5)', [b.id, b.name!.trim(), b.kind, b.spaceId ?? null, !!b.servesLiquor])
-      await appendAudit(t, { actor: who, action: 'outlet.create', entity: { type: 'outlet', id: b.id! }, after: b }, now())
-      return reply.status(201).send({ id: b.id })
+      const menuOf = await checkMenuOf(t, id, b.menuOf)
+      await t.query('insert into outlet (id, name, kind, space_id, serves_liquor, menu_of) values ($1, $2, $3, $4, $5, $6)', [id, b.name!.trim(), b.kind, b.spaceId ?? null, !!b.servesLiquor, menuOf])
+      let tables = 0
+      if (tb?.count) {
+        const prefix = tb.prefix ?? ''
+        for (let i = 1; i <= tb.count; i++) {
+          const label = `${prefix}${i}`
+          await t.query('insert into dining_table (id, outlet_id, label, seats, section) values ($1, $2, $3, $4, $5)', [`${id}-${label}`, id, label, tb.seats ?? 4, tb.section?.trim() || null])
+          tables++
+        }
+      }
+      await appendAudit(t, { actor: who, action: 'outlet.create', entity: { type: 'outlet', id }, after: { ...b, id, tables } }, now())
+      return reply.status(201).send({ id, tables })
     })
   })
 
   app.patch('/api/fnb/outlets/:id', async (req) => {
     const who = await need(ctx, req, 'menu.edit')
     const { id } = req.params as { id: string }
-    const b = (req.body ?? {}) as { name?: string; kind?: string; spaceId?: string | null; servesLiquor?: boolean; active?: boolean }
-    if (b.name !== undefined && (!b.name.trim() || b.name.length > 60)) throw new HttpError(400, 'Give the outlet a name (up to 60 characters).')
+    const b = (req.body ?? {}) as { name?: string; kind?: string; spaceId?: string | null; servesLiquor?: boolean; active?: boolean; menuOf?: string | null }
+    if (b.name !== undefined && (!b.name.trim() || b.name.length > 60)) throw new HttpError(400, 'Give the food place a name (up to 60 characters).')
     if (b.kind !== undefined && !OUTLET_KINDS.includes(b.kind)) throw new HttpError(400, `Kind: ${OUTLET_KINDS.join(', ')}.`)
     return db.tx(async (t) => {
       const [before] = await t.query('select * from outlet where id = $1 for update', [id])
@@ -201,9 +235,14 @@ export function fnbRoutes(app: FastifyInstance, ctx: Ctx) {
         const [open] = await t.query(`select number from fnb_order where outlet_id = $1 and status in ('open', 'billed') limit 1`, [id])
         if (open) throw new HttpError(409, 'Close this outlet\'s open orders first.')
       }
+      if (b.menuOf !== undefined) {
+        const [lent] = await t.query<{ name: string }>('select name from outlet where menu_of = $1 limit 1', [id])
+        if (b.menuOf && lent) throw new HttpError(409, `${lent.name} serves this place's menu, so this place must keep its own.`)
+      }
+      const menuOf = b.menuOf !== undefined ? await checkMenuOf(t, id, b.menuOf) : undefined
       await t.query(`update outlet set name = coalesce($2, name), kind = coalesce($3, kind), space_id = case when $4::boolean then $5 else space_id end,
-                       serves_liquor = coalesce($6, serves_liquor), active = coalesce($7, active) where id = $1`,
-        [id, b.name?.trim() ?? null, b.kind ?? null, b.spaceId !== undefined, b.spaceId ?? null, b.servesLiquor ?? null, b.active ?? null])
+                       serves_liquor = coalesce($6, serves_liquor), active = coalesce($7, active), menu_of = case when $8::boolean then $9 else menu_of end where id = $1`,
+        [id, b.name?.trim() ?? null, b.kind ?? null, b.spaceId !== undefined, b.spaceId ?? null, b.servesLiquor ?? null, b.active ?? null, menuOf !== undefined, menuOf ?? null])
       const [after] = await t.query('select * from outlet where id = $1', [id])
       await appendAudit(t, { actor: who, action: 'outlet.update', entity: { type: 'outlet', id }, before, after }, now())
       return after
@@ -278,13 +317,14 @@ export function fnbRoutes(app: FastifyInstance, ctx: Ctx) {
 
   app.get('/api/fnb/menu', async (req) => {
     await requireCaller(ctx, req)
-    const { outletId, all } = req.query as { outletId?: string; all?: string }
-    if (!outletId) throw new HttpError(400, 'Send outletId.')
+    const q = req.query as { outletId?: string; all?: string }
+    if (!q.outletId) throw new HttpError(400, 'Send outletId.')
+    const outletId = await menuOutlet(db, q.outletId)      // a place that serves another's menu gets that menu
     const categories = await db.query('select id, name, sort from menu_category where outlet_id = $1 order by sort, name', [outletId])
     const items = await db.query(
       `select id, category_id, code, name, name_ta, price_paise, liquor_class, station_id, diet, jain, allergens, available, placeholder, active, brand_id, pour_ml
-         from menu_item where outlet_id = $1 ${all === 'true' ? '' : 'and active'} order by active desc, code`, [outletId])
-    return { categories, items }
+         from menu_item where outlet_id = $1 ${q.all === 'true' ? '' : 'and active'} order by active desc, code`, [outletId])
+    return { categories, items, menuOutletId: outletId }
   })
 
   app.post('/api/fnb/items', async (req, reply) => {
@@ -561,14 +601,15 @@ export function fnbRoutes(app: FastifyInstance, ctx: Ctx) {
     return db.tx(async (t) => {
       const o = await loadOrder(t, id, true)
       openOnly(o)
-      const [outlet] = await t.query<{ serves_liquor: boolean }>('select serves_liquor from outlet where id = $1', [o.outlet_id])
+      const [outlet] = await t.query<{ serves_liquor: boolean; menu_of: string | null }>('select serves_liquor, menu_of from outlet where id = $1', [o.outlet_id])
+      const menuId = outlet.menu_of ?? o.outlet_id
       let liquorChecked = false
       for (const line of b.items!) {
         const qty = line.qty ?? 1
         if (!(Number.isInteger(qty) && qty >= 1 && qty <= 99)) throw new HttpError(400, 'Quantity: 1–99.')
         if (line.note && line.note.length > 120) throw new HttpError(400, 'Keep instructions under 120 characters.')
         const [m] = await t.query<{ id: string; name: string; price_paise: number; liquor_class: string | null; station_id: string; available: boolean; active: boolean }>(
-          'select id, name, price_paise, liquor_class, station_id, available, active from menu_item where id = $1 and outlet_id = $2', [line.itemId, o.outlet_id])
+          'select id, name, price_paise, liquor_class, station_id, available, active from menu_item where id = $1 and outlet_id = $2', [line.itemId, menuId])
         if (!m || !m.active) throw new HttpError(400, `${line.itemId} is not on this outlet's menu.`)
         if (!m.available) throw new HttpError(409, `${m.name} is sold out.`)
         if (m.liquor_class) {
