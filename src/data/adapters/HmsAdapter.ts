@@ -11,7 +11,8 @@ export interface HmsAdapter {
   getEvents(range: DateRange): Promise<EventBooking[]>
   getOrders(date: string): Promise<Order[]>
   getHousekeeping(): Promise<Record<string, HkStatus>>
-  subscribe(onEvent: (e: DomainEvent) => void): () => void
+  /** `onReconnect` fires when the feed comes back after a drop, so the caller can fetch what it missed. */
+  subscribe(onEvent: (e: DomainEvent) => void, onReconnect?: () => void): () => void
 
   // God Mode write actions
   checkIn(reservationId: string): Promise<void>

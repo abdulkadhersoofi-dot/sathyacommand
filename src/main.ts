@@ -455,6 +455,8 @@ document.addEventListener('click', async (e) => {
   if (bqEvent && bqWs) { e.stopPropagation(); hideWorkspaces(); bqWs.openEvent(bqEvent.dataset.bqEvent!); return }
   const bqBook = t.closest<HTMLElement>('[data-bq-book]')
   if (bqBook && bqWs && liveAdapter) { e.stopPropagation(); hideWorkspaces(); bqWs.newBooking(liveAdapter.serverIdOf.get(bqBook.dataset.bqBook!) ?? bqBook.dataset.bqBook!, store.date); return }
+  const fnbRoom = t.closest<HTMLElement>('[data-fnb-room]')
+  if (fnbRoom && fnb) { e.stopPropagation(); hideWorkspaces(); closeDrawer(); void fnb.roomOrder(fnbRoom.dataset.fnbRoom!); return }
   const fnbPlace = t.closest<HTMLElement>('[data-fnb-place]')
   if (fnbPlace && fnb) { e.stopPropagation(); hideWorkspaces(); fnb.openPlace(fnbPlace.dataset.fnbPlace!); return }
   const fnbServe = t.closest<HTMLElement>('[data-fnb-serve]')
@@ -633,6 +635,8 @@ function tick() {
 tick()
 setInterval(tick, 15000)
 setInterval(() => { if (store.isToday) { store.invalidate('clock') } }, 30000)
+// The live feed can miss an entry while a connection is down: the day's orders are fetched again every minute regardless.
+setInterval(() => { if (liveMode && store.isToday && !document.hidden) void store.reloadOrders().then(() => store.invalidate('orders')) }, 60_000)
 setTimeout(() => $('#hint').style.opacity = '0', 9000)
 
 $('#source-label').textContent = me ? `Sathya Park & Resorts · ${me.name}` : `Sathya Park & Resorts · ${adapter.name}`
@@ -687,7 +691,7 @@ if (api && me && liveAdapter) {
   fd = new FrontDesk(api, store, me, () => { renderSide(); if (drawerId) void loadStay(drawerId) })
   store.stayAllowed = true
   const outbox = new Outbox(api)
-  fnb = new FnbWorkspace(api, me, outbox, () => store.reservations.filter((r) => r.status === 'in-house').map((r) => ({ id: r.id, guest: r.guest, roomNo: r.roomNo ?? null })), () => renderSide())
+  fnb = new FnbWorkspace(api, me, outbox, () => store.reservations.filter((r) => r.status === 'in-house').map((r) => ({ id: r.id, guest: r.guest, roomNo: r.roomNo ?? null, pax: r.pax })), () => renderSide())
   // The map's drawer offers "Food orders" at places that are food places and "Serve food here" at the rest.
   const placeFoodPlaces = (outlets: { id: string; name: string; space_id: string | null; active: boolean }[]) => {
     store.foodPlaces.clear()

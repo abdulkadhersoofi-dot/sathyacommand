@@ -10,6 +10,35 @@ interface Login { id: string; name: string; email: string | null; mobile: string
   has_password: boolean; must_change_password: boolean; locked_until: string | null; access_until: string | null }
 interface Role { id: string; god_mode: boolean }
 
+/** What each role sees and may do, by department, so the right login is picked without guessing. */
+const ROLE_INFO: Record<string, { dept: string; does: string }> = {
+  managing_director: { dept: 'Management', does: 'Everything, with God Mode' },
+  general_manager: { dept: 'Management', does: 'Every module except God Mode; approves discounts, purchases, payroll' },
+  operations_manager: { dept: 'Management', does: 'Front desk, restaurant, housekeeping, engineering, security and staff; approves discounts and leave' },
+  front_office_manager: { dept: 'Front office', does: 'The desk, night audit, credit notes, rates and channels, rosters' },
+  reception: { dept: 'Front office', does: 'Bookings, check-in and check-out, payments, room-service orders, charging restaurant bills to rooms' },
+  night_auditor: { dept: 'Front office', does: 'The desk and closing the day' },
+  captain: { dept: 'Restaurant', does: 'Taking orders at tables and rooms, sending to the kitchen, bills and payments' },
+  chef: { dept: 'Restaurant', does: 'The kitchen screen, sold-out dishes, kitchen stock and indents' },
+  bartender: { dept: 'Restaurant', does: 'Bar orders and bills, the bar screen, bar stock' },
+  bar_manager: { dept: 'Restaurant', does: 'The bar: orders, bills, discounts, bar hours and dry days, stock and purchases' },
+  fnb_manager: { dept: 'Restaurant', does: 'Everything in the restaurant: menu, prices (with approval), kitchen, stock, rosters' },
+  executive_housekeeper: { dept: 'Housekeeping', does: 'Rooms, inspections, public areas, laundry and linen, rosters, breakages' },
+  hk_supervisor: { dept: 'Housekeeping', does: 'Rooms, inspections, laundry and linen' },
+  room_attendant: { dept: 'Housekeeping', does: 'Own rooms and tasks on the phone' },
+  chief_engineer: { dept: 'Engineering', does: 'Faults, assets, meters, compliance, rosters and spares' },
+  engineering: { dept: 'Engineering', does: 'Own tickets and meter readings on the phone' },
+  security_head: { dept: 'Security', does: 'Gate, patrols, incidents, cameras, emergencies, rosters' },
+  security: { dept: 'Security', does: 'Gate entries, patrols and incidents on the phone' },
+  stores: { dept: 'Stores', does: 'Items, vendors, indents, purchase orders, receipts, issues and counts' },
+  accounts: { dept: 'Accounts', does: 'Books, receivables and payables, banks, GST, TDS, VAT, assets, licences, payroll payment' },
+  hr_payroll: { dept: 'People', does: 'Employees, leave, rosters, payroll and staff logins' },
+  sales_banquets: { dept: 'Banquets', does: 'Enquiries, bookings, event orders, payments and bills' },
+  employee_self_service: { dept: 'Everyone', does: 'Own attendance, leave and pay on the phone' },
+  external_auditor: { dept: 'Everyone', does: 'Read-only books and invoices, for a set number of days' },
+}
+const DEPTS = ['Management', 'Front office', 'Restaurant', 'Housekeeping', 'Engineering', 'Security', 'Stores', 'Accounts', 'People', 'Banquets', 'Everyone']
+
 const roleName = (r: string) => r.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase()).replace(/\b(fnb|Fnb)\b/, 'F&B').replace(/\b(hk|Hk)\b/, 'HK').replace(/\b(hr|Hr)\b/, 'HR').replace('Sales banquets', 'Sales & banquets')
 const day = (iso: string) => new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
 
@@ -42,10 +71,15 @@ export class LoginsView {
         <span class="rc-right"><button type="button" class="btn small" data-lg="edit:${esc(u.id)}">Edit</button>${u.id !== this.h.me.id ? `<button type="button" class="btn small" data-lg="reset:${esc(u.id)}">Reset password</button>` : ''}</span></div>`).join('')}</div>`
   }
 
+  /** Roles by department, each with what it can do; a login usually needs one. */
   private roleChecks(selected: string[]) {
     const god = this.h.me.permissions.includes('*')
-    return `<fieldset class="span2 role-checks"><legend>Roles</legend>${this.roles.filter((r) => god || !r.god_mode).map((r) =>
-      `<label class="check"><input type="checkbox" name="role:${esc(r.id)}" ${selected.includes(r.id) ? 'checked' : ''}> ${esc(roleName(r.id))}</label>`).join('')}</fieldset>`
+    const roles = this.roles.filter((r) => god || !r.god_mode)
+    const groups = [...DEPTS, ...new Set(roles.map((r) => ROLE_INFO[r.id]?.dept ?? 'Other'))].filter((d, i, a) => a.indexOf(d) === i)
+    return `<div class="span2 role-picker"><div class="sec-title">Role <span>what they see and may do</span></div>${groups.map((dept) => {
+      const list = roles.filter((r) => (ROLE_INFO[r.id]?.dept ?? 'Other') === dept)
+      return list.length ? `<div class="role-dept">${esc(dept)}</div>${list.map((r) => `<label class="role-opt"><input type="checkbox" name="role:${esc(r.id)}" ${selected.includes(r.id) ? 'checked' : ''}><span><b>${esc(roleName(r.id))}</b><small>${esc(ROLE_INFO[r.id]?.does ?? '')}</small></span></label>`).join('')}` : ''
+    }).join('')}<p class="muted small">One role is usually enough; a person with two jobs gets both. Nothing outside the role is shown to them.</p></div>`
   }
   private picked(f: HTMLFormElement) { return this.roles.filter((r) => checked(f, `role:${r.id}`)).map((r) => r.id) }
 

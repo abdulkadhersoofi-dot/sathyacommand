@@ -170,7 +170,8 @@ class StartView implements View {
     const left = this.steps.filter((s) => !s.done).length
     return `<p>${left ? `${left} of ${this.steps.length} things still to set up before the resort runs on the system.` : 'Everything here is set up.'}</p>
       ${this.steps.map((s, i) => `<div class="row-card setup-step${s.done ? ' done' : ''}"><div class="rc-title">${i + 1}. ${esc(s.title)}</div><div class="rc-sub">${esc(s.why)}</div>
-        <div class="rc-right">${s.done ? tonePill('Done', '--st-vacant') : `<button type="button" class="btn small primary" data-setup="${esc(s.open)}">Set up</button>`}</div></div>`).join('')}`
+        <div class="rc-right">${s.done ? `${tonePill('Done', '--st-vacant')}<button type="button" class="btn small" data-setup="${esc(s.open)}">Change</button>` : `<button type="button" class="btn small primary" data-setup="${esc(s.open)}">Set up</button>`}</div></div>`).join('')}
+      <p class="muted small">Everything here can be changed later from the same screens; this list only shows what is still missing.</p>`
   }
   async click(el: HTMLElement) {
     const open = el.closest<HTMLElement>('[data-setup]')?.dataset.setup

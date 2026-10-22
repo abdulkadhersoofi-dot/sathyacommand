@@ -1,6 +1,7 @@
 import { esc, tonePill } from '../ui/dom'
 import { val } from '../ui/form-modal'
-import { chips, rs, type Ws } from './common'
+import { chips, rs } from './common'
+import type { WorkspaceHost } from '../ui/workspace'
 import { toolbar, type Action } from '../ui/toolbar'
 
 // Kitchen stock: ingredients and what is on the shelf, recipes per dish with their cost, receipts,
@@ -27,7 +28,7 @@ export class KitchenStockView {
   private recipes: Recipe[] = []
   private cost: FoodCost | null = null
 
-  constructor(private ws: Ws) {}
+  constructor(private ws: WorkspaceHost) {}
 
   private get edit() { return this.ws.can('kitchen.stock') }
 

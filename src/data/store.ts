@@ -77,7 +77,7 @@ export class Store {
     this.hk = hk
     this.orders = await this.adapter.getOrders(this.date)
     this.seedFeed()
-    this.adapter.subscribe((e) => this.onDomainEvent(e))
+    this.adapter.subscribe((e) => this.onDomainEvent(e), () => void this.reload())
     this.invalidate('load')
   }
 

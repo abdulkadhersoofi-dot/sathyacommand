@@ -19,7 +19,7 @@ export interface Ws extends WorkspaceHost {
   outlets: Outlet[]
   stations: Station[]
   /** Checked-in guests, for room-service orders. */
-  inHouse(): { id: string; guest: string; roomNo: string | null }[]
+  inHouse(): { id: string; guest: string; roomNo: string | null; pax: number }[]
   /** Fetches the food places again (after one is added or changed). */
   refreshOutlets(): Promise<void>
 }

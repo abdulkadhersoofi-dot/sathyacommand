@@ -128,13 +128,18 @@ export class LiveAdapter implements HmsAdapter {
     return out
   }
 
-  subscribe(onEvent: (e: DomainEvent) => void) {
+  subscribe(onEvent: (e: DomainEvent) => void, onReconnect?: () => void) {
     let timer = 0
     let last: DomainEvent | null = null
+    let dropped = false
     return this.api.stream((e) => {
       last = { type: 'snapshot.changed', action: e.action, entityId: e.entity.id, actor: e.actor, amount: e.amount }
       clearTimeout(timer)
       timer = window.setTimeout(() => last && onEvent(last), 400)   // a burst of entries from one action becomes one refresh
+    }, (connected) => {
+      // Entries that arrived while the connection was down were never seen: fetch everything again on the way back.
+      if (connected && dropped) { dropped = false; onReconnect?.() }
+      if (!connected) dropped = true
     })
   }
 

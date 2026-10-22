@@ -1,6 +1,7 @@
 import { esc, tonePill, showDate } from '../ui/dom'
 import { val } from '../ui/form-modal'
-import { chips, rs, type Ws } from './common'
+import { chips, rs } from './common'
+import type { WorkspaceHost } from '../ui/workspace'
 import { toolbar, type Action } from '../ui/toolbar'
 
 // Bar stock: what is in the bar now (full bottles and the open one), the daily stock register,
@@ -35,7 +36,7 @@ export class BarView {
   private from = ''
   private to = ''
 
-  constructor(private ws: Ws) {}
+  constructor(private ws: WorkspaceHost) {}
 
   private get manager() { return this.ws.can('bar.stock') }
 

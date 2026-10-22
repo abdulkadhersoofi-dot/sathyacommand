@@ -6,14 +6,12 @@ import { CaptainView } from './captain'
 import type { Outlet, Station, Ws } from './common'
 import { KitchenView } from './kitchen'
 import { MenuView } from './menu'
-import { BarView } from './bar'
-import { KitchenStockView } from './kitchen-stock'
 import { foodPlaceForm } from './places'
 
-// The restaurant workspace: Orders (captain tablet), Kitchen & bar screens, Menu, Bar stock and Kitchen
-// stock. Each tab shows only to roles that use it. Licences & tax live under Settings.
+// The restaurant workspace: Orders (captain tablet), Kitchen & bar screens and Menu. Each tab shows only to
+// roles that use it. Bar stock and kitchen stock live under Stores; licences & tax under Settings.
 
-type Tab = 'orders' | 'kitchen' | 'menu' | 'bar' | 'kstock'
+type Tab = 'orders' | 'kitchen' | 'menu'
 
 export class FnbWorkspace extends Workspace<Tab> implements Ws {
   outlets: Outlet[] = []
@@ -24,7 +22,7 @@ export class FnbWorkspace extends Workspace<Tab> implements Ws {
   constructor(api: Api, me: Me, outbox: Outbox, public inHouse: Ws['inHouse'], onClose: () => void) {
     super(api, me, outbox, 'Restaurant', onClose)
     this.captain = new CaptainView(this)
-    this.views = { orders: this.captain, kitchen: new KitchenView(this), menu: new MenuView(this), bar: new BarView(this), kstock: new KitchenStockView(this) }
+    this.views = { orders: this.captain, kitchen: new KitchenView(this), menu: new MenuView(this) }
     this.tab = this.tabs()[0]?.[0] ?? 'orders'
   }
 
@@ -33,8 +31,6 @@ export class FnbWorkspace extends Workspace<Tab> implements Ws {
     if (this.can('fnb.order')) t.push(['orders', 'Orders'])
     if (this.can('kitchen', 'fnb.order')) t.push(['kitchen', 'Kitchen & bar'])
     if (this.can('menu.edit', 'menu.price')) t.push(['menu', 'Menu'])
-    if (this.can('bar.stock', 'bar.approve') || this.me.roles.includes('bartender')) t.push(['bar', 'Bar stock'])
-    if (this.can('kitchen.stock', 'kitchen', 'food_cost.view')) t.push(['kstock', 'Kitchen stock'])
     return t
   }
 
@@ -47,6 +43,9 @@ export class FnbWorkspace extends Workspace<Tab> implements Ws {
 
   /** The captain screen on one place's tables (from the map). */
   openPlace(id: string) { this.captain.showPlace(id); void this.show('orders') }
+
+  /** A room-service order for a checked-in guest, from the map. */
+  async roomOrder(reservationId: string) { await this.show('orders'); await this.captain.startRoomOrder(reservationId); this.render() }
 
   /** From the map: a lawn, hall or the pool becomes a food place, then the captain screen opens on it. */
   newPlace(spaceId: string, name: string, kind: string) {

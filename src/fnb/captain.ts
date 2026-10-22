@@ -80,6 +80,16 @@ export class CaptainView {
   /** Shows one place's tables (after it was just added from the map). */
   showPlace(id: string) { this.outletId = id; this.filter = id; this.order = null; this.cart.clear() }
 
+  /** Opens a room-service order for a checked-in guest: the open one if there is one, else a new one. */
+  async startRoomOrder(reservationId: string) {
+    const g = this.ws.inHouse().find((x) => x.id === reservationId), roomPlace = this.ws.outlets.find((o) => o.active && o.kind === 'room_service')
+    if (!g || !roomPlace) { toast(g ? 'No room-service place is set up under Menu → Food places.' : 'That guest is not checked in.'); return }
+    const open = (await this.ws.api.get<RoomOrder[]>('/api/fnb/orders')).find((r) => r.kind === 'room_service' && r.room_no === g.roomNo)
+    this.outletId = roomPlace.id
+    this.order = open ? await this.ws.api.get<OrderView>(`/api/fnb/orders/${open.id}`) : await this.ws.api.post<OrderView>('/api/fnb/orders', { outletId: roomPlace.id, reservationId: g.id, covers: g.pax || 1 })
+    this.cart.clear(); await this.load()
+  }
+
   /** Opens a specific order (e.g. from the kitchen panel). */
   async openOrder(id: string) {
     this.order = await this.ws.api.get<OrderView>(`/api/fnb/orders/${id}`)
@@ -108,8 +118,8 @@ export class CaptainView {
       ...(this.ws.can('menu.edit') ? [{ attrs: 'data-cap="add-place"', label: 'Add a food place' }] : []),
       ...(shift ? [shift] : []),
     ]
-    const placeChips = chips([['', 'All places'], ...places.map((x): [string, string] => [x.id, x.name])], this.filter, 'outlet')
-    return toolbar({ primary: [{ attrs: 'data-cap="new"', label: 'New order' }], filters: `<input class="ws-search" type="search" data-tsearch placeholder="Table, room or guest" value="${esc(this.tsearch)}" aria-label="Find a table, room or guest">${placeChips}`, more })
+    const placeSel = `<select data-place-filter aria-label="Place"><option value="">All places</option>${places.map((x) => `<option value="${esc(x.id)}" ${x.id === this.filter ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>`
+    return toolbar({ primary: [{ attrs: 'data-cap="new"', label: 'New order' }], filters: `<input class="ws-search" type="search" data-tsearch placeholder="Table, room or guest" value="${esc(this.tsearch)}" aria-label="Find a table, room or guest">${placeSel}`, more })
       + `<div class="cap-tables">${this.tablesBody()}</div>`
   }
 
@@ -136,13 +146,24 @@ export class CaptainView {
           ${state === 'billed' ? '<em>Bill out</em>' : t.ready_tickets ? '<em>Food ready</em>' : ''}</button>`
       }).join('')}</div>`
     }
-    const rooms = open.filter((r) => r.kind === 'room_service' && hit(r.room_no, r.guest, r.number, 'room'))
     const takeaway = open.filter((r) => r.kind === 'takeaway' && hit(r.number, r.outlet, 'takeaway'))
     const card = (r: RoomOrder, title: string) => `<button type="button" class="row-card ws-row" data-order="${esc(r.id)}">
       <div class="rc-title">${title}</div>
       <div class="rc-sub">${esc(r.outlet)} · order ${r.number} · ${minutesAgo(r.opened_at)} min · ${rs(Number(r.subtotal_paise))}${r.pending_items ? ` · ${r.pending_items} not sent` : ''}</div>
       <div class="rc-right">${r.kitchen ? tonePill(...KITCHEN_STATE[r.kitchen]) : tonePill('Delivered', '--st-ooo')}</div></button>`
-    if (rooms.length || (!q && places.some((o) => o.kind === 'room_service'))) h += `<div class="sec-title">Room service <span>${rooms.length}</span></div>` + (rooms.map((r) => card(r, `Room ${esc(r.room_no ?? '?')} · ${esc(r.guest ?? '')}`)).join('') || '<div class="empty">No open room-service orders.</div>')
+    // Room service: the occupied rooms as tiles, like tables, so an order for a room starts with one tap.
+    const roomPlace = places.find((o) => o.kind === 'room_service')
+    if (roomPlace) {
+      const guests = this.ws.inHouse().filter((g) => g.roomNo && hit(g.roomNo, g.guest, 'room')).sort((a, b) => a.roomNo!.localeCompare(b.roomNo!, undefined, { numeric: true }))
+      const openFor = (roomNo: string) => open.filter((r) => r.kind === 'room_service' && r.room_no === roomNo)
+      const openRooms = open.filter((r) => r.kind === 'room_service').length
+      if (guests.length || !q) h += `<div class="sec-title">Room service <span>${openRooms ? `${openRooms} open · ` : ''}${guests.length} rooms</span></div><div class="tables">${guests.map((g) => {
+        const o = openFor(g.roomNo!)[0]
+        const state = !o ? 'free' : o.kitchen === 'ready' ? 'ready' : 'open'
+        return `<button type="button" class="tbl room" ${o ? `data-order="${esc(o.id)}"` : `data-room-res="${esc(g.id)}"`} data-state="${state}">
+          <b>${esc(g.roomNo!)}</b><span>${esc(g.guest)}${o ? ` · order ${o.number} · ${minutesAgo(o.opened_at)} min` : ` · ${g.pax} pax`}</span>${o?.kitchen === 'ready' ? '<em>Food ready</em>' : o?.pending_items ? '<em>Not sent</em>' : ''}</button>`
+      }).join('') || '<div class="empty">Nobody is checked in.</div>'}</div>`
+    }
     if (takeaway.length) h += `<div class="sec-title">Takeaway <span>${takeaway.length}</span></div>` + takeaway.map((r) => card(r, `Takeaway ${r.number}`)).join('')
     return h || `<div class="empty">${q ? 'Nothing matches.' : 'No food places yet. Add one under More ▾.'}</div>`
   }
@@ -300,6 +321,7 @@ export class CaptainView {
       return true
     }
     const order = d('order'); if (order) { await this.openOrder(order); await this.load(); return true }
+    const roomRes = d('room-res'); if (roomRes) { await this.startRoomOrder(roomRes); return true }
     const item = d('item')
     if (item) {
       const m = this.menu.items.find((i) => i.id === item)!
@@ -380,6 +402,13 @@ export class CaptainView {
     }
     if (act === 'new') this.newOrderForm()
     if (act === 'add-place') foodPlaceForm(this.ws, async (id, created) => { await this.ws.refreshOutlets(); if (created) this.showPlace(id); await this.load(); this.ws.render() })
+    return true
+  }
+
+  async change(t: HTMLElement) {
+    if (!t.matches('[data-place-filter]')) return false
+    this.filter = (t as HTMLSelectElement).value
+    if (this.filter) this.outletId = this.filter
     return true
   }
 

@@ -72,11 +72,13 @@ function kitchenHtml(store: Store) {
       ? `<div class="empty">${n} KOTs were raised on this date.${store.godMode ? ` F&amp;B sales ${inr(store.kpis().fnb)}.` : ''}</div>` + store.orders.slice(-15).reverse().map((o) => kotCard(store, o.id, true)).join('')
       : `<div class="empty">No orders yet. The kitchen board fills in on the day.</div>`)
   }
-  const cols: [string, 'placed' | 'cooking' | 'ready'][] = [['New', 'placed'], ['Cooking', 'cooking'], ['Ready to send', 'ready']]
+  // The kitchen's own columns: an order is "ready" until the waiter marks it served, then it leaves this list.
+  const cols: [string, 'placed' | 'cooking' | 'ready'][] = [['New', 'placed'], ['Cooking', 'cooking'], ['Ready · waiting for the waiter', 'ready']]
+  const served = store.orders.filter((o) => o.status === 'served').length
   return cols.map(([label, st]) => {
     const list = store.orders.filter((o) => o.status === st).sort((a, b) => minutesOpen(b) - minutesOpen(a))
     return `<div class="sec-title">${label} <span>${list.length}</span></div>` + (list.length ? list.map((o) => kotCard(store, o.id, true)).join('') : `<div class="empty">None</div>`)
-  }).join('')
+  }).join('') + `<p class="muted small">${served ? `${served} order${served > 1 ? 's' : ''} served today. ` : ''}An order's place here is its slowest ticket: with two stations, it stays in Cooking until both are ready. The kitchen screen shows the tickets by station.</p>`
 }
 
 function eventsHtml(store: Store) {

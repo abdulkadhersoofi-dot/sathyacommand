@@ -59,7 +59,8 @@ const RATE_PLANS = [
 
 export async function seed(db: Db, opts: { today?: string; mdMobile?: string } = {}) {
   const [{ n }] = await db.query<{ n: number }>('select count(*)::int as n from property')
-  if (n > 0) return { seeded: false }
+  // Roles and their permissions follow the file on every start, so a change there reaches a running resort.
+  if (n > 0) { await syncRoles(db, loadRolesConfig()); return { seeded: false } }
   return db.tx((t) => seedInto(t, opts))     // all or nothing
 }
 

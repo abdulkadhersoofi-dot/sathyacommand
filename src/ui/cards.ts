@@ -155,8 +155,6 @@ function actionsFor(store: Store, r: Reservation) {
   if (!store.isToday) return ''
   const btns: string[] = []
   if (r.status === 'confirmed' && r.arrival === store.date) btns.push(`<button class="btn primary" data-act="checkin" data-res="${r.id}">Check in</button>`)
-  // Check-out is done from the opened booking only, once everything is on the bill.
-  if (store.live && store.stayAllowed && r.status !== 'cancelled') btns.push(`<button class="btn${r.status === 'in-house' ? ' primary' : ''}" data-fd="open" data-res="${esc(r.id)}">Open the booking</button>`)
   if (!store.live && r.status === 'in-house') btns.push(`<button class="btn" data-act="checkout" data-res="${r.id}">Check out</button>`)
   if (!store.live && r.folioId && (r.status === 'in-house' || r.status === 'confirmed')) btns.push(`<button class="btn" data-act="pay" data-res="${r.id}">Payment</button>`)
   if (!store.live && store.godMode && r.balance && r.status !== 'checked-out') btns.push(`<button class="btn god" data-act="waive" data-res="${r.id}">Waive ${inr(r.balance)}</button>`)
@@ -211,8 +209,15 @@ export function drawerHtml(store: Store, id: string) {
     if (store.isToday && store.live) {
       const d = (store.adapter as { hkDetail?: Map<string, { status: string; dnd: boolean }> }).hkDetail?.get(id)
       const label: Record<string, string> = { vacant_clean: 'Clean', inspected: 'Ready (inspected)', vacant_dirty: 'Dirty', occupied_clean: 'Occupied · serviced', occupied_dirty: 'Occupied · to service', out_of_order: 'Out of order', out_of_service: 'Out of service' }
-      body += `<div class="sec-title">Housekeeping <span>${d ? hkPill(store.hk[id] ?? 'clean').replace(/>[^<]*<\/span>$/, `>${label[d.status] ?? d.status}</span>`) : ''}${d?.dnd ? ' ' + tonePill('Do not disturb', '--god') : ''}</span></div>
-        <div class="actions"><button class="btn" data-hk-room="${esc(id)}">Housekeeping…</button><button class="btn" data-eng-room="${esc(id)}" data-eng-name="${esc(s.name)}">Report a fault…</button></div>`
+      body += `<div class="sec-title">Housekeeping <span>${d ? hkPill(store.hk[id] ?? 'clean').replace(/>[^<]*<\/span>$/, `>${label[d.status] ?? d.status}</span>`) : ''}${d?.dnd ? ' ' + tonePill('Do not disturb', '--god') : ''}</span></div>`
+      // Everything for this room, from here: the booking, a room-service order, housekeeping and laundry, a fault, a new booking.
+      const r = st.stay ?? st.departing
+      const acts: string[] = []
+      if (r && store.stayAllowed && r.status !== 'cancelled') acts.push(`<button class="btn primary" data-fd="open" data-res="${esc(r.id)}">Open the booking</button>`)
+      if (r?.status === 'in-house') acts.push(`<button class="btn" data-fnb-room="${esc(r.id)}">Room-service order…</button>`)
+      acts.push(`<button class="btn" data-hk-room="${esc(id)}">Housekeeping &amp; laundry…</button>`, `<button class="btn" data-eng-room="${esc(id)}" data-eng-name="${esc(s.name)}">Report a fault…</button>`)
+      if (!r && store.stayAllowed) acts.push(`<button class="btn" data-fd="book">New booking…</button>`)
+      body += `<div class="sec-title">Do</div><div class="actions">${acts.join('')}</div>`
     } else if (store.isToday) {
       const hk = store.hk[id] ?? 'clean'
       body += `<div class="sec-title">Housekeeping <span>${hkPill(hk)}</span></div><div class="actions">`

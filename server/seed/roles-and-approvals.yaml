@@ -123,7 +123,7 @@ roles:
     permissions: [front_desk, folio.reverse, night_audit, invoice.credit_note, receivables.view, hk.view, attendance.view, roster.manage, broadcast.send, security.view, emergency.start, purchase.indent, events.view, events.payment, beo.view, sales.manage, revenue.manage, guest.requests, feedback.manage, leave.approve]
     limits: { discount_percent: 15, refund: 10000, cashier_variance_writeoff: 500 }
   reception:
-    permissions: [front_desk, fnb.order, fnb.bill, hk.view, beo.view, guest.requests]
+    permissions: [front_desk, fnb.order, hk.view, beo.view, guest.requests]   # charges restaurant bills to rooms through the desk; cash for them is the restaurant's
     limits: { discount_percent: 10, refund: 0 }
   night_auditor:
     permissions: [front_desk, night_audit]

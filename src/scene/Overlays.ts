@@ -392,17 +392,19 @@ export class Overlays {
     return (this.site.anchors.get('RESTAURANT')?.pos ?? new THREE.Vector3()).clone().setY(4.6)   // restaurant tables
   }
 
+  /** An order sent: the waiter walks from the table (or the room's wing) to the kitchen with the ticket, and the ticket arcs in. */
   orderArc(o: Order) {
     const from = this.anchorOf(o.origin)
-    const to = (this.site.anchors.get('KITCHEN')?.pos ?? new THREE.Vector3()).clone().setY(4.2)
-    this.arc(from, to, MARIGOLD, 1.8)
+    const k = (this.site.anchors.get('KITCHEN')?.pos ?? new THREE.Vector3())
+    this.walker([from.clone().setY(1.2), new THREE.Vector3(k.x, 1.2, k.z)], MARIGOLD, 2.6, 0, true)
+    this.arc(from, k.clone().setY(4.2), MARIGOLD, 1.8)
   }
 
+  /** Food ready: the waiter walks from the kitchen back to the table or the room with the tray. */
   foodRunner(o: Order) {
-    if (o.kind !== 'room') return
     const k = (this.site.anchors.get('KITCHEN')?.pos ?? new THREE.Vector3())
     const to = this.anchorOf(o.origin)
-    this.walker([k.clone().setY(1.2), new THREE.Vector3(to.x, 1.2, to.z), to], MARIGOLD, 3.2)
+    this.walker([k.clone().setY(1.2), new THREE.Vector3(to.x, 1.2, to.z), to], 0x35a46b, 3.2, 0, true)
   }
 
   guestMove(res: Reservation, change: 'check-in' | 'check-out') {
@@ -458,9 +460,9 @@ export class Overlays {
     })
   }
 
-  private walker(path: THREE.Vector3[], color: number, dur: number, delay = 0) {
+  private walker(path: THREE.Vector3[], color: number, dur: number, delay = 0, person = false) {
     const curve = new THREE.CatmullRomCurve3(path, false, 'centripetal', 0.2)
-    const dot = this.glowDot(color)
+    const dot = person ? this.figure(color) : this.glowDot(color)
     const trail = new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(80)), new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.35 }))
     dot.visible = trail.visible = delay === 0
     this.group.add(dot, trail)
@@ -468,11 +470,31 @@ export class Overlays {
       start: performance.now() / 1000 + delay, dur,
       update: (k) => {
         dot.visible = trail.visible = true
-        dot.position.copy(curve.getPoint(ease.inOutCubic(k)))
+        const p = curve.getPoint(ease.inOutCubic(k))
+        dot.position.copy(p)
+        if (person) {
+          // A little bob with each step, facing the way it walks.
+          dot.position.y += Math.abs(Math.sin(k * dur * 9)) * 0.25
+          const ahead = curve.getPoint(Math.min(1, ease.inOutCubic(k) + 0.01))
+          if (ahead.distanceToSquared(p) > 1e-4) dot.lookAt(ahead.x, dot.position.y, ahead.z)
+        }
         ;(trail.material as THREE.LineBasicMaterial).opacity = 0.35 * (1 - Math.max(0, k - 0.8) * 5)
       },
       done: () => { this.group.remove(dot, trail); trail.geometry.dispose() },
     })
+  }
+
+  /** A small figure: body, head and a tray in the colour of the errand. */
+  private figure(color: number) {
+    const g = new THREE.Group()
+    const skin = new THREE.MeshStandardMaterial({ color: 0xf1ebe1, roughness: 0.8 })
+    const cloth = new THREE.MeshStandardMaterial({ color: 0x2b2b2b, roughness: 0.9 })
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.45, 1.1, 4, 8).translate(0, 1.0, 0), cloth)
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.38, 10, 8).translate(0, 2.05, 0), skin)
+    const tray = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.12, 0.7).translate(0, 1.45, 0.75), new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.5 }))
+    g.add(body, head, tray)
+    g.scale.setScalar(1.6)
+    return g
   }
 
   private glowDot(color: number) {
