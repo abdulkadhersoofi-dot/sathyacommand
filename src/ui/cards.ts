@@ -38,7 +38,7 @@ export function tipHtml(store: Store, id: string, touch: boolean) {
       body += row('Guests', `${g.pax}`)
       body += row('Check-in', `${fmtDay(g.arrival, { day: 'numeric', month: 'short' })} · ${g.checkInAt ? fmtTime(g.checkInAt) : 'ETA ' + g.eta}`)
       body += row('Check-out', `${fmtDay(g.departure, { day: 'numeric', month: 'short' })} · 11:00`)
-      if (god) body += row('Balance due', g.balance ? inr(g.balance) : 'Settled')
+      body += row('Bill', payWords(g, god))
       const open = store.isToday ? store.ordersFor(id).filter((o) => o.status !== 'served').length : 0
       if (open) body += row('Room service', `${open} open order${open > 1 ? 's' : ''}`)
       if (g.openItems) body += row('Before check-out', `<b class="fd-warn">${g.openItems} open bill${g.openItems > 1 ? 's' : ''}</b>`)
@@ -132,7 +132,7 @@ function guestBlock(store: Store, r: Reservation, title: string) {
         <dt>Check-in</dt><dd>${fmtDay(r.arrival)} · ${r.checkInAt ? 'in at ' + fmtTime(r.checkInAt) : 'ETA ' + r.eta}</dd>
         <dt>Check-out</dt><dd>${fmtDay(r.departure)} · ${r.checkOutAt ? 'out at ' + fmtTime(r.checkOutAt) : 'by 11:00'}</dd>
         <dt>Nights</dt><dd>${nights(r)}</dd>
-        ${god ? `<dt>Rate</dt><dd>${inr(r.rate)} / night</dd><dt>Balance due</dt><dd>${r.balance ? inr(r.balance) : 'Settled'}</dd>` : ''}
+        ${god ? `<dt>Rate</dt><dd>${inr(r.rate)} / night</dd>` : ''}<dt>Bill</dt><dd>${payWords(r, god)}</dd>
       </dl>
       ${r.notes ? `<div class="note">${esc(r.notes)}</div>` : ''}
       ${stayBlock(store, r)}
@@ -146,7 +146,9 @@ function stayBlock(store: Store, r: Reservation) {
   const d = store.stays.get(r.id)
   if (!d) return store.stayAllowed ? '<div class="muted small" style="margin-top:8px">Loading the bill…</div>' : ''
   const open = openCount(d.openItems)
-  return `<div class="sec-title">The stay so far <span>${d.balance > 0 ? `<b class="fd-warn">${rs(d.balance)} due</b>` : d.balance < 0 ? `${rs(-d.balance)} paid ahead` : 'settled'}</span></div>
+  const pending = d.pendingPaise ?? 0
+  const head = d.balance > 0 ? `<b class="fd-warn">${rs(d.balance)} due now</b>` : pending ? (d.balance < 0 ? `${rs(-d.balance)} paid ahead · ~${rs(pending)} to come` : `nothing paid yet · ~${rs(pending)} to come`) : d.balance < 0 ? `${rs(-d.balance)} paid ahead` : 'settled'
+  return `<div class="sec-title">The stay so far <span>${head}</span></div>
     ${billHtml(d.lines, { compact: true })}
     ${open ? `<div class="sec-title bk-open">Still open <span>${open}</span></div><div class="fd-bill">${openItemsHtml(d.openItems)}</div><p class="muted small">Not on the room bill yet. Check-out waits for these; the desk puts them on the bill from the booking.</p>` : r.status === 'in-house' ? '<p class="muted small">Nothing open elsewhere: everything the guest used is on the room bill.</p>' : ''}`
 }
@@ -185,6 +187,16 @@ export function kotCard(store: Store, orderId: string, withFrom = false) {
         ${o.serverId ? `<button class="btn small" data-fnb-order="${esc(o.serverId)}">Open</button>` : live && next ? `<button class="btn small" data-act="advance" data-order="${o.id}">${next}</button>` : ''}
       </div>
     </div>`
+}
+
+/** What the bill says, in words: due now, nothing paid yet with what is to come, paid ahead, or settled. */
+function payWords(r: Reservation, god: boolean) {
+  if (r.status === 'checked-out') return 'Settled'
+  const toCome = r.pending ?? 0
+  if (r.balance > 0) return `<b class="fd-warn">${inr(r.balance)} due now</b>${toCome ? ` · ~${inr(toCome)} to come` : ''}`
+  if (toCome) return `${(r.paid ?? 0) ? `${inr(r.paid!)} paid ahead` : 'Nothing paid yet'} · ~${inr(toCome)} ${god ? 'still to charge' : 'to come'}`
+  if (r.balance < 0) return `${inr(-r.balance)} paid ahead`
+  return 'Settled'
 }
 
 /** Food orders at this place, or the button that makes it a food place. */
@@ -242,7 +254,7 @@ export function drawerHtml(store: Store, id: string) {
           <dt>Client</dt><dd>${esc(e.client)}</dd>
           <dt>Guests</dt><dd>${e.pax}</dd>
           <dt>Setup</dt><dd>${e.setup.replace('-', ' ')}</dd>
-          ${god ? `<dt>Contract</dt><dd>${inr(e.value)}</dd><dt>Advance paid</dt><dd>${inr(e.advance)}</dd><dt>Outstanding</dt><dd>${inr(e.value - e.advance)}</dd>` : ''}
+          <dt>Paid</dt><dd>${e.firm === false ? 'Not booked yet' : !e.advance ? '<b class="fd-warn">Nothing paid yet</b>' : e.advance >= e.value ? 'Paid in full' : 'Advance paid'}${god ? ` · ${inr(e.advance)} of ${inr(e.value)}` : ''}</dd>
         </dl>
         ${e.eventId && store.live ? `<div class="actions"><button class="btn small" data-bq-event="${esc(e.eventId)}">Open the event</button></div>` : ''}
       </div>`).join('') : `<div class="empty">Free on this date.</div>`

@@ -10,7 +10,7 @@ export interface OpenItems {
   orders: { id: string; number: number; outlet: string; kind: string; status: string; subtotal_paise: number; sent_items: number; pending_items: number; opened_at: string }[]
   laundry: { id: string; items: { name: string; qty: number }[]; express: boolean; total_paise: number; picked_at: string }[]
 }
-export interface StayDetail { lines: StayLine[]; balance: number; openItems: OpenItems; documents: { id: string; doc_type: string; number: string; issue_date: string; total_paise: number }[] }
+export interface StayDetail { lines: StayLine[]; balance: number; openItems: OpenItems; documents: { id: string; doc_type: string; number: string; issue_date: string; total_paise: number }[]; /** Room nights not yet charged, with GST. */ pendingPaise?: number }
 
 export const rs = (p: number) => inr(Math.round(p / 100))
 const GROUPS: [string, string, string[]][] = [

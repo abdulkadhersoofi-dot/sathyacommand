@@ -89,6 +89,14 @@ describe('the day\'s work', () => {
     const mine = (await R.get('/api/hk/tasks', A1)).json()
     expect(mine.every((t: { attendant: string }) => t.attendant === 'Selvi')).toBe(true)
   })
+
+  it('lets whoever starts a room nobody was given keep it', async () => {
+    const { id } = (await R.post('/api/hk/tasks', EH, { spaceId: 'RM-103', kind: 'touch_up' })).json()
+    expect((await R.post(`/api/hk/tasks/${id}/start`, A2)).statusCode).toBe(200)
+    expect((await room('103')).task).toMatchObject({ id, status: 'in_progress', attendant: 'Muthu' })
+    expect((await R.post(`/api/hk/tasks/${id}/start`, A1)).statusCode).toBe(403)
+    await R.post(`/api/hk/tasks/${id}/finish`, A2, { checklist: [], notes: 'touched up' })
+  })
 })
 
 describe('cleaning and inspection', () => {

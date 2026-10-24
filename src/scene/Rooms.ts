@@ -23,6 +23,8 @@ export class Rooms {
   private slabMesh: THREE.InstancedMesh
   private baseColors = new Map<string, THREE.Color>()
   private pulsing = new Set<string>()
+  /** Rooms that need cleaning: they flash so the floor sees them from the lobby screen. */
+  private flashing = new Set<string>()
   private hovered: string | null = null
   private explode = 0
   private explodeTarget = 0
@@ -132,6 +134,7 @@ export class Rooms {
   update(store: Store) {
     const mode = store.layers.has('rooms') ? 'rooms' : store.layers.has('housekeeping') ? 'hk' : store.layers.has('revenue') ? 'rev' : 'none'
     this.pulsing.clear()
+    this.flashing.clear()
     const ids = [...this.cells.map((c) => c.id), ...this.villaParts.keys()]
     for (const id of ids) {
       if (!store.spaceById.has(id)) continue
@@ -140,8 +143,10 @@ export class Rooms {
       if (mode === 'rooms') {
         col = new THREE.Color(STATUS_HEX[st.status])
         if (st.status === 'arriving' || st.status === 'departing') this.pulsing.add(id)
+        if (st.status === 'dirty' || (store.isToday && store.hk[id] === 'dirty')) this.flashing.add(id)
       } else if (mode === 'hk') {
         col = new THREE.Color(HK_HEX[store.hk[id] ?? 'clean'])
+        if (store.isToday && store.hk[id] === 'dirty') this.flashing.add(id)
       } else if (mode === 'rev') {
         col = revenueColor(st.revenue / 11000)
       } else col = FACADE.clone()
@@ -160,10 +165,12 @@ export class Rooms {
 
   private paint(t: number) {
     const pulse = 0.5 + 0.5 * Math.sin(t * 4.2)
+    const flash = Math.sin(t * 7) > 0 ? 1 : 0   // a hard blink, purple to white, for rooms to clean
     this.cells.forEach((c, i) => {
       const base = this.baseColors.get(c.id) ?? FACADE
       this.tmpC.copy(base)
       if (this.pulsing.has(c.id)) this.tmpC.lerp(FACADE, pulse * 0.45)
+      if (this.flashing.has(c.id)) this.tmpC.lerp(new THREE.Color(0xffffff), flash * 0.8)
       if (this.hovered === c.id) this.tmpC.lerp(new THREE.Color(0xffffff), 0.45)
       this.roomMesh.setColorAt(i, this.tmpC)
     })
@@ -173,8 +180,8 @@ export class Rooms {
       v.walls.emissive.setHex(hov ? 0x444444 : 0)
       v.roof.emissive.setHex(hov ? 0x3a1a0a : 0)
       const mat = v.halo.material as THREE.MeshBasicMaterial
-      mat.opacity = this.pulsing.has(id) ? 0.35 + 0.6 * pulse : 0.85
-      v.halo.scale.setScalar(this.pulsing.has(id) ? 1 + pulse * 0.08 : 1)
+      mat.opacity = this.flashing.has(id) ? 0.2 + 0.75 * flash : this.pulsing.has(id) ? 0.35 + 0.6 * pulse : 0.85
+      v.halo.scale.setScalar(this.pulsing.has(id) || this.flashing.has(id) ? 1 + pulse * 0.08 : 1)
     }
   }
 
@@ -192,7 +199,8 @@ export class Rooms {
       this.layoutMatrices()
       moving = true
     }
-    if (ambient && this.pulsing.size) { this.paint(t); moving = true }
+    // Rooms waiting to be cleaned flash even in eco mode: it is an alert, not decoration, and only recolours instances.
+    if (this.flashing.size || (ambient && this.pulsing.size)) { this.paint(t); moving = true }
     return moving
   }
 

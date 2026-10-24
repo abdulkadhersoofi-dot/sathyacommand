@@ -149,8 +149,10 @@ async function loadStay(spaceId: string) {
   const r = st.stay ?? st.departing
   if (!r) return
   try {
-    const d = await api.get<{ lines: StayDetail['lines']; balance: number; openItems: StayDetail['openItems']; documents: StayDetail['documents'] }>(`/api/reservations/${encodeURIComponent(r.id)}`)
-    store.stays.set(r.id, { lines: d.lines, balance: d.balance, openItems: d.openItems ?? { orders: [], laundry: [] }, documents: d.documents })
+    const d = await api.get<{ lines: StayDetail['lines']; balance: number; openItems: StayDetail['openItems']; documents: StayDetail['documents']; nights: { amount_paise: number; extras_paise: number; released: boolean; posted_line_id: string | null }[] }>(`/api/reservations/${encodeURIComponent(r.id)}`)
+    // Room nights still to be charged, at the GST slab of each night (5% up to ₹7,500, 18% above).
+    const pendingPaise = d.nights.filter((n) => !n.released && !n.posted_line_id).reduce((a, n) => a + Math.round((Number(n.amount_paise) + Number(n.extras_paise)) * (Number(n.amount_paise) > 750000 ? 1.18 : 1.05)), 0)
+    store.stays.set(r.id, { lines: d.lines, balance: d.balance, openItems: d.openItems ?? { orders: [], laundry: [] }, documents: d.documents, pendingPaise })
     if (drawerId === spaceId) renderDrawer()
   } catch { /* the drawer shows the booking without the bill */ }
 }

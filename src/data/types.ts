@@ -44,6 +44,9 @@ export interface Reservation {
   company?: string | null
   /** Orders not yet on the room bill and laundry not yet delivered: check-out waits for them. */
   openItems?: number
+  /** Paid so far, and the room nights still to be charged (with GST), in rupees. Zero balance is not "paid". */
+  paid?: number
+  pending?: number
   /** Filled in by the guest before arrival (Phase 7). */
   onlineCheckin?: boolean
   /** A website booking waiting for its deposit until then. */

@@ -25,6 +25,9 @@ export function dashboardRoutes(app: FastifyInstance, ctx: Ctx) {
               (select coalesce(round(avg(amount_paise)), 0)::bigint from room_night rn where rn.reservation_id = r.id) as rate_paise,
               (select coalesce(sum(l.amount_paise), 0)::bigint from folio_line l join folio f on f.id = l.folio_id where f.reservation_id = r.id) as balance_paise,
               (select id from folio f where f.reservation_id = r.id order by created_at limit 1) as folio_id,
+              (select coalesce(-sum(l.amount_paise), 0)::bigint from folio_line l join folio f on f.id = l.folio_id where f.reservation_id = r.id and l.kind in ('payment', 'refund')) as paid_paise,
+              (select coalesce(sum(round((rn.amount_paise + rn.extras_paise) * case when rn.amount_paise > 750000 then 1.18 else 1.05 end)), 0)::bigint
+                 from room_night rn where rn.reservation_id = r.id and not rn.released and rn.posted_line_id is null) as pending_paise,
               (select count(*)::int from fnb_order o where o.reservation_id = r.id and o.status in ('open', 'billed'))
                 + (select count(*)::int from laundry_order l where l.reservation_id = r.id and l.status = 'picked_up') as open_items
          from reservation r join guest g on g.id = r.guest_id left join space s on s.id = r.space_id

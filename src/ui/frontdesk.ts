@@ -98,7 +98,16 @@ export class FrontDesk {
       ${tile('ready', 'Rooms ready', ready, `of ${s.lodging.length}`, 'st-vacant')}</div>
       <div class="fd-date">Hotel day <b>${fmtDay(today)}</b>${c.open ? ' · your shift is open' : desk ? ' · <span class="fd-warn">no cashier shift open</span>' : ''}</div>`
     const tag = (text: string, tone = '') => `<span class="fd-tag ${tone}">${text}</span>`
-    const money = (r: Reservation) => r.balance > 0 ? tag(`${rs(r.balance * 100)} due`, 'bad') : r.balance < 0 ? tag(`${rs(-r.balance * 100)} paid ahead`, 'ok') : r.status === 'in-house' ? tag('Settled', 'ok') : ''
+    // Zero balance is not "paid": the room nights are charged when the day closes. Say what is still to come.
+    const money = (r: Reservation) => {
+      if (r.status === 'checked-out') return tag('Settled', 'ok')
+      const toCome = r.pending ?? 0
+      if (r.balance > 0) return tag(`${rs(r.balance * 100)} due now`, 'bad') + (toCome ? tag(`~${rs(toCome * 100)} still to come`, 'warn') : '')
+      if (toCome && !(r.paid ?? 0)) return tag(`Nothing paid yet · ~${rs(toCome * 100)} for the stay`, 'warn')
+      if (toCome) return tag(`Paid ahead ${rs(-r.balance * 100)}`, r.balance < 0 ? 'ok' : 'warn') + tag(`~${rs(toCome * 100)} still to come`, 'warn')
+      if (r.balance < 0) return tag(`${rs(-r.balance * 100)} paid ahead`, 'ok')
+      return r.status === 'in-house' || r.status === 'confirmed' ? tag('Settled', 'ok') : ''
+    }
     const common = (r: Reservation) => [
       r.openItems ? tag(`${r.openItems} open bill${r.openItems > 1 ? 's' : ''}`, 'warn') : '',
       r.company ? tag(esc(r.company)) : '', r.pastStays ? tag(`${ordinal(r.pastStays + 1)} stay`, 'ok') : '',
@@ -268,7 +277,7 @@ export class FrontDesk {
     const openN = openCount(d.openItems)
     const gone = d.status === 'cancelled' || d.status === 'no_show'
     // The stay's steps: booked → checked in → everything on the bill and settled → checked out.
-    const settled = d.status === 'checked_out' || (d.status === 'in_house' && !openN && d.balance <= 0)
+    const settled = d.status === 'checked_out' || (d.status === 'in_house' && !openN && d.balance <= 0 && pending === 0)
     const flow: Step[] = gone ? [] : [
       { label: 'Booked', state: 'done' },
       d.status === 'confirmed' ? { label: 'Checked in', state: d.arrival === today && desk ? 'now' : 'todo', attrs: 'data-bk="checkin"', title: d.arrival === today ? 'Assign the room and record the ID' : `Arrives ${showDate(d.arrival)}` } : { label: 'Checked in', state: 'done' },

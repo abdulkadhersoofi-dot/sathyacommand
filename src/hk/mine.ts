@@ -30,6 +30,7 @@ export class MineView {
     const todo = this.tasks.filter((t) => ['pending', 'in_progress', 'reclean'].includes(t.status))
     const done = this.tasks.filter((t) => ['cleaned', 'inspected'].includes(t.status))
     const credits = todo.reduce((a, t) => a + Number(t.credits), 0)
+    const waiting = this.h.rooms.filter((r) => r.task && ['pending', 'reclean'].includes(r.task.status) && !r.task.attendant && !this.tasks.some((t) => t.id === r.task!.id))
     const card = (t: HkTask) => {
       const isOpen = this.open === t.id && t.status === 'in_progress'
       const ticks = this.ticks.get(t.id) ?? t.checklist.map((c) => c.done)
@@ -50,6 +51,8 @@ export class MineView {
     }
     return `${toolbar({ primary: [{ attrs: 'data-mine="found"', label: 'Found an item' }], end: `<span class="muted">${todo.length} to do · ${credits} credits</span>` })}
       ${todo.map(card).join('') || '<div class="empty">Nothing assigned to you right now.</div>'}
+      ${waiting.length ? `<div class="sec-title">Waiting for anyone <span>${waiting.length}</span></div><p class="muted small">Nobody has been given these rooms. Tap one and start; it becomes yours.</p>
+        <div class="hk-grid">${waiting.map((r) => `<button type="button" class="hk-room" data-roomact="${esc(r.space_id)}" data-st="${r.status}" style="--c: var(--st-dirty)"><b>${esc(r.room_no)}</b><span class="hk-st">${esc(TASK[r.task!.kind] ?? r.task!.kind)}</span><span class="muted small">${esc(r.section)}${r.task!.status === 'reclean' ? ' · clean it again' : ''}</span></button>`).join('')}</div>` : ''}
       ${done.length ? `<div class="sec-title">Done today <span>${done.length}</span></div>` + done.map((t) => `<div class="row-card"><div class="rc-title">${t.room_no ? `Room ${esc(t.room_no)}` : esc(t.area ?? '')} · ${esc(TASK[t.kind] ?? t.kind)}</div>
         <div class="rc-sub">${t.started_at && t.finished_at ? `${Math.round((new Date(t.finished_at).getTime() - new Date(t.started_at).getTime()) / 60000)} min` : ''}${t.score != null ? ` · score ${t.score}` : ''}</div>
         <div class="rc-right">${tonePill(...TASK_STATE[t.status])}</div></div>`).join('') : ''}`

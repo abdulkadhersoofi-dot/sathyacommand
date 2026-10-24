@@ -159,7 +159,8 @@ export function housekeepingRoutes(app: FastifyInstance, ctx: Ctx) {
     const who = await need(req, 'hk.attend', 'hk.manage')
     return db.tx(async (t) => {
       const x = await task(t, (req.params as { id: string }).id)
-      if (!mine(who, x)) throw new HttpError(403, 'This room is assigned to someone else.')
+      // A room nobody has been given yet may be taken by whoever starts it.
+      if (x.assigned_to && !mine(who, x)) throw new HttpError(403, 'This room is assigned to someone else.')
       if (!['pending', 'reclean'].includes(x.status)) throw new HttpError(409, `Already ${x.status.replace('_', ' ')}.`)
       if (x.space_id) {
         const h = await hkOf(t, x.space_id)
