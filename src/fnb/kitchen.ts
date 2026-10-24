@@ -51,7 +51,7 @@ export class KitchenView {
           ${l.allergens.length || l.jain ? `<div class="kds-alert">${[...l.allergens.map((a) => a.toUpperCase()), ...(l.jain ? ['JAIN'] : [])].map(esc).join(' · ')}</div>` : ''}
           ${l.status === 'void' ? `<div class="kds-note">Cancelled${l.void_reason ? `: ${esc(l.void_reason)}` : ''}</div>` : ''}</li>`).join('')}</ul>
         <footer>
-          ${canCook && k.status === 'new' ? `<button type="button" class="btn" data-kds="cooking" data-kot="${esc(k.id)}">Start</button>` : ''}
+          ${canCook && k.status === 'new' ? `<button type="button" class="btn primary" data-kds="cooking" data-kot="${esc(k.id)}">Start</button>` : ''}
           ${canCook && k.status === 'cooking' ? `<button type="button" class="btn primary" data-kds="ready" data-kot="${esc(k.id)}">Ready</button>` : ''}
           ${canCook && k.status === 'ready' ? `<button type="button" class="btn" data-kds="cooking" data-kot="${esc(k.id)}">Recall</button>` : ''}
           ${canServe && k.status === 'ready' ? `<button type="button" class="btn primary" data-kds="served" data-kot="${esc(k.id)}">Served</button>` : ''}

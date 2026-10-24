@@ -30,7 +30,7 @@ import type { StayDetail } from './ui/stay'
 import { $, toast, esc } from './ui/dom'
 import { FormModal, val } from './ui/form-modal'
 import { showDemoGuide } from './ui/demo-guide'
-import { drawerHtml, tipHtml } from './ui/cards'
+import { drawerHtml, stripOffset, tipHtml } from './ui/cards'
 import { sideHtml, type Tab } from './ui/side'
 import { kpisHtml, layersHtml, legendHtml, timelineHtml } from './ui/dock'
 
@@ -156,7 +156,24 @@ async function loadStay(spaceId: string) {
     if (drawerId === spaceId) renderDrawer()
   } catch { /* the drawer shows the booking without the bill */ }
 }
+// Drag the room's booking strip sideways to slide it a day per column; a drag is not a tap.
+let stripDragged = false
+$('#drawer-inner').addEventListener('pointerdown', (e) => {
+  const lane = (e.target as HTMLElement).closest<HTMLElement>('.gantt-body')
+  if (!lane || !drawerId) return
+  const id = drawerId, x0 = e.clientX, base = stripOffset.get(id) ?? 0, col = lane.getBoundingClientRect().width / 14
+  stripDragged = false
+  const move = (ev: PointerEvent) => {
+    const d = Math.round((x0 - ev.clientX) / col)
+    if (!d && !stripDragged) return
+    stripDragged = true
+    if ((stripOffset.get(id) ?? 0) !== base + d) { stripOffset.set(id, base + d); renderDrawer() }
+  }
+  const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); setTimeout(() => { stripDragged = false }, 50) }
+  document.addEventListener('pointermove', move); document.addEventListener('pointerup', up)
+})
 function closeDrawer() {
+  if (drawerId) stripOffset.delete(drawerId)
   drawerId = null
   store.select(null)
   drawer.classList.remove('open')
@@ -405,8 +422,8 @@ async function checkEmergency() {
   }
   const mine = e.mine?.status
   el.innerHTML = `<span>🚨 ${EMERGENCY[e.active.kind] ?? 'Emergency'}${e.active.note ? `: ${e.active.note.replace(/[<>&]/g, '')}` : ''}. Go to the nearest assembly point${e.points.length ? ` (${e.points.map((p) => p.name.replace(/[<>&]/g, '')).join(', ')})` : ''}.</span>
-    ${mine === 'safe' ? '<span>You are marked safe.</span>' : '<button type="button" class="btn" data-emb="safe">I am safe</button>'}
-    ${mine === 'need_help' ? '<span>Help is coming.</span>' : '<button type="button" class="btn" data-emb="need_help">I need help</button>'}
+    ${mine === 'safe' ? '<span>You are marked safe.</span>' : '<button type="button" class="btn primary" data-emb="safe">I am safe</button>'}
+    ${mine === 'need_help' ? '<span>Help is coming.</span>' : '<button type="button" class="btn danger" data-emb="need_help">I need help</button>'}
     <button type="button" class="btn ghost" data-emb="open">${e.counts ? `Roll-call ${e.counts.safe}/${e.counts.total}` : 'Details'}</button>`
   el.hidden = false
   // Everyone sees where to go.
@@ -469,7 +486,16 @@ document.addEventListener('click', async (e) => {
     return
   }
   const fdBtn = t.closest<HTMLElement>('[data-fd]')
-  if (fdBtn && fd) { e.stopPropagation(); fd.handle(fdBtn); return }
+  if (fdBtn && fd) {
+    e.stopPropagation()
+    const sp = fdBtn.dataset.fd === 'book' && fdBtn.dataset.space ? store.spaceById.get(fdBtn.dataset.space) : undefined
+    if (sp) void fd.newBooking({ spaceId: liveAdapter?.serverIdOf.get(sp.id) ?? sp.id, roomNo: sp.hmsRoomNo ?? sp.name, roomTypeId: sp.roomTypeId, from: fdBtn.dataset.from })
+    else fd.handle(fdBtn)
+    return
+  }
+  const stripBtn = t.closest<HTMLElement>('[data-strip]')
+  if (stripBtn && drawerId) { e.stopPropagation(); stripOffset.set(drawerId, (stripOffset.get(drawerId) ?? 0) + Number(stripBtn.dataset.strip)); renderDrawer(); return }
+  if (stripDragged && t.closest('.gantt')) { e.stopPropagation(); return }
 
   const act = t.closest<HTMLElement>('[data-act]')
   if (act) {

@@ -24,16 +24,16 @@ export class LaundryView {
 
   html() {
     const manage = this.h.can('hk.manage')
-    return `<p class="muted small">Collect laundry from a room on the room board (Room… → Collect laundry). It is charged to the guest when delivered back.</p>
+    return `<p class="muted small">Collect laundry from a room on the room board (open the room → Collect laundry). It is charged to the guest when delivered back.</p>
       <div class="sec-title">With the laundry <span>${this.orders.length}</span></div>
       ${this.orders.map((o) => `<div class="row-card"><div class="rc-title">Room ${esc(o.room_no)} · ${esc(o.guest)}${o.express ? ' · <b>Express</b>' : ''}</div>
         <div class="rc-sub">${o.items.map((i) => `${i.qty} × ${esc(i.name)}`).join(', ')} · collected by ${esc(o.picked_by)} ${new Date(o.picked_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</div>
-        <div class="rc-right"><span class="mono">${rs(Number(o.total_paise))}</span><button type="button" class="btn small primary" data-deliver="${esc(o.id)}">Delivered</button></div></div>`).join('') || '<div class="empty">Nothing at the laundry.</div>'}
+        <div class="rc-right"><span class="mono">${rs(Number(o.total_paise))}</span><button type="button" class="btn small" data-deliver="${esc(o.id)}">Delivered</button></div></div>`).join('') || '<div class="empty">Nothing at the laundry.</div>'}
       <div class="sec-title">Laundry prices</div>
       ${toolbar({ primary: manage ? [{ attrs: 'data-lp="laundry"', label: 'Add laundry item' }] : [] })}
       <div class="m-table">${this.laundry.map((i) => `<div class="m-row m-row-4${i.active ? '' : ' retired'}"><b>${esc(i.name)}</b><span>${SV[i.service!]}</span><span class="mono">${rs(i.price_paise)}</span>${manage ? `<button type="button" class="btn small" data-edit-price="laundry:${esc(i.id)}">Edit</button>` : '<span></span>'}</div>`).join('')}</div>
       <div class="sec-title">Minibar</div>
-      ${toolbar({ primary: manage ? [{ attrs: 'data-lp="minibar"', label: 'Add minibar item' }] : [] })}
+      ${toolbar({ primary: manage ? [{ attrs: 'data-lp="minibar"', label: 'Add minibar item', primary: false }] : [] })}
       <div class="m-table">${this.minibar.map((i) => `<div class="m-row m-row-4${i.active ? '' : ' retired'}"><b>${esc(i.name)}</b><span>GST ${Number(i.gst_rate)}%</span><span class="mono">${rs(i.price_paise)}</span>${manage ? `<button type="button" class="btn small" data-edit-price="minibar:${esc(i.id)}">Edit</button>` : '<span></span>'}</div>`).join('') || '<div class="empty">No minibar items yet.</div>'}</div>`
   }
 

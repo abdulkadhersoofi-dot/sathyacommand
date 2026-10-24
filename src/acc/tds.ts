@@ -52,7 +52,7 @@ export class TdsView {
         ${this.months.map((m) => `<tr><td>${esc(m.month)} <small class="muted">${m.entries} payment${m.entries > 1 ? 's' : ''}</small></td><td class="n">${money(m.deductedPaise)}</td><td class="n">${money(m.depositedPaise)}</td><td>${esc(showDate(m.due))}</td>
           <td>${tonePill(...(STATUS[m.status] ?? [m.status, '--muted']))}${m.interestNowPaise ? ` <small class="fd-warn">interest ${money(m.interestNowPaise)} so far</small>` : ''}</td>
           <td><small>${m.challans.map((c) => `${esc(c.bsr_code)}/${esc(showDate(c.paid_on))}/${esc(c.challan_no)}`).join(', ')}</small></td>
-          <td>${m.openPaise && manage ? `<button type="button" class="btn small primary" data-pay="${esc(m.month)}">Deposited…</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">No tax deducted this year.</td></tr>'}
+          <td>${m.openPaise && manage ? `<button type="button" class="btn small" data-pay="${esc(m.month)}">Deposited…</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">No tax deducted this year.</td></tr>'}
       </tbody></table></div>
 
       <div class="sec-title">Quarterly statement 26Q: ${esc(s.fy)} Q${s.quarter} <span>due ${esc(showDate(s.due))}</span></div>

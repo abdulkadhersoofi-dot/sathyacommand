@@ -3,7 +3,7 @@ import type { Api } from '../live/api'
 import type { Me } from '../live/signin'
 import type { Outbox } from '../live/outbox'
 import { esc, toast, tonePill, showDate } from '../ui/dom'
-import { val } from '../ui/form-modal'
+import { confirmDanger, val } from '../ui/form-modal'
 import { toolbar } from '../ui/toolbar'
 import { Workspace, type View, type WorkspaceHost } from '../ui/workspace'
 import { money } from '../acc/books'
@@ -27,13 +27,14 @@ class RequestsView implements View {
     return `<p class="muted small">From the QR card in each room. Faults also go to engineering as a ticket. This list refreshes by itself.</p>
       ${this.rows.map((r) => `<div class="row-card ${['done', 'cancelled'].includes(r.status) ? 'retired' : ''}"><div class="rc-title">Room ${esc(r.room_no)} · ${esc(KIND[r.kind] ?? r.kind)}</div>
         <div class="rc-sub">${esc(r.items.map((i) => `${i.name}${i.qty > 1 ? ` × ${i.qty}` : ''}`).join(', '))}${r.note ? `${r.items.length ? ' · ' : ''}<i>${esc(r.note)}</i>` : ''} · ${esc(r.guest ?? '')} · ${esc(ago(r.created_at))}${r.handled_by ? ` · ${esc(r.handled_by)}` : ''}</div>
-        <div class="rc-right">${r.status === 'new' ? `${tonePill('New', '--st-departing')}<button type="button" class="btn small primary" data-rq="${esc(r.id)}|accept">On it</button>` : r.status === 'accepted' ? `<button type="button" class="btn small primary" data-rq="${esc(r.id)}|done">Done</button>` : tonePill(r.status === 'done' ? 'Done' : 'Cancelled', '--muted')}
+        <div class="rc-right">${r.status === 'new' ? `${tonePill('New', '--st-departing')}<button type="button" class="btn small" data-rq="${esc(r.id)}|accept">On it</button>` : r.status === 'accepted' ? `<button type="button" class="btn small" data-rq="${esc(r.id)}|done">Done</button>` : tonePill(r.status === 'done' ? 'Done' : 'Cancelled', '--muted')}
           ${['new', 'accepted'].includes(r.status) ? `<button type="button" class="btn small ghost" data-rq="${esc(r.id)}|cancel">Cancel</button>` : ''}</div></div>`).join('') || '<p class="empty">No requests from rooms.</p>'}`
   }
   async click(el: HTMLElement) {
     const a = el.closest<HTMLElement>('[data-rq]')?.dataset.rq
     if (!a) return false
     const [id, step] = a.split('|')
+    if (step === 'cancel') { confirmDanger(this.h.modal, 'Cancel this request?', 'The guest is not told; call the room if they are waiting.', 'Cancel the request', async () => { await this.h.api.post(`/api/guest/requests/${id}/cancel`); await this.load(); this.h.render(); return 'Cancelled' }, 'Keep it'); return false }
     await this.h.api.post(`/api/guest/requests/${id}/${step}`)
     await this.load(); return true
   }
@@ -47,7 +48,7 @@ class MessagesView implements View {
     return `<p class="muted small">${this.d.provider ? `Sent by ${esc(this.d.provider)} as they fall due.` : 'No WhatsApp provider is set up yet: open each message in WhatsApp with one tap, send it from the desk\'s phone, then mark it sent.'}</p>
       ${this.d.messages.map((m) => `<div class="row-card ${m.status === 'queued' ? '' : 'retired'}"><div class="rc-title">${esc(m.guest ?? m.mobile)} · ${esc(TEMPLATE[m.template] ?? m.template)}</div>
         <div class="rc-sub">${esc(m.body)}${m.error ? ` <b class="fd-warn">${esc(m.error)}</b>` : ''}</div>
-        <div class="rc-right">${m.status === 'queued' || m.status === 'failed' ? `<a class="btn small primary" href="https://wa.me/${esc(m.mobile.replace(/\D/g, ''))}?text=${encodeURIComponent(m.body)}" target="_blank" rel="noopener">Open in WhatsApp</a>
+        <div class="rc-right">${m.status === 'queued' || m.status === 'failed' ? `<a class="btn small" href="https://wa.me/${esc(m.mobile.replace(/\D/g, ''))}?text=${encodeURIComponent(m.body)}" target="_blank" rel="noopener">Open in WhatsApp</a>
           <button type="button" class="btn small" data-msg="${esc(m.id)}|sent">Mark sent</button><button type="button" class="btn small ghost" data-msg="${esc(m.id)}|skip">Skip</button>` : tonePill(m.status === 'sent' ? `Sent${m.sent_by ? ` by ${m.sent_by}` : ''}` : m.status, '--muted')}</div></div>`).join('') || '<p class="empty">No messages due.</p>'}`
   }
   async click(el: HTMLElement) {
@@ -98,7 +99,7 @@ class ActivitiesView implements View {
     return `${toolbar({ primary: manage ? [{ attrs: 'data-act="new"', label: 'Add an activity' }] : [], filters: `<label class="inline">Day <input type="date" data-actday value="${esc(d.day)}"></label>` })}
       <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Activity</th><th>Where</th><th>Hours</th><th class="n">Price</th><th class="n">Slots</th><th></th></tr></thead><tbody>
         ${d.activities.filter((a) => a.active).map((a) => `<tr><td><b>${esc(a.name)}</b>${a.notes ? ` <small class="muted">${esc(a.notes)}</small>` : ''}</td><td>${esc(a.place_name ?? '')}</td><td>${esc(a.opens ?? '')}${a.closes ? `–${esc(a.closes)}` : ''}</td>
-          <td class="n">${a.price_paise ? `${money(a.price_paise)} / ${esc(a.per)}` : 'free'}</td><td class="n">${a.capacity ?? '—'}</td><td><button type="button" class="btn small primary" data-actbook="${esc(a.id)}">Book</button></td></tr>`).join('')}
+          <td class="n">${a.price_paise ? `${money(a.price_paise)} / ${esc(a.per)}` : 'free'}</td><td class="n">${a.capacity ?? '—'}</td><td><button type="button" class="btn small" data-actbook="${esc(a.id)}">Book…</button></td></tr>`).join('')}
       </tbody></table></div>
       <div class="sec-title">Booked for ${esc(showDate(d.day))} <span>${d.bookings.length}</span></div>
       <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Time</th><th>Activity</th><th>Guest</th><th class="n">How many</th><th class="n">Amount</th></tr></thead><tbody>

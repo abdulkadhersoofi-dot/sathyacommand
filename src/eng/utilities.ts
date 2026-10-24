@@ -38,7 +38,7 @@ export class MetersView {
           <input name="r_${esc(m.id)}" type="number" min="0" step="0.01" inputmode="decimal" value="${m.reading ?? ''}" aria-label="${esc(m.name)} reading">
           <span class="mono">${m.qty != null ? n(Number(m.qty)) : ''}</span>
           ${m.cumulative ? `<label class="check"><input type="checkbox" name="x_${esc(m.id)}" ${m.reset ? 'checked' : ''} aria-label="Meter reset"></label>` : '<span></span>'}</div>`).join('')}</div>
-        <div class="actions"><button class="btn primary">Save readings</button><span class="muted small">Take them at the same time each morning. Tick reset only when a meter was replaced or rolled over.</span></div>
+        <div class="actions end"><span class="muted small">Take them at the same time each morning. Tick reset only when a meter was replaced or rolled over.</span><button class="btn primary">Save readings</button></div>
       </form>
       <div class="sec-title">Last 30 days <span>${esc(r.from)} – ${esc(r.to)}</span></div>
       <div class="kpi-mini">

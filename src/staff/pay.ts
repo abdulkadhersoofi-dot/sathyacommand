@@ -18,12 +18,12 @@ export class MyPayView {
   html() {
     const d = this.d!
     if (!d.employee) return `<p class="empty">${esc(t('Your login is not linked to an employee record yet: ask HR.'))}</p>`
-    return `<div class="sec-title">${esc(t('Payslips'))}</div>
+    return `${toolbar({ primary: [{ attrs: 'data-mp="decl"', label: t('My declaration') }], more: d.years.map((y) => ({ attrs: `data-f16="${esc(y)}"`, label: `Form 16 ${y}` })) })}
+      <div class="sec-title">${esc(t('Payslips'))}</div>
       ${d.payslips.map((p) => `<div class="row-card"><div class="rc-title">${esc(p.monthName)}</div><div class="rc-sub">${esc(t('Net pay'))} <b class="mono">${money(p.net_paise)}</b> · ${p.paid_days} ${esc(t('days'))}${p.paid_on ? ` · ${esc(t('paid'))} ${esc(showDate(p.paid_on))}` : ''}</div>
         <div class="rc-right"><button type="button" class="btn small" data-slip="${esc(p.month)}">${esc(t('Open'))}</button></div></div>`).join('') || `<p class="empty">${esc(t('No payslip yet.'))}</p>`}
       <div class="sec-title">${esc(t('Income tax'))} ${esc(d.tax.fy)}</div>
-      ${taxSummary(d.tax, t)}
-      ${toolbar({ primary: [{ attrs: 'data-mp="decl"', label: t('My declaration') }], more: d.years.map((y) => ({ attrs: `data-f16="${esc(y)}"`, label: `Form 16 ${y}` })) })}`
+      ${taxSummary(d.tax, t)}`
   }
   async click(el: HTMLElement) {
     const d = this.d!

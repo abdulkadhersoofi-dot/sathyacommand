@@ -1,5 +1,5 @@
 import { esc, toast, tonePill } from '../ui/dom'
-import { checked, val } from '../ui/form-modal'
+import { checked, confirmDanger, val } from '../ui/form-modal'
 import { toolbar } from '../ui/toolbar'
 import type { BqHost } from './workspace'
 
@@ -44,17 +44,18 @@ export class ChannelsView {
         ${this.payOnline ? 'Deposits are taken by payment link.' : 'No payment gateway yet: guests pay at the resort.'}</div>
         <div class="rc-right"><button type="button" class="btn small" data-chn="copy">Copy link</button></div></div>
       ${failed.length ? `<div class="sec-title fd-warn">OTA bookings that could not be placed <span>${failed.length}</span></div>${failed.map((b) => `<div class="row-card"><div class="rc-title">${esc(this.channels[b.channel] ?? b.channel)} ${esc(b.ota_ref)} · ${esc(b.payload.guest?.name ?? '')}</div>
-        <div class="rc-sub">${esc(b.payload.arrival ?? '')} to ${esc(b.payload.departure ?? '')} · ${esc(b.error ?? '')}</div><div class="rc-right"><button type="button" class="btn small primary" data-chres="${esc(b.id)}">Resolved…</button></div></div>`).join('')}` : ''}
+        <div class="rc-sub">${esc(b.payload.arrival ?? '')} to ${esc(b.payload.departure ?? '')} · ${esc(b.error ?? '')}</div><div class="rc-right"><button type="button" class="btn small" data-chres="${esc(b.id)}">Resolved…</button></div></div>`).join('')}` : ''}
       <div class="sec-title">Selling rules</div>
       ${toolbar({
         primary: manage ? [{ attrs: 'data-chn="rule"', label: 'Set a rule' }] : [],
+        more: manage ? [{ attrs: 'data-chn="map"', label: 'Map a room code…' }] : [],
         filters: `<button type="button" class="btn small" data-chnav="-14" aria-label="Earlier">◀</button><span class="small">${esc(days[0])} to ${esc(days[27])}</span><button type="button" class="btn small" data-chnav="14" aria-label="Later">▶</button>`,
       })}
       <div class="acc-scroll"><table class="acc-table bq-rules"><thead><tr><th>Room</th>${days.map((d) => { const x = new Date(`${d}T00:00:00Z`); return `<th class="n ${x.getUTCDay() % 6 === 0 ? 'wk' : ''}">${WEEK[x.getUTCDay()][0]}<br>${x.getUTCDate()}</th>` }).join('')}</tr></thead><tbody>
         ${this.types.map((t) => `<tr><td>${esc(t.name)}</td>${days.map((d) => `<td class="n">${mark(this.rules.find((r) => r.room_type_id === t.id && r.day === d))}</td>`).join('')}</tr>`).join('')}
       </tbody></table></div>
       <p class="muted small">✕ not sold online · 3+ minimum stay from that arrival · CTA no arrivals · CTD no departures. The booking page follows these, and they go to the channel manager with availability and rates.</p>
-      <div class="sec-title">Channel manager ${tonePill(this.connected ? 'Connected (key set)' : 'Not set up', this.connected ? '--st-vacant' : '--muted')} ${manage ? '<button type="button" class="btn small" data-chn="map">Map a room code</button>' : ''}</div>
+      <div class="sec-title">Channel manager ${tonePill(this.connected ? 'Connected (key set)' : 'Not set up', this.connected ? '--st-vacant' : '--muted')}</div>
       <div class="m-table">${this.maps.map((m) => `<div class="m-row bq-doc"><span>${esc(this.channels[m.channel] ?? m.channel)}</span><span class="mono">${esc(m.code)}</span><span>${esc(this.types.find((t) => t.id === m.room_type_id)?.name ?? m.room_type_id)}</span><span>${esc(m.plan_code)}</span>
         <span class="rc-right">${manage ? `<button type="button" class="btn small ghost" data-chunmap="${esc(m.channel)}|${esc(m.code)}">Remove</button>` : ''}</span></div>`).join('') || '<p class="empty">No room codes mapped yet.</p>'}</div>
       <div class="sec-title">From the channel manager</div>
@@ -73,7 +74,7 @@ export class ChannelsView {
       await api.post(`/api/channels/bookings/${res}/resolve`, { note: val(f, 'note') }); await this.load(); this.h.render(); return 'Marked resolved'
     })
     const un = el.closest<HTMLElement>('[data-chunmap]')?.dataset.chunmap
-    if (un) { const [channel, code] = un.split('|'); await api.req('PUT', '/api/channels/maps', { channel, code, remove: true }); await this.load(); return true }
+    if (un) { const [channel, code] = un.split('|'); confirmDanger(this.h.modal, 'Remove this room code?', 'The channel manager stops receiving rates and availability for it.', 'Remove the code', async () => { await api.req('PUT', '/api/channels/maps', { channel, code, remove: true }); await this.load(); this.h.render(); return 'Removed' }); return false }
     const a = el.closest<HTMLElement>('[data-chn]')?.dataset.chn
     if (a === 'copy') { try { await navigator.clipboard.writeText(`${location.origin}/book`); toast('Link copied') } catch { toast(`${location.origin}/book`) } }
     if (a === 'rule') this.h.modal.open('Selling rule', `<div class="form-grid"><fieldset class="span2"><legend>Rooms</legend>${this.types.map((t) => `<label class="check"><input type="checkbox" name="t:${esc(t.id)}" checked> ${esc(t.name)}</label>`).join('')}</fieldset>

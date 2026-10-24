@@ -46,7 +46,7 @@ export class BeoView {
             ${ins ? `<div class="bq-beo-ins"><b>Instructions:</b> ${esc(ins)}</div>` : ''}
             ${o.beo.extras.length && this.dept !== 'kitchen' ? `<div class="small">For the event: ${o.beo.extras.map((x) => esc(x.description)).join(', ')}</div>` : ''}
             <div class="muted small">Client ${esc(o.beo.client)}${o.beo.owner ? ` · sales ${esc(o.beo.owner)}` : ''} · sent by ${esc(o.by)} ${esc(new Date(o.issuedAt).toLocaleString('en-IN'))}</div></div>
-          <div class="rc-right">${ack ? tonePill(`Read by ${ack.by}`, '--st-vacant') : `<button type="button" class="btn small primary" data-back="${esc(o.eventId)}|${o.revision}">Acknowledge</button>`}</div></div>`
+          <div class="rc-right">${ack ? tonePill(`Read by ${ack.by}`, '--st-vacant') : `<button type="button" class="btn small" data-back="${esc(o.eventId)}|${o.revision}">Acknowledge</button>`}</div></div>`
       }).join('') || '<p class="empty">No event orders for the days ahead.</p>'}`
   }
 

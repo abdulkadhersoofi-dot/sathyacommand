@@ -133,7 +133,7 @@ export class CamerasView {
     return `${toolbar({ primary: this.h.can('security.manage') ? [{ attrs: 'data-cm="add"', label: 'Add camera' }] : [] })}
       <p class="muted small">Tap a camera pin on the 3D map (Security layer) to open its live view.</p>
       ${this.list.filter((c) => c.active).map((c) => `<div class="row-card"><div class="rc-title">📹 ${esc(c.name)}</div><div class="rc-sub">${esc([c.space, c.channel && `channel ${c.channel}`].filter(Boolean).join(' · ') || '—')}</div>
-        <div class="rc-right">${c.view_url ? `<button type="button" class="btn small primary" data-cm="view:${esc(c.id)}">Live view</button>` : '<span class="muted small">no live view set</span>'}${this.h.can('security.manage') ? `<button type="button" class="btn small" data-cm="edit:${esc(c.id)}">Edit</button>` : ''}</div></div>`).join('') || '<div class="empty">No cameras yet.</div>'}`
+        <div class="rc-right">${c.view_url ? `<button type="button" class="btn small" data-cm="view:${esc(c.id)}">Live view</button>` : '<span class="muted small">no live view set</span>'}${this.h.can('security.manage') ? `<button type="button" class="btn small" data-cm="edit:${esc(c.id)}">Edit</button>` : ''}</div></div>`).join('') || '<div class="empty">No cameras yet.</div>'}`
   }
 
   /** Opens the NVR's own page for the camera (signed in there, not here). */

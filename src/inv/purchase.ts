@@ -1,6 +1,6 @@
 import { esc, toast, tonePill, showDate } from '../ui/dom'
-import { checked, val } from '../ui/form-modal'
-import { steps, toolbar, type Action, type Step } from '../ui/toolbar'
+import { checked, confirmDanger, val } from '../ui/form-modal'
+import { rowMenu, steps, toolbar, type Action, type Step } from '../ui/toolbar'
 import type { WorkspaceHost } from '../ui/workspace'
 import { rupees, type Item, type Store } from './items'
 import { receivePo } from './payables'
@@ -63,9 +63,12 @@ export class IndentsView {
         <div class="rc-sub">${i.lines.map((l) => `${esc(l.item)} ${qty(l.purchaseQty)} ${esc(l.purchase_unit)}${l.po_number ? ` <small>(${esc(l.po_number)})</small>` : ''}`).join(' · ')}</div>
         <div class="rc-sub">${esc(i.requested_by)}, ${when(i.requested_at)}${i.needed_by ? ` · needed by ${esc(showDate(i.needed_by))}` : ''}${i.estimatePaise ? ` · about ${rupees(i.estimatePaise)}` : ''}${i.note ? ` · ${esc(i.note)}` : ''}${i.decision_note ? ` · ${esc(i.decided_by ?? '')}: ${esc(i.decision_note)}` : ''}</div>
         <div class="rc-right">${tonePill(...(IND_STATE[i.status] ?? [i.status, '--muted']))}
-          ${i.status === 'submitted' && this.h.can('indent.approve') && i.requester_id !== this.h.me.id ? `<button type="button" class="btn small primary" data-in="approve:${esc(i.id)}">Approve</button><button type="button" class="btn small" data-in="reject:${esc(i.id)}">Turn down…</button>` : ''}
+          ${i.status === 'submitted' && this.h.can('indent.approve') && i.requester_id !== this.h.me.id ? `<button type="button" class="btn small" data-in="approve:${esc(i.id)}">Approve</button>` : ''}
           ${['approved', 'ordered'].includes(i.status) && this.h.can('stores.issue') ? `<button type="button" class="btn small" data-in="issue:${esc(i.id)}">Issue from stock…</button>` : ''}
-          ${['submitted', 'approved'].includes(i.status) && (i.requester_id === this.h.me.id || canOrder) ? `<button type="button" class="btn small" data-in="cancel:${esc(i.id)}">Cancel</button>` : ''}</div></div>`).join('') || '<div class="empty">No indents.</div>'}`
+          ${rowMenu([
+            i.status === 'submitted' && this.h.can('indent.approve') && i.requester_id !== this.h.me.id && { attrs: `data-in="reject:${esc(i.id)}"`, label: 'Turn down…' },
+            ['submitted', 'approved'].includes(i.status) && (i.requester_id === this.h.me.id || canOrder) && { attrs: `data-in="cancel:${esc(i.id)}"`, label: 'Cancel the indent…', danger: true },
+          ])}</div></div>`).join('') || '<div class="empty">No indents.</div>'}`
   }
 
   async change(el: HTMLElement): Promise<boolean> {
@@ -98,7 +101,7 @@ export class IndentsView {
     }
     const [act, id] = a.split(':')
     if (act === 'approve') { await api.post(`/api/indents/${id}/approve`); await this.load(); toast('Approved'); return true }
-    if (act === 'cancel') { await api.post(`/api/indents/${id}/cancel`); await this.load(); toast('Cancelled'); return true }
+    if (act === 'cancel') { confirmDanger(this.h.modal, 'Cancel this indent?', 'Nothing is ordered for it; the store can raise a new one.', 'Cancel the indent', async () => { await api.post(`/api/indents/${id}/cancel`); await this.load(); this.h.render(); return 'Cancelled' }, 'Keep it'); return false }
     if (act === 'issue') {
       const ind = this.list.find((x) => x.id === id)!
       const stores = await this.h.stores()
@@ -195,9 +198,9 @@ export class PosView {
         if (a === 'print') { await this.h.api.openDocument(`/api/pos/${id}/print`); return }
         if (a === 'receive') { await receivePo(this.h, id, async () => { await this.load(); this.h.render() }); return }
         if (a === 'cancel') {
-          this.h.modal.open(`Cancel ${po.number}`, '<div class="form-grid"><label class="span2">Why<input name="reason" maxlength="200"></label></div>', 'Cancel order', async (f) => {
+          this.h.modal.open(`Cancel ${po.number}?`, '<div class="form-grid"><label class="span2">Why<input name="reason" maxlength="200"></label></div>', 'Cancel order', async (f) => {
             await this.h.api.post(`/api/pos/${id}/cancel`, { reason: val(f, 'reason') }); await this.load(); this.h.render(); return 'Cancelled'
-          })
+          }, { danger: true, cancelLabel: 'Keep the order' })
           return
         }
         const r = await this.h.api.post<{ status?: string }>(`/api/pos/${id}/${a}`)
@@ -220,9 +223,10 @@ export class MarketView {
   html() {
     const total = this.list.reduce((a, s) => a + (s.amountPaise ?? 0), 0)
     // The "raise" button submits the form around the list, so it stays a submit button at the toolbar's end.
-    return `<form data-form="market">${toolbar({
+    return `<form data-form="market" id="market-form">${toolbar({
+      primary: this.list.length ? [{ attrs: '', label: 'Raise draft purchase orders', form: 'market-form' }] : [],
       filters: `<div class="chips"><button type="button" class="chip" data-mk="1" aria-pressed="${this.perishable}">Today's market list (perishables)</button><button type="button" class="chip" data-mk="0" aria-pressed="${!this.perishable}">Everything below its level</button></div>`,
-      end: this.list.length ? `<span class="muted small">about ${rupees(total)}</span><button class="btn primary">Raise draft purchase orders</button>` : '',
+      end: this.list.length ? `<span class="muted small">about ${rupees(total)}</span>` : '',
     })}
       <div class="m-table"><div class="m-row mk-row head"><span></span><span>Item</span><span>In stock / level</span><span>Order</span><span>Best rate</span></div>
       ${this.list.map((s, n) => `<div class="m-row mk-row"><input type="checkbox" name="t_${n}" ${s.vendor ? 'checked' : 'disabled'} aria-label="Order ${esc(s.item)}"><b>${esc(s.item)}</b>

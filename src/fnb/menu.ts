@@ -102,7 +102,7 @@ export class MenuView {
         ${p.stations.map((s) => `<label>${esc(s.name)}<select name="s_${esc(s.id)}" ${canEdit ? '' : 'disabled'}>${opts(s.printer_id)}</select></label>`).join('')}
         <div class="sec-title span2">Bills</div>
         ${p.outlets.map((o) => `<label>${esc(o.name)}<select name="o_${esc(o.id)}" ${canEdit ? '' : 'disabled'}>${opts(o.bill_printer_id)}</select></label>`).join('')}
-        ${canEdit ? '<div class="span2"><button type="submit" class="btn">Save routing</button></div>' : ''}</form>` : ''}
+        ${canEdit ? '<div class="span2 actions end"><button type="submit" class="btn primary">Save routing</button></div>' : ''}</form>` : ''}
       <div class="sec-title">Recent print jobs</div>
       ${this.jobs.map((j) => `<div class="row-card"><div class="rc-title">${esc(j.ref)} · ${esc(j.printer)}</div><div class="rc-sub">${new Date(j.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}${j.attempts > 1 ? ` · ${j.attempts} tries` : ''}${j.error ? ` · ${esc(j.error)}` : ''}</div>
         <div class="rc-right">${tonePill(...JOB[j.status])}${j.status === 'failed' ? `<button type="button" class="btn small" data-retry-job="${esc(j.id)}">Retry</button>` : ''}</div></div>`).join('') || '<div class="empty">Nothing printed yet.</div>'}`

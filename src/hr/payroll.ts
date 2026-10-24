@@ -87,12 +87,12 @@ export class PayrollView implements View {
     return `<div class="sec-title">Waiting</div>
       ${adv.map((a) => `<div class="row-card"><div class="rc-title">Salary ${esc(a.kind)} · ${esc(a.name)} <small class="muted mono">${esc(a.code)}</small> · ${money(a.amount_paise)}</div>
         <div class="rc-sub">${money(a.instalment_paise)} a month · ${esc(a.reason)} · asked by ${esc(a.requested_by)}</div>
-        <div class="rc-right">${a.status === 'pending' ? (h.can('payroll.approve') ? `<button type="button" class="btn small primary" data-adv="${esc(a.id)}|approve">Approve</button><button type="button" class="btn small" data-adv="${esc(a.id)}|reject">Turn down</button>` : tonePill('With the GM', '--marigold'))
-          : h.can('payroll.pay') ? `<button type="button" class="btn small primary" data-adv="${esc(a.id)}|issue">Paid…</button>` : tonePill('To be paid by accounts', '--marigold')}</div></div>`).join('')}
+        <div class="rc-right">${a.status === 'pending' ? (h.can('payroll.approve') ? `<button type="button" class="btn small" data-adv="${esc(a.id)}|approve">Approve</button><button type="button" class="btn small" data-adv="${esc(a.id)}|reject">Turn down</button>` : tonePill('With the GM', '--marigold'))
+          : h.can('payroll.pay') ? `<button type="button" class="btn small" data-adv="${esc(a.id)}|issue">Paid…</button>` : tonePill('To be paid by accounts', '--marigold')}</div></div>`).join('')}
       ${fnf.map((x) => `<div class="row-card"><div class="rc-title">Full and final · ${esc(x.name)} <small class="muted mono">${esc(x.code)}</small> · ${money(x.net_paise)}</div>
         <div class="rc-sub">last day ${esc(showDate(x.last_day))} · ${x.items.map((i) => `${esc(i.label)} ${money(i.amount_paise)}`).join(' · ')}</div>
-        <div class="rc-right">${x.status === 'draft' ? (h.can('payroll.approve') ? `<button type="button" class="btn small primary" data-fnf="${esc(x.id)}|approve">Approve</button>` : tonePill('With the GM', '--marigold')) + (h.can('payroll.run') ? `<button type="button" class="btn small ghost" data-fnf="${esc(x.id)}|cancel">Cancel</button>` : '')
-          : x.net_paise > 0 && h.can('payroll.pay') ? `<button type="button" class="btn small primary" data-fnf="${esc(x.id)}|pay">Paid…</button>` : tonePill(x.net_paise > 0 ? 'To be paid' : 'They owe the resort', '--marigold')}</div></div>`).join('')}`
+        <div class="rc-right">${x.status === 'draft' ? (h.can('payroll.approve') ? `<button type="button" class="btn small" data-fnf="${esc(x.id)}|approve">Approve</button>` : tonePill('With the GM', '--marigold')) + (h.can('payroll.run') ? `<button type="button" class="btn small ghost" data-fnf="${esc(x.id)}|cancel">Cancel</button>` : '')
+          : x.net_paise > 0 && h.can('payroll.pay') ? `<button type="button" class="btn small" data-fnf="${esc(x.id)}|pay">Paid…</button>` : tonePill(x.net_paise > 0 ? 'To be paid' : 'They owe the resort', '--marigold')}</div></div>`).join('')}`
   }
 
   private compared(c: Compare) {

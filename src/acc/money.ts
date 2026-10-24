@@ -1,6 +1,6 @@
 import { esc, toast, tonePill, showDate } from '../ui/dom'
-import { val } from '../ui/form-modal'
-import { toolbar } from '../ui/toolbar'
+import { confirmDanger, val } from '../ui/form-modal'
+import { rowMenu, toolbar } from '../ui/toolbar'
 import { drcr, money, type Host } from './books'
 
 // Money owed to the resort and money it holds: company accounts (credit limits, statements, ageing, money
@@ -155,7 +155,8 @@ export class BanksView {
     const b = this.banks.find((x) => x.id === this.bankId), r = this.recon
     const manage = this.h.can('bank.reconcile')
     return `${toolbar({
-      filters: `${manage ? '<label class="btn primary file-btn">Import statement (CSV)<input type="file" accept=".csv,text/csv" data-import hidden></label>' : ''}<select data-bank aria-label="Bank account">${this.banks.map((x) => `<option value="${esc(x.id)}"${x.id === this.bankId ? ' selected' : ''}>${esc(x.name)}${x.is_default ? ' (default)' : ''}</option>`).join('')}</select>
+      primary: manage ? [{ attrs: '', label: 'Import statement (CSV)…', file: 'accept=".csv,text/csv" data-import' }] : [],
+      filters: `<select data-bank aria-label="Bank account">${this.banks.map((x) => `<option value="${esc(x.id)}"${x.id === this.bankId ? ' selected' : ''}>${esc(x.name)}${x.is_default ? ' (default)' : ''}</option>`).join('')}</select>
         <select data-show aria-label="Show"><option value="open"${this.show === 'open' ? ' selected' : ''}>To settle</option><option value="all"${this.show === 'all' ? ' selected' : ''}>All lines</option></select>`,
       more: manage ? [{ attrs: 'data-bk="auto"', label: 'Match again' }, { attrs: 'data-bk="add"', label: 'Add bank account' }] : [],
     })}
@@ -172,7 +173,7 @@ export class BanksView {
         return `<div class="row-card bank-line"><div class="rc-title"><span class="mono">${esc(showDate(l.date))}</span> ${esc(l.description)}${l.reference ? ` <small class="muted">${esc(l.reference)}</small>` : ''}</div>
           <div class="rc-sub">${l.status === 'matched' ? `Matched to ${esc(l.voucher_number ?? '')}${l.note ? ` (${esc(l.note.replace('_', ' '))})` : ''}` : l.status === 'ignored' ? `Left out: ${esc(l.note ?? '')}` : 'Not in the books yet'}</div>
           <div class="rc-right"><b class="mono ${amt < 0 ? 'fd-warn' : ''}">${amt > 0 ? '+' : '−'}${money(Math.abs(amt))}</b>
-            ${l.status === 'open' && manage ? `<span><button type="button" class="btn small" data-bl="match" data-id="${esc(l.id)}">Match…</button><button type="button" class="btn small primary" data-bl="post" data-id="${esc(l.id)}">Post…</button><button type="button" class="btn small" data-bl="ignore" data-id="${esc(l.id)}">Leave out…</button></span>` : ''}
+            ${l.status === 'open' && manage ? `<span><button type="button" class="btn small" data-bl="post" data-id="${esc(l.id)}">Post…</button>${rowMenu([{ attrs: `data-bl="match" data-id="${esc(l.id)}"`, label: 'Match to a voucher…' }, { attrs: `data-bl="ignore" data-id="${esc(l.id)}"`, label: 'Leave the line out…', danger: true }])}</span>` : ''}
             ${l.status === 'matched' && manage ? `<button type="button" class="btn small" data-bl="unmatch" data-id="${esc(l.id)}">Unmatch</button>` : ''}</div></div>`
       }).join('') || `<div class="empty">${this.show === 'open' ? 'Every statement line is settled.' : 'No statement imported yet.'}</div>`}`
   }
@@ -200,7 +201,7 @@ export class BanksView {
     const id = b.dataset.id!, line = this.lines.find((l) => l.id === id)!
     const amt = Number(line.amount_paise)
     const done = async (msg: string) => { await this.load(); this.h.render(); return msg }
-    if (b.dataset.bl === 'unmatch') { await this.h.api.post(`/api/bank/lines/${id}/unmatch`); await this.load(); return true }
+    if (b.dataset.bl === 'unmatch') { confirmDanger(this.h.modal, 'Unmatch this line?', 'The voucher stays in the books; the line goes back to "to settle".', 'Unmatch it', async () => { await this.h.api.post(`/api/bank/lines/${id}/unmatch`); await this.load(); this.h.render(); return 'Unmatched' }); return false }
     if (b.dataset.bl === 'ignore') {
       this.h.modal.open('Leave the line out', '<div class="form-grid"><label class="span2">Why<input name="reason" maxlength="200" placeholder="e.g. opening balance line"></label></div>', 'Leave out', async (f) => {
         await this.h.api.post(`/api/bank/lines/${id}/ignore`, { reason: val(f, 'reason') }); return done('Left out')

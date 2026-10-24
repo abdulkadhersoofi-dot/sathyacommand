@@ -1,6 +1,6 @@
 import { steps, toolbar, type Action, type Step } from '../ui/toolbar'
 import { esc, toast, tonePill, showDate } from '../ui/dom'
-import { checked, val } from '../ui/form-modal'
+import { checked, confirmDanger, val } from '../ui/form-modal'
 import { money } from '../acc/books'
 import { STATUS_LABEL, STATUS_TONE, STYLE_LABEL, type Venue } from './calendar'
 import { ACT_KINDS } from './sales'
@@ -272,11 +272,12 @@ export class EventsView {
       return false
     }
     const fnDel = el.closest<HTMLElement>('[data-fndel]')?.dataset.fndel
-    if (fnDel) { await api.req('DELETE', `/api/banquets/functions/${fnDel}`); await this.load(); return true }
+    const ask = (title: string, why: string, deed: string, url: string) => { confirmDanger(this.h.modal, title, why, deed, async () => { await api.req('DELETE', url); await this.load(); this.h.render(); return 'Removed' }); return false }
+    if (fnDel) return ask('Remove this function?', 'Its menu, extras and timings go with it; the venue is freed.', 'Remove the function', `/api/banquets/functions/${fnDel}`)
     const itDel = el.closest<HTMLElement>('[data-itdel]')?.dataset.itdel
-    if (itDel) { await api.req('DELETE', `/api/banquets/items/${itDel}`); await this.load(); return true }
+    if (itDel) return ask('Remove this extra?', 'It comes off the quote and the event order.', 'Remove the extra', `/api/banquets/items/${itDel}`)
     const vdel = el.closest<HTMLElement>('[data-vdel]')?.dataset.vdel
-    if (vdel) { await api.req('DELETE', `/api/banquets/vendors/${vdel}`); await this.load(); return true }
+    if (vdel) return ask('Remove this supplier?', 'The booking with them is not cancelled by this; tell them yourself.', 'Remove the supplier', `/api/banquets/vendors/${vdel}`)
     const blk = el.closest<HTMLElement>('[data-blk]')?.dataset.blk
     if (blk) { this.h.openBlock(blk); return false }
     const chk = el.closest<HTMLElement>('[data-check]')?.dataset.check
@@ -405,16 +406,16 @@ export class EventsView {
         })
         break
       case 'lost':
-        this.h.modal.open('Lost', `<div class="form-grid"><label class="span2">Why<select name="why">${opt([['Price', 'Price'], ['Date not available', 'Date not available'], ['Chose another venue', 'Chose another venue'], ['Event called off', 'Event called off'], ['No response', 'No response'], ['Other', 'Other']])}</select></label>
-          <label class="span2">Went to (if known)<input name="to" maxlength="120"></label></div>`, 'Mark lost', async (f) => { await api.post(`${base}/lost`, { reason: val(f, 'why'), lostTo: val(f, 'to') }); return done('Marked lost') })
+        this.h.modal.open('Lost the enquiry?', `<div class="form-grid"><label class="span2">Why<select name="why">${opt([['Price', 'Price'], ['Date not available', 'Date not available'], ['Chose another venue', 'Chose another venue'], ['Event called off', 'Event called off'], ['No response', 'No response'], ['Other', 'Other']])}</select></label>
+          <label class="span2">Went to (if known)<input name="to" maxlength="120"></label></div>`, 'Mark lost', async (f) => { await api.post(`${base}/lost`, { reason: val(f, 'why'), lostTo: val(f, 'to') }); return done('Marked lost') }, { danger: true, cancelLabel: 'Not lost yet' })
         break
       case 'cancel':
-        this.h.modal.open('Cancel the event', `<p class="small">${money(d.advancesHeldPaise)} is held. What is refunded goes back on a refund voucher; what is kept is invoiced as the cancellation charge.</p>
+        this.h.modal.open('Cancel the event?', `<p class="small">${money(d.advancesHeldPaise)} is held. What is refunded goes back on a refund voucher; what is kept is invoiced as the cancellation charge.</p>
           <div class="form-grid"><label class="span2">Reason<input name="why" maxlength="200"></label><label>Refund (₹)<input name="amt" type="number" min="0" step="0.01" value="0"></label>
           <label>How<select name="m">${opt([['bank', 'Bank transfer'], ['upi', 'UPI'], ['cheque', 'Cheque'], ['card', 'Card'], ['cash', 'Cash']])}</select></label><label class="span2">Reference<input name="ref" maxlength="80"></label></div>`, 'Cancel event', async (f) => {
           await api.post(`${base}/cancel`, { reason: val(f, 'why'), refund: Number(val(f, 'amt') || 0), method: val(f, 'm'), reference: val(f, 'ref') })
           return done('Cancelled')
-        })
+        }, { danger: true, cancelLabel: 'Keep the event' })
         break
     }
     return false

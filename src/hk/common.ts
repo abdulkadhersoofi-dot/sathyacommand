@@ -1,3 +1,5 @@
+import { tile as sharedTile } from '../ui/tiles'
+import { rowMenu } from '../ui/toolbar'
 import { esc, toast, tonePill, showDate } from '../ui/dom'
 import { checked, val } from '../ui/form-modal'
 import { takePhoto, uploadPhoto } from '../ui/photo'
@@ -35,17 +37,7 @@ export interface HkHost extends WorkspaceHost {
   loadRooms(): Promise<void>
 }
 
-const ICON: Record<string, string> = {
-  broom: '<svg viewBox="0 0 24 24"><path d="M3 21l6-6M9 15l6-6m0 0l4-4m-4 4l5 5M3 21c2-5 5-6 8-4s4 5 2 7"/></svg>',
-  check: '<svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg>',
-  double: '<svg viewBox="0 0 24 24"><path d="M2 12l5 5 7-7M9 17l2 2 11-11"/></svg>',
-  redo: '<svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>',
-  bell: '<svg viewBox="0 0 24 24"><path d="M6 17V11a6 6 0 0 1 12 0v6l2 2H4zM10 21h4M3 3l18 18"/></svg>',
-  bed: '<svg viewBox="0 0 24 24"><path d="M3 18V8M3 12h18v6M7 12V9h5v3M21 18v-2"/></svg>',
-  wrench: '<svg viewBox="0 0 24 24"><path d="M14 7a4 4 0 0 1 5 5l-9 9-5-5 9-9zM3 21l5-5"/></svg>',
-}
-const tile = (ra: string, icon: string, label: string, sub: string, tone: string) =>
-  `<button type="button" class="hk-tile" data-ra="${ra}" style="--tile: var(${tone})">${ICON[icon]}<b>${esc(label)}</b><small>${esc(sub)}</small></button>`
+const tile = (ra: string, icon: string, label: string, sub: string, tone: string) => sharedTile(`data-ra="${ra}"`, icon, label, sub, tone)
 
 /**
  * The room card, built for the hand: one or two big tiles for what this person does now (start, room is
@@ -81,11 +73,16 @@ export async function roomActions(h: HkHost, r: Room) {
 
   const small: string[] = []
   if (r.in_house && (attend || desk)) small.push('<button type="button" class="btn" data-ra="minibar">Minibar used…</button>', '<button type="button" class="btn" data-ra="laundry">Collect laundry…</button>')
-  if (attend) small.push('<button type="button" class="btn" data-ra="seen-v">I found it empty</button>', '<button type="button" class="btn" data-ra="seen-o">I found a guest / luggage</button>')
-  small.push('<button type="button" class="btn" data-ra="found">Found an item…</button>', '<button type="button" class="btn" data-ra="fault">Report a fault…</button>')
-  const more = manage && r.status !== 'out_of_order' && r.status !== 'out_of_service'
-    ? `<details class="menu hk-more"><summary class="btn">More ▾</summary><div class="menu-list" role="menu"><button type="button" class="menu-row" data-ra="task">Add a task…</button><button type="button" class="menu-row" data-ra="status">Change the status…</button><div class="menu-sep"></div><button type="button" class="menu-row danger" data-ra="ooo">Out of order…</button></div></details>` : ''
-
+  small.push('<button type="button" class="btn" data-ra="found">Found an item…</button>')
+  const inService = r.status !== 'out_of_order' && r.status !== 'out_of_service'
+  const more = `<span class="hk-more">${rowMenu([
+    { attrs: 'data-ra="fault"', label: 'Report a fault…' },
+    attend && { attrs: 'data-ra="seen-v"', label: 'I found it empty' },
+    attend && { attrs: 'data-ra="seen-o"', label: 'I found a guest / luggage' },
+    manage && inService && { attrs: 'data-ra="task"', label: 'Add a task…' },
+    manage && inService && { attrs: 'data-ra="status"', label: 'Change the status…' },
+    manage && inService && { attrs: 'data-ra="ooo"', label: 'Out of order…', danger: true },
+  ], 'More ▾', 'btn')}</span>`
   h.modal.open(`Room ${r.room_no}`, `<div class="room-head">${hkPill(r.status)}${r.dnd ? tonePill('Do not disturb', '--god') : ''}${r.discrepancy ? tonePill(r.discrepancy === 'skipper' ? 'Skipper?' : 'Sleeper?', '--st-departing') : ''}
       ${t ? tonePill(`${TASK[t.kind] ?? t.kind} · ${TASK_STATE[t.status]?.[0] ?? t.status}`, TASK_STATE[t.status]?.[1] ?? '--muted') : ''}</div>
     <dl class="kv"><dt>Section</dt><dd>${esc(r.section)}</dd>${r.room_type ? `<dt>Type</dt><dd>${esc(r.room_type)}</dd>` : ''}

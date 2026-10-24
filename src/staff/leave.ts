@@ -1,5 +1,5 @@
 import { esc, tonePill } from '../ui/dom'
-import { checked, val } from '../ui/form-modal'
+import { checked, confirmDanger, val } from '../ui/form-modal'
 import { toolbar } from '../ui/toolbar'
 import type { WorkspaceHost } from '../ui/workspace'
 import { t } from './i18n'
@@ -30,7 +30,7 @@ export class MyLeaveView {
   async click(el: HTMLElement) {
     const d = this.d!
     const c = el.closest<HTMLElement>('[data-mlc]')?.dataset.mlc
-    if (c) { await this.h.api.post(`/api/hr/leave/applications/${c}/cancel`); await this.load(); return true }
+    if (c) { confirmDanger(this.h.modal, t('Withdraw this leave?'), t('The days go back to your balance.'), t('Withdraw it'), async () => { await this.h.api.post(`/api/hr/leave/applications/${c}/cancel`); await this.load(); this.h.render(); return t('Withdrawn') }, t('Keep it')); return false }
     if (el.closest('[data-ml=apply]')) {
       this.h.modal.open(t('Ask for leave'), `<div class="form-grid"><label class="span2">${esc(t('Leave type'))}<select name="type">${d.balances.map((b) => `<option value="${esc(b.type)}">${esc(b.name)} (${b.balance})</option>`).join('')}<option value="LOP">${esc(d.leaveTypes.LOP ?? 'Leave without pay')}</option></select></label>
           <label>${esc(t('From'))}<input name="from" type="date"></label><label>${esc(t('To'))}<input name="to" type="date"></label>

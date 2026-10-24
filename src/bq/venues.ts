@@ -1,4 +1,5 @@
 import { esc, tonePill } from '../ui/dom'
+import { toolbar } from '../ui/toolbar'
 import { checked, val } from '../ui/form-modal'
 import { money } from '../acc/books'
 import { STYLE_LABEL, type Venue } from './calendar'
@@ -20,13 +21,13 @@ export class VenuesView {
 
   html() {
     const edit = this.h.can('venues.manage')
-    return `<div class="sec-title">Venues</div>
+    return `${toolbar({ primary: edit ? [{ attrs: 'data-pkg="new"', label: 'Add a menu or package' }] : [] })}<div class="sec-title">Venues</div>
       <div class="acc-scroll"><table class="acc-table"><thead><tr><th>Venue</th><th class="n">Rental per function</th><th class="n">Turnaround</th>${Object.values(STYLE_LABEL).map((s) => `<th class="n">${esc(s)}</th>`).join('')}<th></th></tr></thead><tbody>
         ${this.venues.map((v) => `<tr><td><b>${esc(v.name)}</b> <small class="muted">${esc(v.kind)}</small></td><td class="n">${money(v.rental_paise)}</td><td class="n">${v.turnaround_minutes / 60} h</td>
           ${Object.keys(STYLE_LABEL).map((s) => `<td class="n">${v.setups[s] ?? '—'}</td>`).join('')}<td>${edit ? `<button type="button" class="btn small" data-venue="${esc(v.id)}">Edit</button>` : ''}</td></tr>`).join('')}
       </tbody></table></div>
       <p class="muted small">The figures are placeholders until the resort's own are entered. The turnaround keeps a venue free before and after each booking for setting up and clearing.</p>
-      <div class="sec-title">Menus and packages ${edit ? '<button type="button" class="btn small primary" data-pkg="new">Add</button>' : ''}</div>
+      <div class="sec-title">Menus and packages</div>
       <div class="m-table">${this.pkgs.map((p) => `<div class="m-row bq-pkg ${p.active ? '' : 'retired'}"><b>${esc(p.name)}</b><span>${esc({ menu: 'Menu', decor: 'Decor', service: 'Service' }[p.kind] ?? p.kind)}${p.veg === true ? ' · veg' : p.veg === false ? ' · non-veg' : ''}</span>
           <span class="mono">${money(p.price_paise)}/${esc(p.per)}${p.min_pax ? ` <small class="muted">min ${p.min_pax}</small>` : ''}</span><small class="muted">${esc(p.items.join(' · '))}</small>
           <span class="rc-right">${p.active ? '' : tonePill('Archived', '--muted')}${edit ? `<button type="button" class="btn small" data-pkg="${esc(p.id)}">Edit</button>` : ''}</span></div>`).join('')}</div>`

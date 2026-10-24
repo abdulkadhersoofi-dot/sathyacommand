@@ -39,7 +39,7 @@ export class CalendarView {
     }).join('')}`).join('')
     return `${toolbar({
       primary: manage ? [{ attrs: 'data-cal-book', label: 'Book an event' }, { attrs: 'data-cal-new', label: 'New enquiry', primary: false }] : [],
-      filters: `<button type="button" class="btn" data-cal-nav="-7">◀ Week</button><label class="inline">From <input type="date" data-cal-from value="${esc(this.from)}"></label><button type="button" class="btn" data-cal-nav="7">Week ▶</button>`,
+      filters: `<button type="button" class="btn small" data-cal-nav="-7">◀ Week</button><label class="inline">From <input type="date" data-cal-from value="${esc(this.from)}"></label><button type="button" class="btn small" data-cal-nav="7">Week ▶</button>`,
       end: '<span class="bq-legend"><span class="bq-chip pencil">Pencilled</span><span class="bq-chip hold">On hold</span><span class="bq-chip firm">Booked</span></span>',
     })}
       <p class="muted small">A venue is kept free for its turnaround (setting up and clearing) around each booking. Pencilled enquiries may overlap; only one can hold or book a slot.${manage ? ' Tap an empty day to book that venue; tap a booking to open it.' : ''}</p>

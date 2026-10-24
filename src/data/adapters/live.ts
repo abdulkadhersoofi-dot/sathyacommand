@@ -61,7 +61,7 @@ export class LiveAdapter implements HmsAdapter {
       return {
         id, type: KIND_TO_TYPE[s.kind] ?? 'service',
         name: lodging && s.kind === 'room' ? `Room ${s.room_no}` : s.name,
-        hmsRoomNo: s.room_no ?? undefined, category: s.room_type ?? undefined, floor: s.floor ?? undefined,
+        hmsRoomNo: s.room_no ?? undefined, category: s.room_type ?? undefined, roomTypeId: s.room_type_id ?? undefined, floor: s.floor ?? undefined,
         baseRate: s.base_rate_paise != null ? s.base_rate_paise / 100 : undefined, capacity: s.capacity ?? s.max_occupancy ?? undefined,
       }
     })

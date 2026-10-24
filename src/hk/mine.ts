@@ -40,7 +40,7 @@ export class MineView {
         return `<div class="mine-card">${head}<div class="actions">
           ${['pending', 'reclean'].includes(t.status) ? `<button type="button" class="btn primary" data-start="${esc(t.id)}">Start</button>` : ''}
           ${t.status === 'in_progress' ? `<button type="button" class="btn primary" data-openTask="${esc(t.id)}">Continue</button>` : ''}
-          ${t.space_id ? `<button type="button" class="btn" data-roomact="${esc(t.space_id)}">Room…</button>` : ''}</div></div>`
+          ${t.space_id ? `<button type="button" class="btn" data-roomact="${esc(t.space_id)}">Open the room…</button>` : ''}</div></div>`
       }
       const ph = this.photos.get(t.id) ?? []
       return `<div class="mine-card open">${head}

@@ -130,7 +130,7 @@ export class FrontDesk {
         : card(x, 'occupied', [tag(`In at ${fmtTime(x.checkInAt)}`, 'ok'), tag(`${nightsOf(x)} night${nightsOf(x) > 1 ? 's' : ''} · ${x.pax} pax`), money(x), ...common(x)], btn('open', x.id, 'Open'))).join('')
         : '<div class="empty">No arrivals today.</div>')
       + sec('dueout', 'Due out', departures.length, departures.length ? departures.map((x) =>
-        card(x, 'departing', [tag(x.departure < today ? `Was due ${fmtDay(x.departure, { day: 'numeric', month: 'short' })}` : 'Leaving today', x.departure < today ? 'bad' : ''), money(x), ...common(x)], btn('open', x.id, (x.openItems ?? 0) > 0 || x.balance > 0 ? 'Settle & check out' : 'Check out', true))).join('')
+        card(x, 'departing', [tag(x.departure < today ? `Was due ${fmtDay(x.departure, { day: 'numeric', month: 'short' })}` : 'Leaving today', x.departure < today ? 'bad' : ''), money(x), ...common(x)], btn('open', x.id, (x.openItems ?? 0) > 0 || x.balance > 0 ? 'Settle & check out…' : 'Check out…', true))).join('')
         : '<div class="empty">No departures due.</div>')
       + sec('inhouse', 'In-house', staying.length, staying.length ? staying.map((x) =>
         card(x, 'occupied', [tag(`Until ${fmtDay(x.departure, { day: 'numeric', month: 'short' })}`), tag(`${x.pax} pax`), money(x), ...common(x)], btn('open', x.id, 'Open'))).join('')
@@ -175,20 +175,25 @@ export class FrontDesk {
   private detail(id: string) { return this.api.get<Detail>(`/api/reservations/${encodeURIComponent(id)}`) }
 
   // ---------- forms ----------
-  async newBooking() {
+  /** The booking form; from the map it comes pinned to a room (its type and tariff), starting on the room's next free night. */
+  async newBooking(room?: { spaceId: string; roomNo: string; roomTypeId?: string; from?: string }) {
     const types = (await this.api.get<RoomType[]>('/api/room-types')).filter((t) => t.active)
+    const roomType = room?.roomTypeId ? types.find((t) => t.id === room.roomTypeId) : undefined
     // Company accounts with contracted rates (Phase 7); none when this login cannot read them.
     const accounts = (await this.api.get<{ accounts: { id: string; name: string; active: boolean; rates: number }[] }>('/api/sales/accounts').catch(() => ({ accounts: [] }))).accounts.filter((a) => a.active)
     const today = todayKey()
-    const form = this.open('New booking', `
+    const start = room?.from && room.from > today ? room.from : today
+    const form = this.open(room ? `New booking · Room ${room.roomNo}` : 'New booking', `
+      ${room ? `<div class="fd-room-pin"><b>Room ${esc(room.roomNo)}</b>${roomType ? ` · ${esc(roomType.name)} · ${rs(roomType.base_rate_paise)} a night` : ''}
+        <label class="check"><input type="checkbox" name="thisRoom" checked> Keep this exact room</label></div>` : ''}
       <div class="form-grid">
         <label class="span2">Guest name<input name="name" required autocomplete="off"></label>
         <label>Mobile<input name="mobile" inputmode="tel"></label>
         <label>Nationality<select name="nationality"><option value="IN">Indian</option><option value="OTHER">Foreign national</option></select></label>
         <label class="span2" data-country hidden>Country code (e.g. GB, US, AE)<input name="country" maxlength="2"></label>
-        <label>Room type<select name="roomTypeId">${types.map((t) => `<option value="${esc(t.id)}">${esc(t.name)} · ${rs(t.base_rate_paise)}</option>`).join('')}</select></label>
+        <label data-room-type ${roomType ? 'hidden' : ''}>Room type<select name="roomTypeId">${types.map((t) => `<option value="${esc(t.id)}" ${t.id === roomType?.id ? 'selected' : ''}>${esc(t.name)} · ${rs(t.base_rate_paise)}</option>`).join('')}</select></label>
         <label>Meal plan<select name="plan"><option value="EP">Room only (EP)</option><option value="CP">With breakfast (CP)</option><option value="MAP">Breakfast + 1 meal (MAP)</option><option value="AP">All meals (AP)</option></select></label>
-        <label>Arrival<input name="arrival" type="date" value="${today}" min="${today}"></label>
+        <label>Arrival<input name="arrival" type="date" value="${start}" min="${today}"></label>
         <label>Nights<input name="nights" type="number" min="1" max="60" value="1"></label>
         <label>Adults<input name="adults" type="number" min="1" value="2"></label>
         <label>Children<input name="children" type="number" min="0" value="0"></label>
@@ -210,7 +215,8 @@ export class FrontDesk {
       const arrival = this.val(f, 'arrival')
       const nationality = this.val(f, 'nationality') === 'OTHER' ? this.val(f, 'country').toUpperCase() : 'IN'
       if (nationality !== 'IN' && !/^[A-Z]{2}$/.test(nationality)) throw new Error('Enter the 2-letter country code for a foreign guest.')
-      const r = await this.api.post<{ id: string; roomTotal: number }>('/api/reservations', {
+      const r = await this.api.post<{ id: string; roomTotal: number; roomNo?: string }>('/api/reservations', {
+        spaceId: room && checked(f, 'thisRoom') ? room.spaceId : undefined,
         guest: { name: this.val(f, 'name'), mobile: this.val(f, 'mobile') || undefined, nationality },
         roomTypeId: this.val(f, 'roomTypeId'), plan: this.val(f, 'plan'), arrival, departure: addDaysLocal(arrival, nights),
         adults: Number(this.val(f, 'adults')), children: Number(this.val(f, 'children')), eta: this.val(f, 'eta') || undefined,
@@ -219,15 +225,22 @@ export class FrontDesk {
         source: this.val(f, 'source'), otaRef: this.val(f, 'otaRef') || undefined, debtorId: this.val(f, 'debtor') || undefined,
       })
       await this.after()
-      toast(`Booked ${r.id} · ${rs(r.roomTotal)} for the room before tax`)
+      toast(`Booked ${r.id}${r.roomNo ? ` · Room ${r.roomNo}` : ''} · ${rs(r.roomTotal)} for the room before tax`)
       void this.openBooking(r.id)
       return undefined
     })
     const quote = form.querySelector<HTMLElement>('.fd-quote')!
     const country = form.querySelector<HTMLElement>('[data-country]')!
     const ota = form.querySelector<HTMLElement>('[data-ota]')!
+    const typeRow = form.querySelector<HTMLElement>('[data-room-type]')!
     const update = async () => {
       country.hidden = this.val(form, 'nationality') !== 'OTHER'
+      if (room) {
+        // Untick "keep this exact room" and the type may be changed; tick it and the room's type comes back.
+        const keep = checked(form, 'thisRoom')
+        typeRow.hidden = keep && !!roomType
+        if (keep && roomType) form.querySelector<HTMLSelectElement>('[name=roomTypeId]')!.value = roomType.id
+      }
       ota.hidden = !['booking_com', 'makemytrip', 'goibibo', 'agoda', 'expedia', 'airbnb', 'cleartrip', 'yatra', 'easemytrip', 'travel_agent'].includes(this.val(form, 'source'))
       try {
         const q = await this.api.post<{ lines: { rate: number }[]; taxable: number; cgst: number; sgst: number; total: number }>('/api/quote', {

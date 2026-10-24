@@ -68,6 +68,17 @@ describe('check-out waits for every bill', () => {
     expect(inv.lines.length).toBeGreaterThanOrEqual(3)   // room, food, laundry
   })
 
+  it('books this exact room from the map, and refuses it when the room is taken on a night', async () => {
+    const r = (await R.post('/api/reservations', FD, { guest: { name: 'Lakshmi' }, roomTypeId: 'deluxe', plan: 'EP', arrival: '2026-11-03', departure: '2026-11-05', spaceId: 'RM-108' })).json()
+    expect(r.roomNo).toBe('108')
+    expect((await R.get(`/api/reservations/${r.id}`, FD)).json().room_no).toBe('108')
+    const clash = await R.post('/api/reservations', FD, { guest: { name: 'Ramesh' }, roomTypeId: 'deluxe', plan: 'EP', arrival: '2026-11-04', departure: '2026-11-06', spaceId: 'RM-108' })
+    expect(clash.statusCode).toBe(409)
+    expect(clash.json().error).toMatch(/Room 108 is already booked/)
+    const wrongType = await R.post('/api/reservations', FD, { guest: { name: 'Ramesh' }, roomTypeId: 'deluxe', plan: 'EP', arrival: '2026-11-04', departure: '2026-11-06', spaceId: 'RM-V1' })
+    expect(wrongType.statusCode).toBe(409)
+  })
+
   it('the front desk can charge an order to a room', async () => {
     const r2 = (await R.post('/api/reservations', FD, { guest: { name: 'Meena' }, roomTypeId: 'deluxe', plan: 'EP', arrival: '2026-11-01', departure: '2026-11-02' })).json()
     await R.post(`/api/reservations/${r2.id}/check-in`, FD, { spaceId: 'RM-107', idType: 'aadhaar', idNumber: '1234 5678 9013' })

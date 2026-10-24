@@ -3,7 +3,7 @@ import type { Api } from '../live/api'
 import type { Me } from '../live/signin'
 import type { Outbox } from '../live/outbox'
 import { esc, toast, tonePill, showDate } from '../ui/dom'
-import { val } from '../ui/form-modal'
+import { confirmDanger, val } from '../ui/form-modal'
 import { toolbar, type Action } from '../ui/toolbar'
 import { Workspace, type View, type WorkspaceHost } from '../ui/workspace'
 import { money } from '../acc/books'
@@ -219,7 +219,7 @@ class LeaveView implements View {
     return `${toolbar({ filters: [['pending', 'Waiting'], ['approved', 'Approved'], ['all', 'All']].map(([k, l]) => `<button type="button" class="chip" data-lvs="${k}" aria-pressed="${k === this.status}">${l}</button>`).join('') })}
       ${this.rows.map((a) => `<div class="row-card"><div class="rc-title">${esc(a.name)} <small class="muted mono">${esc(a.code)}</small> · ${esc(this.h.cfg.leaveTypes[a.leave_type]?.name ?? a.leave_type)}</div>
         <div class="rc-sub">${esc(showDate(a.from_date))}${a.to_date !== a.from_date ? ` to ${esc(showDate(a.to_date))}` : ''}${a.half_day ? ' (half day)' : ''} · ${Number(a.days)} days · ${esc(this.h.cfg.departments[a.department]?.name ?? a.department)}${a.reason ? ` · ${esc(a.reason)}` : ''}${a.decided_by ? ` · ${esc(a.decided_by)}${a.decision_note ? `: ${esc(a.decision_note)}` : ''}` : ''}</div>
-        <div class="rc-right">${a.status === 'pending' ? `<button type="button" class="btn small primary" data-lvd="${esc(a.id)}|approve">Approve</button><button type="button" class="btn small" data-lvd="${esc(a.id)}|reject">Turn down…</button>` : tonePill(a.status, LEAVE_TONE[a.status])}</div></div>`).join('') || '<p class="empty">Nothing here.</p>'}`
+        <div class="rc-right">${a.status === 'pending' ? `<button type="button" class="btn small" data-lvd="${esc(a.id)}|approve">Approve</button><button type="button" class="btn small" data-lvd="${esc(a.id)}|reject">Turn down…</button>` : tonePill(a.status, LEAVE_TONE[a.status])}</div></div>`).join('') || '<p class="empty">Nothing here.</p>'}`
   }
   async click(el: HTMLElement) {
     const s = el.closest<HTMLElement>('[data-lvs]')?.dataset.lvs
@@ -255,7 +255,7 @@ class HolidaysView implements View {
     const y = el.closest<HTMLElement>('[data-hy]')?.dataset.hy
     if (y) { this.year += Number(y); await this.load(); return true }
     const del = el.closest<HTMLElement>('[data-holdel]')?.dataset.holdel
-    if (del) { await this.h.api.req('PUT', '/api/hr/holidays', { day: del, remove: true }); await this.load(); return true }
+    if (del) { confirmDanger(this.h.modal, 'Remove this holiday?', 'It stops counting as a paid holiday in attendance and payroll.', 'Remove the holiday', async () => { await this.h.api.req('PUT', '/api/hr/holidays', { day: del, remove: true }); await this.load(); this.h.render(); return 'Removed' }); return false }
     if (el.closest('[data-hol=add]')) this.h.modal.open('Add a holiday', `<div class="form-grid"><label>Date<input name="day" type="date"></label><label>Kind<select name="kind">${opt([['festival', 'Festival'], ['optional', 'Optional']])}</select></label>
         <label class="span2">Name<input name="name" maxlength="80" placeholder="Pongal, Tamil New Year, Deepavali…"></label></div>`, 'Add', async (f) => {
       await this.h.api.req('PUT', '/api/hr/holidays', { day: val(f, 'day'), name: val(f, 'name'), kind: val(f, 'kind') }); await this.load(); this.h.render(); return 'Added'

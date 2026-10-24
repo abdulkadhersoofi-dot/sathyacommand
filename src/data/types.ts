@@ -11,6 +11,7 @@ export interface Space {
   type: SpaceType
   hmsRoomNo?: string    // what the HMS calls it
   category?: string
+  roomTypeId?: string   // the HMS room type, so a booking from the map starts with this room's tariff
   capacity?: number
   baseRate?: number     // INR per night / per event
   floor?: number

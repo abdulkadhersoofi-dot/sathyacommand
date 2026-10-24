@@ -1,5 +1,6 @@
 import { esc, tonePill, showDate } from '../ui/dom'
 import { val } from '../ui/form-modal'
+import { toolbar } from '../ui/toolbar'
 import { money } from '../acc/books'
 import { STATUS_LABEL } from './calendar'
 import type { BqHost } from './workspace'
@@ -52,7 +53,7 @@ export class SalesView {
         <span><small>Conversion</small><b class="mono">${p.conversion == null ? '—' : `${p.conversion}%`}</b></span><span><small>Follow-ups due</small><b class="mono ${p.followUpsDue ? 'fd-warn' : ''}">${p.followUpsDue}</b></span></div></div>
       <div class="sec-title">Pipeline</div>
       <div class="bq-funnel">${p.stages.map((s) => `<div class="bq-stage"><div class="bq-bar" style="width:${Math.max(4, Math.round((s.valuePaise * 100) / max))}%"></div><b>${esc(STATUS_LABEL[s.status])}</b><span>${s.count} · <span class="mono">${money(s.valuePaise)}</span></span></div>`).join('')}</div>
-      <div class="sec-title">Follow-ups <span><button type="button" class="chip" data-sall="0" aria-pressed="${!this.all}">Mine</button> <button type="button" class="chip" data-sall="1" aria-pressed="${this.all}">Everyone's</button></span></div>
+      ${toolbar({ filters: `<div class="chips"><button type="button" class="chip" data-sall="0" aria-pressed="${!this.all}">My follow-ups</button><button type="button" class="chip" data-sall="1" aria-pressed="${this.all}">Everyone's</button></div>` })}<div class="sec-title">Follow-ups</div>
       ${activityRows(this.acts, this.today) || '<p class="empty">Nothing to follow up.</p>'}
       <div class="bq-two">
         <div><div class="sec-title">Lost this year, by reason</div><div class="m-table">${p.lost.map((l) => `<div class="m-row bq-lost"><span>${esc(l.reason)}</span><span class="mono">${l.count}</span><span class="mono">${money(l.valuePaise)}</span></div>`).join('') || '<p class="empty">None lost.</p>'}</div></div>

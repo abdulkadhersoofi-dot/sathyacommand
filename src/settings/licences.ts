@@ -1,5 +1,5 @@
 import { esc, tonePill } from '../ui/dom'
-import { checked, val } from '../ui/form-modal'
+import { checked, confirmDanger, val } from '../ui/form-modal'
 import type { WorkspaceHost } from '../ui/workspace'
 import { toolbar } from '../ui/toolbar'
 
@@ -56,7 +56,7 @@ export class LicencesView {
     </section>
     <section>
       <div class="sec-title">TN VAT on liquor <span>rates in force on ${fmt(this.businessDate)}</span></div>
-      ${canVat ? toolbar({ primary: [{ attrs: 'data-s="add-class"', label: 'Add liquor class' }] }) : ''}
+      ${canVat ? toolbar({ primary: [{ attrs: 'data-s="add-class"', label: 'Add liquor class', primary: false }] }) : ''}
       ${this.vat.map((c) => `<div class="row-card${c.active ? '' : ' retired'}">
         <div class="rc-title">${esc(c.label)} <span class="mono muted">${esc(c.id)}</span></div>
         <div class="rc-sub">${c.upcoming.length ? `From ${fmt(c.upcoming[c.upcoming.length - 1].effective_from)}: ${c.upcoming[c.upcoming.length - 1].rate}% · ` : ''}${c.history.length ? `<details><summary>History</summary>${c.history.map((h) => `<div class="small">${fmt(h.effective_from)} · ${h.rate}% · ${esc(h.set_by)}${h.note ? ` · ${esc(h.note)}` : ''}</div>`).join('')}</details>` : 'No rate set yet'}</div>
@@ -69,11 +69,11 @@ export class LicencesView {
       <form class="form-grid bar-hours" data-s-form="hours">
         <label>Opens<input name="open" type="time" value="${esc(b.open ?? '')}" ${canBar ? '' : 'disabled'}></label>
         <label>Closes<input name="close" type="time" value="${esc(b.close ?? '')}" ${canBar ? '' : 'disabled'}></label>
-        ${canBar ? '<div class="span2"><button class="btn" type="submit">Save hours</button></div>' : ''}
+        ${canBar ? '<div class="span2 actions end"><button class="btn primary" type="submit">Save hours</button></div>' : ''}
       </form>
       <p class="muted small">Staff must check guests are ${b.legalAge} or older before serving liquor.</p>
       <div class="sec-title">Dry days <span>${b.dryDays.length}</span></div>
-      ${canBar ? toolbar({ primary: [{ attrs: 'data-s="add-dry"', label: 'Add dry day' }] }) : ''}
+      ${canBar ? toolbar({ primary: [{ attrs: 'data-s="add-dry"', label: 'Add dry day', primary: false }] }) : ''}
       ${b.dryDays.map((d) => `<div class="row-card"><div class="rc-title">${fmt(d.day)}</div><div class="rc-sub">${esc(d.reason)}</div>
         <div class="rc-right">${canBar ? `<button type="button" class="btn small ghost" data-dry="${esc(d.day)}">Remove</button>` : ''}</div></div>`).join('') || '<div class="empty">No dry days entered. Add them as the state notifies them.</div>'}
     </section>
@@ -83,7 +83,7 @@ export class LicencesView {
         <label class="span2">UPI ID for the QR code on bills<input name="upiVpa" value="${esc(this.billing!.upiVpa ?? '')}" placeholder="sathyaresorts@okaxis" ${this.ws.can('menu.price') ? '' : 'disabled'}></label>
         <label class="span2">Payee name shown in the UPI app<input name="upiPayee" value="${esc(this.billing!.upiPayee ?? '')}" maxlength="60" ${this.ws.can('menu.price') ? '' : 'disabled'}></label>
         <label>Service charge %<input name="service" type="number" min="0" max="20" step="0.5" value="${this.billing!.serviceChargePercent}" ${this.ws.can('menu.price') ? '' : 'disabled'}></label>
-        ${this.ws.can('menu.price') ? '<div class="span2"><button class="btn" type="submit">Save</button></div>' : ''}
+        ${this.ws.can('menu.price') ? '<div class="span2 actions end"><button class="btn primary" type="submit">Save bill settings</button></div>' : ''}
       </form>
       <p class="muted small">Service charge is optional by law: bills say so, and staff remove it when a guest asks.</p>
     </section></div>`
@@ -141,7 +141,7 @@ export class LicencesView {
       return true
     }
     const dry = get('dry')
-    if (dry) { await api.req('DELETE', `/api/fnb/dry-days/${dry}`); await this.load(); return true }
+    if (dry) { confirmDanger(this.ws.modal, 'Remove this dry day?', 'The bar will sell on that day.', 'Remove the dry day', async () => { await api.req('DELETE', `/api/fnb/dry-days/${dry}`); await this.load(); this.ws.render(); return 'Removed' }); return false }
     const act = get('s')
     if (!act) return false
     if (act === 'add-licence') this.licenceForm()

@@ -3,6 +3,7 @@ import type { Reservation, Space } from '../data/types'
 import { addDays, fmtDay, fmtTime, inr, todayKey } from '../data/dates'
 import { esc, hkPill, maskPhone, statusPill, tonePill } from './dom'
 import { billHtml, openCount, openItemsHtml, rs } from './stay'
+import { tile } from './tiles'
 
 // HTML for the hover / tap card and the full detail drawer.
 
@@ -101,21 +102,45 @@ export function tipHtml(store: Store, id: string, touch: boolean) {
 
 // ---------------- drawer ----------------
 
-function gantt(store: Store, id: string) {
-  const start = addDays(store.date, -3)
-  const days = Array.from({ length: 14 }, (_, i) => addDays(start, i))
-  const end = addDays(start, 14)
+/** Days the room's timeline is slid from the map's date, per room (reset when the drawer closes). */
+export const stripOffset = new Map<string, number>()
+const STRIP_DAYS = 14
+
+/** The first night from the map's day (today at the earliest) on which nobody holds this room. */
+export function nextFree(store: Store, id: string) {
+  const today = todayKey()
+  let d = store.date > today ? store.date : today
+  const taken = store.reservations.filter((r) => r.spaceId === id && (r.status === 'confirmed' || r.status === 'in-house'))
+  for (let i = 0; i < 120 && taken.some((r) => r.arrival <= d && d < r.departure); i++) d = addDays(d, 1)
+  return d
+}
+
+/** This room's bookings on a strip of days you can slide: ‹ › or drag. Tap a day to move the map there; tap a bar to see that booking. */
+function roomStrip(store: Store, id: string) {
+  const today = todayKey()
+  const off = stripOffset.get(id) ?? 0
+  const start = addDays(store.date, -3 + off)
+  const days = Array.from({ length: STRIP_DAYS }, (_, i) => addDays(start, i))
+  const end = addDays(start, STRIP_DAYS)
   const idx = (d: string) => Math.round((+new Date(d + 'T12:00') - +new Date(start + 'T12:00')) / 864e5)
   const bars = store.reservations
     .filter((r) => r.spaceId === id && r.departure > start && r.arrival < end && r.status !== 'cancelled')
     .map((r) => {
-      const a = Math.max(0, idx(r.arrival) + 0.5), b = Math.min(14, idx(r.departure) + 0.5)
-      return `<div class="gantt-bar ${r.departure <= todayKey() ? 'past' : ''}" style="left:${(a / 14) * 100}%;width:${((b - a) / 14) * 100}%" title="${esc(r.guest)}">${esc(r.guest.split(' ')[0])}</div>`
+      const a = Math.max(0, idx(r.arrival) + 0.5), b = Math.min(STRIP_DAYS, idx(r.departure) + 0.5)
+      const cls = r.status === 'checked-out' || r.departure <= today ? 'past' : r.status === 'in-house' ? 'now' : r.arrival === today ? 'arriving' : 'booked'
+      return `<button type="button" class="gantt-bar ${cls}" data-date="${r.arrival > today ? r.arrival : r.arrival <= today && r.departure > today ? today : r.arrival}" style="left:${(a / STRIP_DAYS) * 100}%;width:${((b - a) / STRIP_DAYS) * 100}%" title="${esc(r.guest)} · ${fmtDay(r.arrival)} → ${fmtDay(r.departure)}">${esc(r.guest.split(' ')[0])}</button>`
     }).join('')
+  const selIdx = idx(store.date)
+  const canBack = start > store.rangeFrom, canFwd = end < store.rangeTo
   return `
-    <div class="gantt">
-      <div class="gantt-days">${days.map((d) => `<span class="${d === store.date ? 'sel' : ''}">${fmtDay(d, { day: 'numeric' })}</span>`).join('')}</div>
-      <div class="gantt-lane">${bars}<div class="gantt-sel" style="left:${(3 / 14) * 100}%;width:${100 / 14}%"></div></div>
+    <div class="sec-title">This room's bookings <span>${fmtDay(start)} – ${fmtDay(addDays(end, -1))}</span></div>
+    <div class="gantt" data-strip-room="${esc(id)}">
+      <button type="button" class="gantt-arrow" data-strip="-7" ${canBack ? '' : 'disabled'} aria-label="Earlier">‹</button>
+      <div class="gantt-body">
+        <div class="gantt-days">${days.map((d) => `<button type="button" class="gd ${d === store.date ? 'sel' : ''} ${d === today ? 'today' : ''}" data-date="${d}" title="${fmtDay(d)}">${d.slice(-2) === '01' || d === start ? `<small>${fmtDay(d, { month: 'short' })}</small>` : ''}${Number(d.slice(-2))}</button>`).join('')}</div>
+        <div class="gantt-lane">${bars}${selIdx >= 0 && selIdx < STRIP_DAYS ? `<div class="gantt-sel" style="left:${(selIdx / STRIP_DAYS) * 100}%;width:${100 / STRIP_DAYS}%"></div>` : ''}</div>
+      </div>
+      <button type="button" class="gantt-arrow" data-strip="7" ${canFwd ? '' : 'disabled'} aria-label="Later">›</button>
     </div>`
 }
 
@@ -136,7 +161,7 @@ function guestBlock(store: Store, r: Reservation, title: string) {
       </dl>
       ${r.notes ? `<div class="note">${esc(r.notes)}</div>` : ''}
       ${stayBlock(store, r)}
-      ${actionsFor(store, r)}
+      ${store.live ? stayActions(store, r) : actionsFor(store, r)}
     </div>`
 }
 
@@ -153,6 +178,17 @@ function stayBlock(store: Store, r: Reservation) {
     ${open ? `<div class="sec-title bk-open">Still open <span>${open}</span></div><div class="fd-bill">${openItemsHtml(d.openItems)}</div><p class="muted small">Not on the room bill yet. Check-out waits for these; the desk puts them on the bill from the booking.</p>` : r.status === 'in-house' ? '<p class="muted small">Nothing open elsewhere: everything the guest used is on the room bill.</p>' : ''}`
 }
 
+/** The stay's own buttons, inside its box: the booking page first, then what the guest may want now. */
+function stayActions(store: Store, r: Reservation) {
+  if (!store.isToday || !store.stayAllowed || r.status === 'cancelled') return ''
+  const b = [`<button class="btn primary" data-fd="open" data-res="${esc(r.id)}">Open the booking</button>`]
+  if (r.status === 'confirmed' && r.arrival === store.date) b.push(`<button class="btn" data-fd="checkin" data-res="${esc(r.id)}">Check in…</button>`)
+  if (r.status === 'in-house') b.push(`<button class="btn" data-fnb-room="${esc(r.id)}">Room-service order…</button>`)
+  if (r.balance > 0 && r.status !== 'checked-out') b.push(`<button class="btn" data-fd="pay" data-res="${esc(r.id)}">Payment…</button>`)
+  const orders = r.status === 'in-house' && r.spaceId ? store.ordersFor(r.spaceId) : []
+  return `<div class="actions">${b.join('')}</div>${orders.length ? `<div class="sec-title">Room service today <span>${orders.length}</span></div>${orders.map((o) => kotCard(store, o.id)).join('')}` : ''}`
+}
+
 function actionsFor(store: Store, r: Reservation) {
   if (!store.isToday) return ''
   const btns: string[] = []
@@ -161,12 +197,6 @@ function actionsFor(store: Store, r: Reservation) {
   if (!store.live && r.folioId && (r.status === 'in-house' || r.status === 'confirmed')) btns.push(`<button class="btn" data-act="pay" data-res="${r.id}">Payment</button>`)
   if (!store.live && store.godMode && r.balance && r.status !== 'checked-out') btns.push(`<button class="btn god" data-act="waive" data-res="${r.id}">Waive ${inr(r.balance)}</button>`)
   return btns.length ? `<div class="actions">${btns.join('')}</div>` : ''
-}
-
-function ordersList(store: Store, id: string) {
-  const list = store.ordersFor(id)
-  if (!list.length) return `<div class="empty">No room-service orders on this date.</div>`
-  return list.map((o) => kotCard(store, o.id)).join('')
 }
 
 export function kotCard(store: Store, orderId: string, withFrom = false) {
@@ -211,7 +241,7 @@ export function drawerHtml(store: Store, id: string) {
   const god = store.godMode
   let body = ''
   if (s.type === 'room' || s.type === 'villa') {
-    body += `<div class="sec-title">Next 14 days</div>${gantt(store, id)}`
+    body += roomStrip(store, id)
     if (st.departing && st.departing !== st.stay) body += guestBlock(store, st.departing, 'Checking out')
     if (st.stay) body += guestBlock(store, st.stay, st.status === 'arriving' ? 'Arriving' : 'In-house')
     if (!st.stay && !st.departing) {
@@ -219,17 +249,19 @@ export function drawerHtml(store: Store, id: string) {
       body += `<div class="guest"><div class="dr-kicker">Vacant on ${fmtDay(store.date)}</div><div class="note">${n ? `Next: ${esc(n.guest)}, arriving ${fmtDay(n.arrival)}` : 'No upcoming bookings in the next 60 days.'}</div></div>`
     }
     if (store.isToday && store.live) {
+      // What you can do with this room, as tiles: housekeeping (coloured by the room's state), a fault, a new
+      // booking from the room's next free night. The stay's own buttons are in the stay box above.
       const d = (store.adapter as { hkDetail?: Map<string, { status: string; dnd: boolean }> }).hkDetail?.get(id)
-      const label: Record<string, string> = { vacant_clean: 'Clean', inspected: 'Ready (inspected)', vacant_dirty: 'Dirty', occupied_clean: 'Occupied · serviced', occupied_dirty: 'Occupied · to service', out_of_order: 'Out of order', out_of_service: 'Out of service' }
-      body += `<div class="sec-title">Housekeeping <span>${d ? hkPill(store.hk[id] ?? 'clean').replace(/>[^<]*<\/span>$/, `>${label[d.status] ?? d.status}</span>`) : ''}${d?.dnd ? ' ' + tonePill('Do not disturb', '--god') : ''}</span></div>`
-      // Everything for this room, from here: the booking, a room-service order, housekeeping and laundry, a fault, a new booking.
-      const r = st.stay ?? st.departing
-      const acts: string[] = []
-      if (r && store.stayAllowed && r.status !== 'cancelled') acts.push(`<button class="btn primary" data-fd="open" data-res="${esc(r.id)}">Open the booking</button>`)
-      if (r?.status === 'in-house') acts.push(`<button class="btn" data-fnb-room="${esc(r.id)}">Room-service order…</button>`)
-      acts.push(`<button class="btn" data-hk-room="${esc(id)}">Housekeeping &amp; laundry…</button>`, `<button class="btn" data-eng-room="${esc(id)}" data-eng-name="${esc(s.name)}">Report a fault…</button>`)
-      if (!r && store.stayAllowed) acts.push(`<button class="btn" data-fd="book">New booking…</button>`)
-      body += `<div class="sec-title">Do</div><div class="actions">${acts.join('')}</div>`
+      const label: Record<string, string> = { vacant_clean: 'clean', inspected: 'ready, inspected', vacant_dirty: 'needs cleaning', occupied_clean: 'occupied · serviced', occupied_dirty: 'occupied · to service', out_of_order: 'out of order', out_of_service: 'out of service' }
+      const hk = store.hk[id] ?? 'clean'
+      const free = nextFree(store, id)
+      const book = store.stayAllowed ? tile(`data-fd="book" data-space="${esc(id)}" data-from="${free}"`, 'calendar', 'New booking', `this room, from ${fmtDay(free)}`, '--st-vacant') : ''
+      const tiles: string[] = []
+      if (!st.stay && !st.departing && book) tiles.push(book)
+      tiles.push(tile(`data-hk-room="${esc(id)}"`, 'broom', 'Housekeeping', (d ? label[d.status] ?? d.status : hk) + (d?.dnd ? ' · do not disturb' : ''), hk === 'dirty' ? '--st-dirty' : hk === 'out-of-order' ? '--st-ooo' : d?.dnd ? '--marigold' : '--st-inspected'))
+      tiles.push(tile(`data-eng-room="${esc(id)}" data-eng-name="${esc(s.name)}"`, 'flag', 'Report a fault', 'AC, plumbing, lights, TV…', '--marigold'))
+      if ((st.stay || st.departing) && book) tiles.push(book)
+      body += `<div class="hk-tiles dr-tiles">${tiles.join('')}</div>`
     } else if (store.isToday) {
       const hk = store.hk[id] ?? 'clean'
       body += `<div class="sec-title">Housekeeping <span>${hkPill(hk)}</span></div><div class="actions">`
@@ -241,7 +273,6 @@ export function drawerHtml(store: Store, id: string) {
       }
       body += `</div>`
     }
-    body += `<div class="sec-title">Room service</div>${ordersList(store, id)}`
   } else if (['hall', 'lawn', 'pavilion', 'ground'].includes(s.type)) {
     const evs = st.events
     const STATUS: Record<string, [string, string]> = { enquiry: ['Enquiry · pencilled', '--muted'], quoted: ['Quoted · pencilled', '--st-inspected'], hold: ['On hold', '--marigold'], definite: ['Booked', '--st-vacant'], billed: ['Billed', '--st-occupied'], closed: ['Closed', '--muted'] }

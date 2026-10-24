@@ -31,7 +31,7 @@ export class TasksView {
         ${toolbar({ primary: [{ attrs: 'data-hk="assign"', label: `Assign ${unassigned} unassigned` }], more: [{ attrs: 'data-hk="rebalance"', label: 'Rebalance all' }, { attrs: 'data-hk="public"', label: 'Add public-area task…' }] })}</div>` : '')
       + (inspect && toInspect.length ? `<div class="sec-title">Waiting for inspection <span>${toInspect.length}</span></div>` + toInspect.map((t) => `<div class="row-card"><div class="rc-title">Room ${esc(t.room_no ?? t.area ?? '')} · ${esc(TASK[t.kind] ?? t.kind)}</div>
           <div class="rc-sub">${esc(t.attendant ?? '')} · ${t.started_at && t.finished_at ? `${Math.round((new Date(t.finished_at).getTime() - new Date(t.started_at).getTime()) / 60000)} min` : ''}${t.photos.length ? ` · ${t.photos.length} photo${t.photos.length > 1 ? 's' : ''}` : ''}${t.notes ? ` · “${esc(t.notes)}”` : ''}</div>
-          <div class="rc-right"><button type="button" class="btn small primary" data-inspect="${esc(t.id)}">Inspect</button></div></div>`).join('') : '')
+          <div class="rc-right"><button type="button" class="btn small" data-inspect="${esc(t.id)}">Inspect</button></div></div>`).join('') : '')
       + `<div class="sec-title">All tasks today <span>${this.tasks.length}</span></div>
       <div class="m-table">${this.tasks.map((t) => `<div class="m-row hk-task-row"><b>${esc(t.room_no ?? t.area ?? '')}</b><span>${esc(TASK[t.kind] ?? t.kind)}</span>
         <span>${tonePill(...TASK_STATE[t.status])}${t.status === 'in_progress' && t.started_at ? ` <small>${minutes(t.started_at)} min</small>` : ''}${t.score != null ? ` <small>${t.score}</small>` : ''}</span>

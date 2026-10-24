@@ -129,7 +129,7 @@ export class BillsView {
         ${b.differences.length ? `<div class="rc-sub fd-warn">${b.differences.map(esc).join(' · ')}</div>` : ''}
         <div class="rc-sub">${b.msme_due_date ? `<b>MSME: pay by ${esc(showDate(b.msme_due_date))}</b>${b.msmeLate ? ' <span class="fd-warn">late: the expense is not deductible this year</span>' : b.status !== 'paid' ? ` (${b.daysToDue} days)` : ''}` : `Due ${esc(showDate(b.due_date))}`} · entered by ${esc(b.entered_by_name)}${b.approved_by_name ? ` · passed by ${esc(b.approved_by_name)}` : ''}</div>
         <div class="rc-right"><b class="mono">${rupees(n(b.total_paise))}</b>${tonePill(...(MATCH[b.match] ?? [b.match, '--muted']))}${tonePill(...(BILL_STATE[b.status] ?? [b.status, '--muted']))}
-          ${b.status === 'entered' && (this.h.can('purchase.approve') || (b.match === 'matched' && this.h.can('purchase.bill') && b.entered_by !== this.h.me.id)) ? `<button type="button" class="btn small primary" data-bl="pass:${esc(b.id)}">Pass…</button>` : ''}
+          ${b.status === 'entered' && (this.h.can('purchase.approve') || (b.match === 'matched' && this.h.can('purchase.bill') && b.entered_by !== this.h.me.id)) ? `<button type="button" class="btn small" data-bl="pass:${esc(b.id)}">Pass…</button>` : ''}
           ${['entered', 'approved'].includes(b.status) && n(b.total_paise) === n(b.balance_paise) && this.h.can('purchase.bill') ? `<button type="button" class="btn small" data-bl="cancel:${esc(b.id)}">Cancel…</button>` : ''}</div></div>`).join('') || '<div class="empty">No bills.</div>'}`
   }
 
@@ -149,9 +149,9 @@ export class BillsView {
       })
     }
     if (act === 'cancel') {
-      this.h.modal.open(`Cancel bill ${bill.bill_no}`, '<div class="form-grid"><label class="span2">Why<input name="reason" maxlength="200"></label></div>', 'Cancel bill', async (f) => {
+      this.h.modal.open(`Cancel bill ${bill.bill_no}?`, '<div class="form-grid"><label class="span2">Why<input name="reason" maxlength="200"></label></div>', 'Cancel bill', async (f) => {
         await api.post(`/api/bills/${id}/cancel`, { reason: val(f, 'reason') }); return done('Bill cancelled')
-      })
+      }, { danger: true, cancelLabel: 'Keep the bill' })
     }
     return false
   }
@@ -221,11 +221,11 @@ export class PaymentsView {
     return `<div class="sec-title">To pay <span>${rupees(this.bills.reduce((a, b) => a + n(b.balance_paise), 0))}</span></div>
       ${[...byVendor.values()].map((bs) => `<div class="row-card${bs.some((b) => b.msme_due_date && b.daysToDue <= 10) ? ' late' : ''}"><div class="rc-title">${esc(bs[0].vendor)}${bs[0].msme !== 'none' ? ` ${tonePill(`MSME ${bs[0].msme}`, '--marigold')}` : ''}</div>
         <div class="rc-sub">${bs.map((b) => `${esc(b.bill_no)} ${rupees(n(b.balance_paise))} · ${b.msme_due_date ? `<b>by ${esc(showDate(b.msme_due_date))}</b>` : `due ${esc(showDate(b.due_date))}`}`).join(' · ')}</div>
-        <div class="rc-right"><b class="mono">${rupees(bs.reduce((a, b) => a + n(b.balance_paise), 0))}</b>${pay ? `<button type="button" class="btn small primary" data-py="new:${esc(bs[0].vendor_id)}">Pay…</button>` : ''}</div></div>`).join('') || '<div class="empty">Nothing passed for payment.</div>'}
+        <div class="rc-right"><b class="mono">${rupees(bs.reduce((a, b) => a + n(b.balance_paise), 0))}</b>${pay ? `<button type="button" class="btn small" data-py="new:${esc(bs[0].vendor_id)}">Pay…</button>` : ''}</div></div>`).join('') || '<div class="empty">Nothing passed for payment.</div>'}
       <div class="sec-title">Payments</div>
       ${this.payments.slice(0, 50).map((p) => `<div class="row-card"><div class="rc-title">${esc(p.number)} · ${esc(p.vendor)}</div>
         <div class="rc-sub">${esc(p.bills ?? '')} · ${esc(showDate(p.pay_date))} · ${esc(p.mode)}${p.reference ? ` ${esc(p.reference)}` : ''}${n(p.tds_paise) ? ` · TDS ${esc(p.tds_section ?? '')} ${rupees(n(p.tds_paise))}` : ''}</div>
-        <div class="rc-right"><b class="mono">${rupees(n(p.net_paise))}</b>${tonePill(...(PAY[p.status] ?? [p.status, '--muted']))}${pay && p.status === 'approved' ? `<button type="button" class="btn small primary" data-py="paid:${esc(p.id)}:${esc(p.mode)}">Mark paid…</button>` : ''}${pay && ['approved', 'pending_approval'].includes(p.status) ? `<button type="button" class="btn small" data-py="cancel:${esc(p.id)}">Cancel</button>` : ''}</div></div>`).join('') || '<div class="empty">No payments yet.</div>'}
+        <div class="rc-right"><b class="mono">${rupees(n(p.net_paise))}</b>${tonePill(...(PAY[p.status] ?? [p.status, '--muted']))}${pay && p.status === 'approved' ? `<button type="button" class="btn small" data-py="paid:${esc(p.id)}:${esc(p.mode)}">Mark paid…</button>` : ''}${pay && ['approved', 'pending_approval'].includes(p.status) ? `<button type="button" class="btn small" data-py="cancel:${esc(p.id)}">Cancel</button>` : ''}</div></div>`).join('') || '<div class="empty">No payments yet.</div>'}
       ${this.tds?.summary.length ? `<div class="sec-title">TDS deducted, ${esc(this.tds.fy)} <span>deposit by the 7th of the next month</span></div>${this.tds.summary.map((s) => `<div class="m-row ping-row"><b>${esc(s.section)}</b><span>Quarter ${s.quarter} · ${s.entries} deduction${s.entries > 1 ? 's' : ''}</span><span class="mono">${rupees(n(s.tds_paise))}</span></div>`).join('')}` : ''}`
   }
 

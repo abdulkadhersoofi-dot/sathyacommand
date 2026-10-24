@@ -395,10 +395,10 @@ export class CaptainView {
       })
     }
     if (act === 'cancel-order') {
-      this.ws.modal.open(`Cancel order ${this.order!.number}`, `<div class="form-grid"><label class="span2">Reason<input name="reason" maxlength="120"></label></div>`, 'Cancel order', async (f) => {
+      this.ws.modal.open(`Cancel order ${this.order!.number}?`, `<div class="form-grid"><label class="span2">Reason<input name="reason" maxlength="120"></label></div>`, 'Cancel order', async (f) => {
         await api.post(`/api/fnb/orders/${this.order!.id}/cancel`, { reason: val(f, 'reason') })
         this.order = null; this.cart.clear(); await this.load(); this.ws.render(); return 'Order cancelled'
-      })
+      }, { danger: true, cancelLabel: 'Keep the order' })
     }
     if (act === 'new') this.newOrderForm()
     if (act === 'add-place') foodPlaceForm(this.ws, async (id, created) => { await this.ws.refreshOutlets(); if (created) this.showPlace(id); await this.load(); this.ws.render() })

@@ -60,7 +60,7 @@ export class BarView {
     const tabs = chips(subs, this.sub, 'bsub')
     const breakage: Action = { attrs: 'data-b="breakage"', label: 'Report breakage' }
     if (this.sub === 'stock') {
-      return toolbar({ primary: [breakage], filters: tabs }) + `<div class="m-table">${this.stock.map((s) => `<div class="m-row m-row-4${s.negative ? ' warn' : ''}"><b>${esc(s.name)}</b><span class="mono">${bottles(s.ml, s.bottle_ml)}</span>
+      return toolbar({ filters: tabs, more: [breakage] }) + `<div class="m-table">${this.stock.map((s) => `<div class="m-row m-row-4${s.negative ? ' warn' : ''}"><b>${esc(s.name)}</b><span class="mono">${bottles(s.ml, s.bottle_ml)}</span>
         <span class="muted small">${s.ml} ml${s.valuePaise ? ` · ${rs(s.valuePaise)} at cost` : ''}</span><span>${s.negative ? tonePill('Below zero', '--st-departing') : ''}</span></div>`).join('') || '<div class="empty">No brands yet. Add them under Brands.</div>'}</div>
         ${this.stock.some((s) => s.negative) ? '<p class="fd-warn small">Below zero means more was sold than bought: enter the TASMAC invoice or count the stock.</p>' : ''}`
     }

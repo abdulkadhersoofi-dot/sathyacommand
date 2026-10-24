@@ -86,6 +86,8 @@ export interface BookingInput {
   blockId?: string
   /** The price of each night as an OTA sold it, from the channel manager (Phase 7). */
   nightAmounts?: number[]
+  /** This exact room (booked from the map): assigned at once, refused if it is taken on any night. */
+  spaceId?: string
 }
 
 /**
@@ -212,7 +214,16 @@ export function frontOfficeRoutes(app: FastifyInstance, ctx: Ctx) {
   // ---------- reservations ----------
   app.post('/api/reservations', async (req, reply) => {
     const who = await frontDesk(ctx, req)
-    const result = await db.tx((t) => bookStay(ctx, t, who, (req.body ?? {}) as BookingInput))
+    const b = (req.body ?? {}) as BookingInput
+    const result = await db.tx(async (t) => {
+      const r = await bookStay(ctx, t, who, b)
+      if (b.spaceId) {
+        const roomNo = await assignRoom(t, r.id, b.spaceId, b.roomTypeId!, false)
+        await appendAudit(t, { actor: who, action: 'fo.assign_room', entity: { type: 'reservation', id: r.id }, before: { spaceId: null }, after: { spaceId: b.spaceId, roomNo, upgrade: false } }, now())
+        return { ...r, roomNo }
+      }
+      return r
+    })
     return reply.status(201).send(result)
   })
 

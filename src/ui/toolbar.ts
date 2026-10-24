@@ -12,10 +12,28 @@ export interface Action {
   danger?: boolean
   title?: string
   disabled?: boolean
+  /** A file to pick: the button is a label around a hidden file input with these attributes (e.g. `name="csv" accept=".csv"`). */
+  file?: string
+  /** The form this button submits, when it sits outside it. */
+  form?: string
 }
 
 const button = (a: Action, cls: string) =>
-  `<button type="button" class="${cls}${a.danger ? ' danger' : ''}" ${a.attrs}${a.title ? ` title="${esc(a.title)}"` : ''}${a.disabled ? ' disabled' : ''}>${esc(a.label)}</button>`
+  a.file
+    ? `<label class="${cls}${a.danger ? ' danger' : ''} file-btn" ${a.attrs}${a.title ? ` title="${esc(a.title)}"` : ''}><input type="file" ${a.file} hidden>${esc(a.label)}</label>`
+    : `<button type="${a.form ? 'submit' : 'button'}" class="${cls}${a.danger ? ' danger' : ''}" ${a.attrs}${a.form ? ` form="${esc(a.form)}"` : ''}${a.title ? ` title="${esc(a.title)}"` : ''}${a.disabled ? ' disabled' : ''}>${esc(a.label)}</button>`
+
+/**
+ * A row's own menu (rule 2: a row carries one button, the rest go here): a small "⋯" that opens the list,
+ * the dangerous items last in red. Returns '' when there is nothing to put in it.
+ */
+export function rowMenu(items: (Action | false | null | undefined)[], label = '⋯', cls = 'btn small') {
+  const list = items.filter((a): a is Action => !!a)
+  if (!list.length) return ''
+  const plain = list.filter((a) => !a.danger), danger = list.filter((a) => a.danger)
+  return `<details class="menu row-menu"><summary class="${cls}" aria-label="More">${esc(label)}</summary><div class="menu-list" role="menu">
+      ${plain.map((a) => button(a, 'menu-row')).join('')}${plain.length && danger.length ? '<div class="menu-sep"></div>' : ''}${danger.map((a) => button(a, 'menu-row')).join('')}</div></details>`
+}
 
 /** Up to two primary actions, then filters, then the rest under More ▾ (danger last). Empty groups are left out. */
 export function toolbar(o: { primary?: Action[]; filters?: string; more?: Action[]; end?: string }) {

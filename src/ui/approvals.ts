@@ -39,7 +39,7 @@ export class Approvals {
     return `<div class="row-card ap-card" data-ap="${esc(i.id)}"><div class="rc-title">${esc(i.title)}</div>
       <div class="rc-sub">${i.detail ? `${esc(i.detail)}<br>` : ''}Asked by ${esc(i.requested_by_name)} · ${esc(ago(i.created_at))}</div>
       ${i.canDecide ? `<div class="ap-actions"><input name="note-${esc(i.id)}" placeholder="Note (optional)" maxlength="200">
-        <button type="button" class="btn small" data-reject="${esc(i.id)}">Reject</button><button type="button" class="btn small primary" data-approve="${esc(i.id)}">Approve</button></div>` : ''}</div>`
+        <button type="button" class="btn small" data-reject="${esc(i.id)}">Reject</button><button type="button" class="btn small" data-approve="${esc(i.id)}">Approve</button></div>` : ''}</div>`
   }
 
   private render() {

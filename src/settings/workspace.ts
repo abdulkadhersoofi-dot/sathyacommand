@@ -37,7 +37,7 @@ class ProfileView implements View {
       <div class="form-grid"><label class="span2 check"><input type="checkbox" name="autoClose" ${p.auto_close ? 'checked' : ''}> Close the day by itself if nobody has closed it</label>
         <label>At (24-hour time)<input name="dayCloseAt" type="time" value="${esc(p.day_close_at)}"></label></div>
       <p class="muted small">Closing the day posts tonight's room charges, marks no-shows, puts the day's takings in the books and moves the hotel date on. The night auditor can still close it earlier from the front desk.</p>
-      <div class="ws-toolbar"><button type="submit" class="btn primary">Save the profile</button></div></form>`
+      <div class="actions end"><button type="submit" class="btn primary">Save the profile</button></div></form>`
   }
   async submit(f: HTMLFormElement) {
     this.p = await this.h.api.req<Profile>('PATCH', '/api/property', {

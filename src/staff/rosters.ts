@@ -145,7 +145,7 @@ export class StaffSettingsView {
         <label>Map z (south)<input name="mapZ" type="number" step="0.1" value="${g.mapZ}"></label>
         <label>Rotation (°)<input name="rotation" type="number" step="0.5" min="-180" max="180" value="${g.rotation}"></label>
         <label class="check span2"><input type="checkbox" name="selfie" ${g.selfieRequired ? 'checked' : ''}> Ask for a selfie at clock-in</label>
-        <div class="actions span2"><button class="btn primary">Save</button></div>
+        <div class="actions end span2"><button class="btn primary">Save the settings</button></div>
       </form>
       <div class="sec-title">Indoor beacons <span>${this.beacons.length}</span></div>
       <p class="muted small">Bluetooth beacons place staff inside buildings where GPS is poor (packaged phone app only). Rooms and public areas with a QR label also place the person when scanned.</p>

@@ -29,7 +29,8 @@ export class OtaView {
     if (!o) return '<div class="empty">No OTA bookings paid to an OTA yet. Book with "Booked through" set to the OTA and its booking ID, and take the payment as "OTA prepaid".</div>'
     const n = (v: string) => Number(v)
     return `${toolbar({
-      filters: `${manage ? '<label class="btn primary file-btn">Payout report (CSV)…<input type="file" accept=".csv,text/csv" data-payout hidden></label>' : ''}<select data-ota aria-label="OTA">${this.otas.map((x) => `<option value="${esc(x.id)}"${x.id === this.sel ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}</select>`,
+      primary: manage ? [{ attrs: '', label: 'Payout report (CSV)…', file: 'accept=".csv,text/csv" data-payout' }] : [],
+      filters: `<select data-ota aria-label="OTA">${this.otas.map((x) => `<option value="${esc(x.id)}"${x.id === this.sel ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}</select>`,
       more: manage ? [{ attrs: 'data-ot="terms"', label: 'Commission and TAN…' }] : [],
     })}
       <div class="row-card mc-card"><div class="rc-title">${esc(o.name)} <small class="muted">${o.commission_percent == null ? 'commission not set' : `${o.commission_percent}% commission`}${o.tan ? ` · TAN ${esc(o.tan)}` : ''}</small></div>
@@ -96,7 +97,8 @@ export class CreditsView {
   html() {
     const d = this.d!
     return `${toolbar({
-      filters: `${this.h.can('accounts.post', 'receivables.manage') ? '<label class="btn primary file-btn">Import Form 26AS…<input type="file" accept=".csv,.txt,text/csv,text/plain" data-26as hidden></label>' : ''}<label class="inline">Year <input data-fy value="${esc(this.fy)}" size="7" aria-label="Financial year"></label>`,
+      primary: this.h.can('accounts.post', 'receivables.manage') ? [{ attrs: '', label: 'Import Form 26AS…', file: 'accept=".csv,.txt,text/csv,text/plain" data-26as' }] : [],
+      filters: `<label class="inline">Year <input data-fy value="${esc(this.fy)}" size="7" aria-label="Financial year"></label>`,
       end: `<span class="small">Expected ${money(d.totals.expectedPaise)} · in 26AS ${money(d.totals.in26asPaise)}${d.totals.followUp ? ` · <span class="fd-warn">${d.totals.followUp} to follow up</span>` : ''}</span>`,
     })}
       <p class="muted small">Tax deducted or collected from the resort: TDS by companies and OTAs (194-O) when they pay, TCS by TASMAC on liquor. Each is claimed in the income-tax return once Form 26AS shows it; download 26AS from TRACES or the income-tax portal and import it here. A credit still missing after the deductor's return was due is to be followed up with them.</p>

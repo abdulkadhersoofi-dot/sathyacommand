@@ -1,5 +1,5 @@
 import { esc, tonePill, showDate } from '../ui/dom'
-import { val } from '../ui/form-modal'
+import { confirmDanger, val } from '../ui/form-modal'
 import { toolbar, type Action } from '../ui/toolbar'
 import { money } from '../acc/books'
 import { STATUS_LABEL } from './calendar'
@@ -110,9 +110,9 @@ export class AccountsView {
     const done = el.closest<HTMLElement>('[data-actdone]')?.dataset.actdone
     if (done && this.d) { doneForm(this.h, this.d.activities.find((a) => a.id === done)!, () => this.reload()); return false }
     const del = el.closest<HTMLElement>('[data-acdel]')?.dataset.acdel
-    if (del) { await api.req('DELETE', `/api/sales/contacts/${del}`); await this.load(); return true }
+    if (del) { confirmDanger(this.h.modal, 'Remove this contact?', 'Their past follow-ups stay on the account.', 'Remove the contact', async () => { await api.req('DELETE', `/api/sales/contacts/${del}`); await this.load(); this.h.render(); return 'Removed' }); return false }
     const rdel = el.closest<HTMLElement>('[data-rtdel]')?.dataset.rtdel
-    if (rdel) { await api.req('DELETE', `/api/sales/rates/${rdel}`); await this.load(); return true }
+    if (rdel) { confirmDanger(this.h.modal, 'End this contracted rate?', 'New bookings for the account go back to the rate table.', 'End the rate', async () => { await api.req('DELETE', `/api/sales/rates/${rdel}`); await this.load(); this.h.render(); return 'Rate ended' }); return false }
     const a = el.closest<HTMLElement>('[data-ac]')?.dataset.ac
     if (a === 'back') { this.selected = null; this.d = null; await this.load(); return true }
     if (a === 'new') await this.accountForm('New account')
